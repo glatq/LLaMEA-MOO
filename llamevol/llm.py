@@ -105,7 +105,15 @@ class LLMClient(ABC):
 class GoogleGenAIClient(LLMClient):
     def __init__(self, api_key: str, model_name: str, base_url: Optional[str] = None):
         super().__init__(api_key, model_name, base_url)
-        self.client = genai.Client(api_key=api_key)
+        if api_key:
+            self.client = genai.Client(api_key=api_key)
+        else:
+            self.client = genai.Client(
+                vertexai=True,
+                project='starry-seat-441021-m2',
+                location='us-central1',
+                http_options=types.HttpOptions(api_version='v1')
+            )
 
     def raw_completion(
         self,
@@ -280,9 +288,18 @@ class RequestClient(LLMClient):
 
 class LLMmanager:
     def __init__(self, model_key: str = None, model_name: str = None, api_key: str = None, base_url: str = None, client_str: str = None):
+
+        use_vertex = (client_str == "vertex") or (os.getenv("GOOGLE_GENAI_USE_VERTEXAI") == "1")
+
         if model_key is None:
-            if model_name is None or api_key is None:
-                raise ValueError("model_name and api_key must be provided.")
+            if model_name is None:
+                raise ValueError("model_name must be provided.")
+
+            if not (api_key or use_vertex):
+                raise ValueError(
+                    "Provide api_key (Gemini Developer API) or enable Vertex "
+                    "(set client_str='vertex' or GOOGLE_GENAI_USE_VERTEXAI=1)."
+                )
 
             _model = (model_name, api_key, base_url, 5, client_str)
         else:
@@ -302,7 +319,7 @@ class LLMmanager:
             self.client = OpenAIClient(api_key, model_name, base_url)
         elif client_str == "request":
             self.client = RequestClient(api_key, model_name, base_url)
-        elif client_str == "google":
+        elif client_str in ("google", "vertex"):
             self.client = GoogleGenAIClient(api_key, model_name, base_url)
         else:
             self.client = AISuiteClient(model_key)

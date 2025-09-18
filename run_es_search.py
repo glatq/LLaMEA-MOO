@@ -63,12 +63,12 @@ def run_exp(n_parent, n_offspring, is_elitist, api_key, n_population=4):
     prompt_generator = get_bo_prompt_generator()
 
     # create a LLM Manager
-    model_name = 'gemini-2.0-flash'
+    model_name = 'gemini-2.5-flash'
     base_url = None # use default
 
     # choose the llm client, e.g. openai, google.
     # openai: OpenaiClient; google: google genai client; others: AISuiteClient
-    client = 'google'
+    client = 'vertex'
 
     llm = LLMmanager(model_name=model_name, api_key=api_key, base_url=base_url, client_str=client)
 
