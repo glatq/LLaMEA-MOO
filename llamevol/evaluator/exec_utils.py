@@ -6,8 +6,9 @@ import traceback
 import re
 import inspect
 import logging
-from abc import ABC 
+from abc import ABC
 import torch
+
 
 class ExecInjector(ABC):
     @classmethod
@@ -18,7 +19,7 @@ class ExecInjector(ABC):
                 raise Exception("CUDA is available but the code does not use 'cuda'.")
             else:
                 if device is not None and device not in code:
-                    code = code.replace("\"cuda\"", f"\"{device}\"")
+                    code = code.replace('"cuda"', f'"{device}"')
                     logging.info("replaced 'cuda' with '%s'", device)
         return code
 
@@ -30,6 +31,7 @@ class ExecInjector(ABC):
 
     def clear(self):
         pass
+
 
 class TrackExecExceptionWrapper:
     def __init__(self, error, _traceback):
@@ -47,8 +49,9 @@ class TrackExecExceptionWrapper:
 
 
 def track_exec(code_string, name, _globals=None, _locals=None):
-    compiled_code = compile(code_string, f'<{name}>', 'exec')
+    compiled_code = compile(code_string, f"<{name}>", "exec")
     exec(compiled_code, _globals, _locals)
+
 
 def format_track_exec_with_code(name, code_str, exc_info, context_lines=2):
     trace_lines = traceback.format_exception(*exc_info)
@@ -61,7 +64,7 @@ def format_track_exec_with_code(name, code_str, exc_info, context_lines=2):
             new_trace_lines.append(line)
     trace_lines = new_trace_lines
 
-    formatted_trace = ['']
+    formatted_trace = [""]
 
     last_match_index = 0
     for i, line in enumerate(reversed(trace_lines)):
@@ -80,9 +83,12 @@ def format_track_exec_with_code(name, code_str, exc_info, context_lines=2):
             if i == last_match_index:
                 _context_lines = context_lines
 
-            formatted_trace.extend(get_code_snippet(code_str, error_line, _context_lines))
+            formatted_trace.extend(
+                get_code_snippet(code_str, error_line, _context_lines)
+            )
 
     return "".join(formatted_trace)
+
 
 def get_code_snippet(code_str, error_line, context_lines):
     """Extracts code snippet around a specific line."""
@@ -99,7 +105,15 @@ def get_code_snippet(code_str, error_line, context_lines):
             formatted_code.append(f"{i:4} | {line}\n")
     return formatted_code
 
-def __default_exec(code, cls_name, cls=None, init_kwargs=None, call_kwargs=None, injector:ExecInjector=None) -> tuple[any, str, str, any]:
+
+def __default_exec(
+    code,
+    cls_name,
+    cls=None,
+    init_kwargs=None,
+    call_kwargs=None,
+    injector: ExecInjector = None,
+) -> tuple[any, str, str, any]:
     captured_output = io.StringIO()
     res = None
     err = None
@@ -130,7 +144,9 @@ def __default_exec(code, cls_name, cls=None, init_kwargs=None, call_kwargs=None,
 
         should_capture_output = call_kwargs.pop("capture_output", True)
         if should_capture_output:
-            with contextlib.redirect_stderr(captured_output), contextlib.redirect_stdout(captured_output):
+            with contextlib.redirect_stderr(
+                captured_output
+            ), contextlib.redirect_stdout(captured_output):
                 res = cls_instance(**call_kwargs)
         else:
             res = cls_instance(**call_kwargs)
@@ -142,12 +158,18 @@ def __default_exec(code, cls_name, cls=None, init_kwargs=None, call_kwargs=None,
             if cls_name not in namespace:
                 err = NameError(f"No '{cls_name}' found in the generated code")
             else:
-                with contextlib.redirect_stderr(captured_output), contextlib.redirect_stdout(captured_output):
+                with contextlib.redirect_stderr(
+                    captured_output
+                ), contextlib.redirect_stdout(captured_output):
                     _cls = namespace[cls_name]
-                    cls_instance = _inject_and_init(_cls, code, init_kwargs, call_kwargs)
+                    cls_instance = _inject_and_init(
+                        _cls, code, init_kwargs, call_kwargs
+                    )
                     res = cls_instance(**call_kwargs)
         except Exception as e:
-            formatted_traceback = format_track_exec_with_code(cls_name, code, sys.exc_info())
+            formatted_traceback = format_track_exec_with_code(
+                cls_name, code, sys.exc_info()
+            )
             err = TrackExecExceptionWrapper(e, formatted_traceback)
 
     if injector is not None:
@@ -155,13 +177,21 @@ def __default_exec(code, cls_name, cls=None, init_kwargs=None, call_kwargs=None,
 
     return res, captured_output.getvalue(), err, injector
 
-def default_exec(code, cls_name, init_kwargs=None, call_kwargs=None, cls=None, injector:ExecInjector=None) -> tuple[any, str, str, any]:
+
+def default_exec(
+    code,
+    cls_name,
+    init_kwargs=None,
+    call_kwargs=None,
+    cls=None,
+    injector: ExecInjector = None,
+) -> tuple[any, str, str, any]:
     params = {
-            "code": code,
-            "cls_name": cls_name,
-            "cls": cls,
-            "init_kwargs": init_kwargs,
-            "call_kwargs": call_kwargs,
-            "injector": injector
+        "code": code,
+        "cls_name": cls_name,
+        "cls": cls,
+        "init_kwargs": init_kwargs,
+        "call_kwargs": call_kwargs,
+        "injector": injector,
     }
     return __default_exec(**params)

@@ -5,6 +5,7 @@ import numpy as np
 from .population import Population, PopulationQueryItem, desc_similarity
 from ..individual import Individual
 
+
 class ESPopulationQueryItemType:
     INIT = "INIT"
     EXCLUSIVE_CROSSOVER = "EXCLUSIVE_CROSSOVER"
@@ -12,8 +13,15 @@ class ESPopulationQueryItemType:
     CROSSOVER = "CROSSOVER"
     MUTATION = "MUTATION"
 
+
 class ESPopulation(Population):
-    def __init__(self,n_parent:int=2, n_parent_per_offspring: int = 1, n_offspring: int = 1, use_elitism: bool = True):
+    def __init__(
+        self,
+        n_parent: int = 2,
+        n_parent_per_offspring: int = 1,
+        n_offspring: int = 1,
+        use_elitism: bool = True,
+    ):
         super().__init__()
 
         self.preorder_aware_init = False
@@ -24,23 +32,27 @@ class ESPopulation(Population):
 
         self.light_cross_over_evaluator = None
         self.light_cross_over_promptor = None
-        
+
         self.n_parent = n_parent
         self.n_parent_per_offspring = n_parent_per_offspring
         self.n_offspring = n_offspring
         self.use_elitism = use_elitism
 
-        self.individuals:dict[str, Individual] = {}
+        self.individuals: dict[str, Individual] = {}
         # all individuals per generation
-        self.generations:list[list[str]] = []
+        self.generations: list[list[str]] = []
         # selected individuals per generation
-        self.selected_generations:list[list[str]] = []
+        self.selected_generations: list[list[str]] = []
 
         if not self.use_elitism and self.n_parent > self.n_offspring:
-            raise ValueError("n_parent should be less than or equal to n_offspring when not using elitism.")
+            raise ValueError(
+                "n_parent should be less than or equal to n_offspring when not using elitism."
+            )
 
         if self.n_parent_per_offspring > self.n_parent:
-            raise ValueError("n_parent_per_offspring should be less than or equal to n_parent.")
+            raise ValueError(
+                "n_parent_per_offspring should be less than or equal to n_parent."
+            )
 
         # if math.comb(n_parent, n_parent_per_offspring) < self.n_offspring:
         #     raise ValueError(f"n_parent({n_parent}) choose n_parent_per_offspring({n_parent_per_offspring}) is {math.comb(n_parent, n_parent_per_offspring)}. It should be greater than or equal to n_offspring({n_offspring}).")
@@ -49,7 +61,7 @@ class ESPopulation(Population):
         return self.desc_settings()
 
     def desc_settings(self):
-        settings = f'''Population settings:
+        settings = f"""Population settings:
     n_parent: {self.n_parent}
     n_parent_per_offspring: {self.n_parent_per_offspring} 
     n_offspring: {self.n_offspring}  
@@ -61,15 +73,15 @@ class ESPopulation(Population):
     replaceable_parent_selection: {self.replaceable_parent_selection}
     selection_strategy: {self.selection_strategy}
     get_parent_strategy: {self.get_parent_strategy}
-'''
+"""
         return settings
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        state['light_cross_over_evaluator'] = None
-        state['light_cross_over_promptor'] = None
-        state['selection_strategy'] = None
-        state['get_parent_strategy'] = None
+        state["light_cross_over_evaluator"] = None
+        state["light_cross_over_promptor"] = None
+        state["selection_strategy"] = None
+        state["get_parent_strategy"] = None
         return state
 
     def get_promptor(self, query_item):
@@ -87,7 +99,7 @@ class ESPopulation(Population):
 
     def get_population_size(self):
         return len(self.individuals)
-    
+
     def add_individual(self, individual: Individual, generation: int = -1):
         if generation < 0:
             generation = self.get_current_generation()
@@ -100,7 +112,7 @@ class ESPopulation(Population):
         self.generations[generation].append(individual.id)
 
         if self.debug_save_on_the_fly:
-            self.save_on_the_fly(individual=individual, generation=generation) 
+            self.save_on_the_fly(individual=individual, generation=generation)
 
     def remove_individual(self, individual):
         if individual.id in self.individuals:
@@ -124,7 +136,11 @@ class ESPopulation(Population):
             return
 
         # If the population is not full in the first generation and the init is preorder-aware, do not select next generation
-        if self.get_current_generation() == 0 and self.preorder_aware_init and len(self.generations[0]) < self.n_parent:
+        if (
+            self.get_current_generation() == 0
+            and self.preorder_aware_init
+            and len(self.generations[0]) < self.n_parent
+        ):
             return
 
         last_gen = self.generations[-1]
@@ -136,36 +152,50 @@ class ESPopulation(Population):
             candidates = None
             if self.use_elitism:
                 _candidates = last_gen + last_pop
-                candidates = sorted(_candidates, key=lambda x: self.individuals[x].fitness, reverse=True)
-                next_pop = candidates[:self.n_parent]
+                candidates = sorted(
+                    _candidates, key=lambda x: self.individuals[x].fitness, reverse=True
+                )
+                next_pop = candidates[: self.n_parent]
             else:
                 _candidates = last_gen
                 if len(_candidates) < self.n_parent:
-                    logging.warning("Population size is less than n_parent when selecting next generation.")
+                    logging.warning(
+                        "Population size is less than n_parent when selecting next generation."
+                    )
                     next_pop = last_pop
                 else:
-                    candidates = sorted(_candidates, key=lambda x: self.individuals[x].fitness, reverse=True)
-                    next_pop = candidates[:self.n_parent]
+                    candidates = sorted(
+                        _candidates,
+                        key=lambda x: self.individuals[x].fitness,
+                        reverse=True,
+                    )
+                    next_pop = candidates[: self.n_parent]
 
             self.selected_generations.append(next_pop)
         else:
             ind_last_gen = [self.individuals[id] for id in last_gen]
             ind_last_pop = [self.individuals[id] for id in last_pop]
-            ind_next_pop = self.selection_strategy(ind_last_gen, ind_last_pop, self.n_parent)
+            ind_next_pop = self.selection_strategy(
+                ind_last_gen, ind_last_pop, self.n_parent
+            )
             next_pop = [ind.id for ind in ind_next_pop]
             self.selected_generations.append(next_pop)
 
         # Save population every n generations
         n_gen = len(self.selected_generations)
-        if self.save_per_generation is not None and n_gen % self.save_per_generation == 0:
-            _suffix = f'gen_checkpoint_{n_gen-1}'
+        if (
+            self.save_per_generation is not None
+            and n_gen % self.save_per_generation == 0
+        ):
+            _suffix = f"gen_checkpoint_{n_gen-1}"
             self.save(suffix=_suffix)
 
     def get_current_generation(self):
         return len(self.selected_generations)
 
-
-    def _get_query_item(self, comb_set:list, is_randam_selection, pop_list, parent_count) -> PopulationQueryItem:
+    def _get_query_item(
+        self, comb_set: list, is_randam_selection, pop_list, parent_count
+    ) -> PopulationQueryItem:
         parent_index = None
         if is_randam_selection:
             selected_index = np.random.randint(0, len(comb_set))
@@ -187,19 +217,26 @@ class ESPopulation(Population):
                 continue
 
             _parent = [query_item.offspring]
-            _next_query_item = PopulationQueryItem(parent=_parent, offspring=Individual())
+            _next_query_item = PopulationQueryItem(
+                parent=_parent, offspring=Individual()
+            )
             _next_query_item.type = ESPopulationQueryItemType.MUTATION
             _next_query_items.append(_next_query_item)
 
         self.logging_mutation_crossover_count(_next_query_items)
         return _next_query_items
-    
-    def get_offspring_queryitems(self, n_parent:int=None, max_n_offspring:int=None) -> list[PopulationQueryItem]:
 
+    def get_offspring_queryitems(
+        self, n_parent: int = None, max_n_offspring: int = None
+    ) -> list[PopulationQueryItem]:
         if len(self.selected_generations) == 0:
             # Initial population
             if self.preorder_aware_init:
-                parents = [self.individuals[id] for id in self.generations[0]] if len(self.generations) > 0 else []
+                parents = (
+                    [self.individuals[id] for id in self.generations[0]]
+                    if len(self.generations) > 0
+                    else []
+                )
                 query_item = PopulationQueryItem(parent=parents, offspring=Individual())
                 query_item.is_initialized = True
                 query_item.type = ESPopulationQueryItemType.INIT
@@ -224,9 +261,13 @@ class ESPopulation(Population):
                 # has enough offspring
                 return []
             else:
-                _n_offspring = min(self.n_offspring - len(self.generations[-1]), _n_offspring)
+                _n_offspring = min(
+                    self.n_offspring - len(self.generations[-1]), _n_offspring
+                )
 
-        _n_parent_per_offspring = self.n_parent_per_offspring if n_parent is None else n_parent
+        _n_parent_per_offspring = (
+            self.n_parent_per_offspring if n_parent is None else n_parent
+        )
 
         last_pop = self.selected_generations[-1]
         last_pop = [self.individuals[id] for id in last_pop if id in self.individuals]
@@ -234,33 +275,60 @@ class ESPopulation(Population):
 
         # custom parent selection strategy
         if self.get_parent_strategy is not None:
-            return self.get_parent_strategy(sorted_last_pop, _n_parent_per_offspring, _n_offspring)
-            
+            return self.get_parent_strategy(
+                sorted_last_pop, _n_parent_per_offspring, _n_offspring
+            )
+
         query_items = []
         parent_count = {}
 
         _one_comb = list(itertools.combinations(range(len(sorted_last_pop)), 1))
-        _n_comb = list(itertools.combinations(range(len(sorted_last_pop)), _n_parent_per_offspring))
+        _n_comb = list(
+            itertools.combinations(range(len(sorted_last_pop)), _n_parent_per_offspring)
+        )
         for i in range(_n_offspring):
             _n_parent = _n_parent_per_offspring
 
             if self.exclusive_operations:
                 # exclusive operations
-                if _n_parent_per_offspring > 1 and np.random.rand() > self.cross_over_rate and len(_one_comb) > 0:
+                if (
+                    _n_parent_per_offspring > 1
+                    and np.random.rand() > self.cross_over_rate
+                    and len(_one_comb) > 0
+                ):
                     _n_parent = 1
 
                 _current_comb = _one_comb if _n_parent == 1 else _n_comb
-                query_item = self._get_query_item(_current_comb, self.random_parent_selection, sorted_last_pop, parent_count)
-                query_item.type = ESPopulationQueryItemType.EXCLUSIVE_MUTATION if _n_parent == 1 else ESPopulationQueryItemType.EXCLUSIVE_CROSSOVER
+                query_item = self._get_query_item(
+                    _current_comb,
+                    self.random_parent_selection,
+                    sorted_last_pop,
+                    parent_count,
+                )
+                query_item.type = (
+                    ESPopulationQueryItemType.EXCLUSIVE_MUTATION
+                    if _n_parent == 1
+                    else ESPopulationQueryItemType.EXCLUSIVE_CROSSOVER
+                )
                 query_items.append(query_item)
             else:
                 _query_item = None
                 if np.random.rand() < self.cross_over_rate:
-                    _cross_item = self._get_query_item(_n_comb, self.random_parent_selection, sorted_last_pop, parent_count)
+                    _cross_item = self._get_query_item(
+                        _n_comb,
+                        self.random_parent_selection,
+                        sorted_last_pop,
+                        parent_count,
+                    )
                     _cross_item.type = ESPopulationQueryItemType.CROSSOVER
                     _query_item = _cross_item
                 if _query_item is None:
-                    _mut_item = self._get_query_item(_one_comb, self.random_parent_selection, sorted_last_pop, parent_count)
+                    _mut_item = self._get_query_item(
+                        _one_comb,
+                        self.random_parent_selection,
+                        sorted_last_pop,
+                        parent_count,
+                    )
                     _mut_item.type = ESPopulationQueryItemType.MUTATION
                     _query_item = _mut_item
 
@@ -273,20 +341,32 @@ class ESPopulation(Population):
             if len(_n_comb) == 0:
                 if self.replaceable_parent_selection:
                     # continue to use the same parent
-                    _n_comb = list(itertools.combinations(range(len(sorted_last_pop)), _n_parent_per_offspring))
+                    _n_comb = list(
+                        itertools.combinations(
+                            range(len(sorted_last_pop)), _n_parent_per_offspring
+                        )
+                    )
                 else:
                     # use bigger combiantions
                     _n_parent_per_offspring += 1
                     if _n_parent_per_offspring > len(sorted_last_pop):
                         # here means all combinations are used, reset
                         _n_parent_per_offspring = self.n_parent_per_offspring
-                        _n_comb = list(itertools.combinations(range(len(sorted_last_pop)), _n_parent_per_offspring))
+                        _n_comb = list(
+                            itertools.combinations(
+                                range(len(sorted_last_pop)), _n_parent_per_offspring
+                            )
+                        )
                     else:
-                        _n_comb = list(itertools.combinations(range(len(sorted_last_pop)), _n_parent_per_offspring))
+                        _n_comb = list(
+                            itertools.combinations(
+                                range(len(sorted_last_pop)), _n_parent_per_offspring
+                            )
+                        )
 
         logging.info("Parent count: %s", parent_count)
         self.logging_mutation_crossover_count(query_items)
-            
+
         return query_items
 
     def logging_mutation_crossover_count(self, query_items):
@@ -325,8 +405,12 @@ class ESPopulation(Population):
 
     def get_parent(self, individual: Individual):
         generation = individual.generation
-        if generation < 0 or generation >= len(self.selected_generations) or individual.parent_id is None:
-            return [] 
+        if (
+            generation < 0
+            or generation >= len(self.selected_generations)
+            or individual.parent_id is None
+        ):
+            return []
         parend_ids = individual.parent_id
         parents = []
         for parent_id in parend_ids:

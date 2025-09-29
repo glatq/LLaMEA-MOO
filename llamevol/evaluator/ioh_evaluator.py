@@ -17,7 +17,7 @@ from .evaluator_result import EvaluatorResult, EvaluatorBasicResult
 from .exec_utils import default_exec, ExecInjector
 
 from unittest.mock import MagicMock
- 
+
 _logger = logging.getLogger(__name__)
 
 
@@ -27,7 +27,7 @@ def calculate_aoc_by_ioh(y_hist, optimum_value, budget, upper=1e4):
     best_y -= optimum_value
 
     if len(best_y) >= budget:
-        best_y = best_y[:budget-1]  
+        best_y = best_y[: budget - 1]
     y_value = np.clip(best_y, l2.lower, l2.upper)
     log_upper = l2.transform(l2.upper)
     log_lower = l2.transform(l2.lower)
@@ -48,7 +48,7 @@ def calculate_aoc_by_ioh(y_hist, optimum_value, budget, upper=1e4):
     pre_aoc = 1 - pre_aoc
 
     mock_func = MagicMock()
-    mock_func.state.evaluations = budget if len(best_y) == budget-1 else len(best_y)
+    mock_func.state.evaluations = budget if len(best_y) == budget - 1 else len(best_y)
     mock_func.state.current_best_internal.y = best_y[-1]
     aoc = correct_aoc(mock_func, l2, budget)
 
@@ -56,8 +56,11 @@ def calculate_aoc_by_ioh(y_hist, optimum_value, budget, upper=1e4):
 
     return aoc
 
+
 class IOHObjectiveFn:
-    def __init__(self, problem_id, instance_id, exec_id, dim, budget, show_progress_bar=False):
+    def __init__(
+        self, problem_id, instance_id, exec_id, dim, budget, show_progress_bar=False
+    ):
         self.problem_id = problem_id
         self.instance_id = instance_id
         self.exec_id = exec_id
@@ -99,23 +102,35 @@ class IOHObjectiveFn:
     @property
     def show_progress_bar(self):
         return self._show_progress_bar
-    
+
     @show_progress_bar.setter
     def show_progress_bar(self, value):
         self._show_progress_bar = value
         if self._show_progress_bar:
-            self.progress_bar = tqdm(total=self.budget, desc=f"Evaluating {self.name}") 
+            self.progress_bar = tqdm(total=self.budget, desc=f"Evaluating {self.name}")
         else:
             if self.progress_bar is not None:
                 self.progress_bar.close()
                 self.progress_bar = None
 
     def __call__(self, x):
-        if self.obj_fn is not None and self.budget is not None and self.obj_fn.state.evaluations > self.budget:
-            _logger.error("%s Over budget: %s/%s", self.name, self.obj_fn.state.evaluations, self.budget)
+        if (
+            self.obj_fn is not None
+            and self.budget is not None
+            and self.obj_fn.state.evaluations > self.budget
+        ):
+            _logger.error(
+                "%s Over budget: %s/%s",
+                self.name,
+                self.obj_fn.state.evaluations,
+                self.budget,
+            )
             if not self.ignore_over_budget:
-                raise BOOverBudgetException("OverBudgetException", "The total number(during the whole process) of the sample points which evaluated by func should not exceed the budget. Using the surrogate model, accquisition function or any other methods suited your purposes instead of the func to evaluate the points is a alternative option.")
-        
+                raise BOOverBudgetException(
+                    "OverBudgetException",
+                    "The total number(during the whole process) of the sample points which evaluated by func should not exceed the budget. Using the surrogate model, accquisition function or any other methods suited your purposes instead of the func to evaluate the points is a alternative option.",
+                )
+
         # check if x are nan
         if np.isnan(x).any():
             raise ValueError(f"x({x}) contains nan values")
@@ -129,14 +144,14 @@ class IOHObjectiveFn:
 
         if self.y_hist is None:
             if isinstance(y, list):
-                self.y_hist = np.array(y).reshape(-1,1)
+                self.y_hist = np.array(y).reshape(-1, 1)
             else:
-                self.y_hist = np.array([y]).reshape(-1,1)
+                self.y_hist = np.array([y]).reshape(-1, 1)
         else:
             if isinstance(y, list):
-                self.y_hist = np.append(self.y_hist, np.array(y).reshape(-1,1))
+                self.y_hist = np.append(self.y_hist, np.array(y).reshape(-1, 1))
             else:
-                self.y_hist = np.append(self.y_hist, np.array([y]).reshape(-1,1))
+                self.y_hist = np.append(self.y_hist, np.array([y]).reshape(-1, 1))
 
         if self.show_progress_bar:
             progress = 1
@@ -150,20 +165,38 @@ class IOHObjectiveFn:
                 if progress % interval == 0:
                     msg = f"{self.name}-{self.instance_id}-{self.exec_id}:{progress}/{self.budget} evaluations completed"
                     _logger.debug(msg)
-        
+
         if self.maximize:
             y = -y
 
         if isinstance(y, list):
-            return np.array(y).reshape(-1,1)
+            return np.array(y).reshape(-1, 1)
         return y
 
-def ioh_evaluate_block(problem_id, instance_id, exec_id, dim, budget, code, cls_name, cls=None, cls_init_kwargs=None, cls_call_kwargs=None, 
-                       ignore_over_budget:bool=False, ignore_capture:bool=True,
-                       injector=None,
-                       ) -> tuple[Any, str, str, float, IOHObjectiveFn, Any]:
 
-    obj_fn = IOHObjectiveFn(problem_id=problem_id, instance_id=instance_id, exec_id=exec_id, dim=dim, budget=budget, show_progress_bar=False)
+def ioh_evaluate_block(
+    problem_id,
+    instance_id,
+    exec_id,
+    dim,
+    budget,
+    code,
+    cls_name,
+    cls=None,
+    cls_init_kwargs=None,
+    cls_call_kwargs=None,
+    ignore_over_budget: bool = False,
+    ignore_capture: bool = True,
+    injector=None,
+) -> tuple[Any, str, str, float, IOHObjectiveFn, Any]:
+    obj_fn = IOHObjectiveFn(
+        problem_id=problem_id,
+        instance_id=instance_id,
+        exec_id=exec_id,
+        dim=dim,
+        budget=budget,
+        show_progress_bar=False,
+    )
     obj_fn.ignore_over_budget = ignore_over_budget
 
     l2 = aoc_logger(budget, upper=1e4, triggers=[logger.trigger.ALWAYS])
@@ -177,14 +210,19 @@ def ioh_evaluate_block(problem_id, instance_id, exec_id, dim, budget, code, cls_
     }
     if cls_init_kwargs is not None:
         init_kwargs.update(cls_init_kwargs)
-    
-    call_kwargs = {
-        "func": obj_fn
-    }
+
+    call_kwargs = {"func": obj_fn}
     if cls_call_kwargs is not None:
         call_kwargs.update(cls_call_kwargs)
 
-    res, captured_output, err, new_injector = default_exec(code=code, cls_name=cls_name, cls=cls, init_kwargs=init_kwargs, call_kwargs=call_kwargs, injector=injector) 
+    res, captured_output, err, new_injector = default_exec(
+        code=code,
+        cls_name=cls_name,
+        cls=cls,
+        init_kwargs=init_kwargs,
+        call_kwargs=call_kwargs,
+        injector=injector,
+    )
     exec_time = time.perf_counter() - start_time
 
     aoc = correct_aoc(obj_fn.obj_fn, l2, budget)
@@ -192,17 +230,16 @@ def ioh_evaluate_block(problem_id, instance_id, exec_id, dim, budget, code, cls_
     obj_fn.reset()
 
     # _ioh_aoc = calculate_aoc_by_ioh(
-    #             y_hist=l2.history, 
-    #             optimum_value=0, 
+    #             y_hist=l2.history,
+    #             optimum_value=0,
     #             budget=obj_fn.budget
     #         )
 
     # _ioh_aoc = calculate_aoc_by_ioh(
-    #             y_hist=obj_fn.y_hist, 
-    #             optimum_value=obj_fn.optimal_value, 
+    #             y_hist=obj_fn.y_hist,
+    #             optimum_value=obj_fn.optimal_value,
     #             budget=obj_fn.budget
     # )
-
 
     if ignore_capture:
         captured_output = None
@@ -213,12 +250,23 @@ def ioh_evaluate_block(problem_id, instance_id, exec_id, dim, budget, code, cls_
 class IOHEvaluator(AbstractEvaluator):
     def __str__(self):
         return f"IOHEvaluator: {self._problem_name}_dim-{self.dim}_budget-{self.budget}_instances-{self.instances[0]}_repeat-{self.reapeat}"
-    
-    def __init__(self, dim:int = 5, budget:int = 40, problems:list[int]= None, instances:list[list[int]]=None, repeat:int = 1):
+
+    def __init__(
+        self,
+        dim: int = 5,
+        budget: int = 40,
+        problems: list[int] = None,
+        instances: list[list[int]] = None,
+        repeat: int = 1,
+    ):
         super().__init__()
-        if problems is not None and instances is not None and len(problems) != len(instances):
+        if (
+            problems is not None
+            and instances is not None
+            and len(problems) != len(instances)
+        ):
             raise ValueError("The length of problems and instances should be the same")
-        
+
         feasible_dim = [2, 3, 5, 10, 20, 40]
         if dim not in feasible_dim:
             raise ValueError(f"dim should be in {feasible_dim}")
@@ -239,10 +287,10 @@ class IOHEvaluator(AbstractEvaluator):
             weak_structure_problems = list(range(20, 25))
             group_problems = [
                 separable_problems,
-                low_conditioning_problems, 
-                high_conditioning_problems, 
-                adequate_structure_problems, 
-                weak_structure_problems
+                low_conditioning_problems,
+                high_conditioning_problems,
+                adequate_structure_problems,
+                weak_structure_problems,
             ]
 
             selected_problems = [random.choice(group) for group in group_problems]
@@ -259,7 +307,7 @@ class IOHEvaluator(AbstractEvaluator):
         else:
             # self.instances = [random.sample(feasible_instances, 1)] * len(self.problems)
             self.instances = [[1]] * len(self.problems)
-        
+
         self.reapeat = repeat
         self.dim = dim
         self.budget = budget
@@ -273,16 +321,16 @@ class IOHEvaluator(AbstractEvaluator):
                         "instance_id": instance,
                         "exec_id": i,
                         "dim": self.dim,
-                        "budget": self.budget
+                        "budget": self.budget,
                     }
                     obj_fn_params.append(params)
-        
+
         self.obj_fn_params = obj_fn_params
 
         problem_name = "_".join([f"f{problem}" for problem in self.problems])
         self._problem_name = problem_name
 
-        self.timeout = 60 * 60 # 60 minutes
+        self.timeout = 60 * 60  # 60 minutes
 
     def eval_bugdet(self) -> int:
         return self.budget
@@ -291,14 +339,18 @@ class IOHEvaluator(AbstractEvaluator):
         return self._problem_name
 
     def problem_prompt(self) -> str:
-        prompt = f'Problems from the BBOB test suite with dimensions {self.dim}\n'
+        prompt = f"Problems from the BBOB test suite with dimensions {self.dim}\n"
         return prompt
 
-    def __process_results(self, res, captured_output, err, exec_time, obj_fn, injector) -> EvaluatorBasicResult:
+    def __process_results(
+        self, res, captured_output, err, exec_time, obj_fn, injector
+    ) -> EvaluatorBasicResult:
         eval_basic_result = EvaluatorBasicResult()
         if self.dim > 5:
             eval_basic_result.aoc_upper_bound = 1e9
-        eval_basic_result.id = f"{obj_fn.problem_id}-{obj_fn.instance_id}-{obj_fn.exec_id}"
+        eval_basic_result.id = (
+            f"{obj_fn.problem_id}-{obj_fn.instance_id}-{obj_fn.exec_id}"
+        )
         eval_basic_result.budget = obj_fn.budget
         eval_basic_result.name = obj_fn.name
         eval_basic_result.bounds = obj_fn.bounds
@@ -318,14 +370,24 @@ class IOHEvaluator(AbstractEvaluator):
 
         if eval_basic_result.error is None:
             # best_y, best_x = res
-            y_hist = obj_fn.y_hist if len(obj_fn.y_hist) <= self.budget else obj_fn.y_hist[:self.budget] 
-            x_hist = obj_fn.x_hist if len(obj_fn.x_hist) <= self.budget else obj_fn.x_hist[:self.budget]
+            y_hist = (
+                obj_fn.y_hist
+                if len(obj_fn.y_hist) <= self.budget
+                else obj_fn.y_hist[: self.budget]
+            )
+            x_hist = (
+                obj_fn.x_hist
+                if len(obj_fn.x_hist) <= self.budget
+                else obj_fn.x_hist[: self.budget]
+            )
 
             eval_basic_result.name = obj_fn.name
             eval_basic_result.bounds = obj_fn.bounds
             eval_basic_result.optimal_value = obj_fn.optimal_value
             eval_basic_result.optimal_x = obj_fn.optimal_x
-            eval_basic_result.y_hist = y_hist.reshape(-1) if len(y_hist.shape) > 1 else y_hist
+            eval_basic_result.y_hist = (
+                y_hist.reshape(-1) if len(y_hist.shape) > 1 else y_hist
+            )
             eval_basic_result.x_hist = x_hist
 
             if injector is not None:
@@ -335,7 +397,9 @@ class IOHEvaluator(AbstractEvaluator):
                     eval_basic_result.r2_list = critic.r_2_list
                     eval_basic_result.r2_list_on_train = critic.r_2_list_on_train
                     eval_basic_result.uncertainty_list = critic.uncertainty_list
-                    eval_basic_result.uncertainty_list_on_train = critic.uncertainty_list_on_train
+                    eval_basic_result.uncertainty_list_on_train = (
+                        critic.uncertainty_list_on_train
+                    )
                     eval_basic_result.search_result = critic.search_result
                 if not injector.ignore_metric:
                     eval_basic_result.update_coverage()
@@ -344,7 +408,6 @@ class IOHEvaluator(AbstractEvaluator):
             eval_basic_result.update_stats()
             eval_basic_result.update_aoc(optimal_value=obj_fn.optimal_value, min_y=1e-8)
 
-            
             eval_basic_result.log_y_aoc_ioh = obj_fn.ioh_aoc
 
         return eval_basic_result
@@ -357,14 +420,20 @@ class IOHEvaluator(AbstractEvaluator):
                 return True
         return False
 
-    def _post_process_error_check(self, eval_result: EvaluatorResult, eval_basic_result: EvaluatorBasicResult, timeout, start_time):
+    def _post_process_error_check(
+        self,
+        eval_result: EvaluatorResult,
+        eval_basic_result: EvaluatorBasicResult,
+        timeout,
+        start_time,
+    ):
         _err = eval_basic_result.error
         _err_type = eval_basic_result.error_type
         if _err is None and self._check_timeout(start_time, timeout):
             _err = TimeoutError("Evaluation timed out (%d)", timeout)
             _err_type = "Timeout"
         if _err is not None:
-            eval_result.error = _err 
+            eval_result.error = _err
             eval_result.error_type = _err_type
         else:
             eval_result.result.append(eval_basic_result)
@@ -378,13 +447,25 @@ class IOHEvaluator(AbstractEvaluator):
             if done_tasks % interval == 0:
                 _logger.info("Evaluating %s: %s/%s", cls_name, done_tasks, total_tasks)
 
-    def start_as_completed(self,eval_result, futures, timeout, task_manager=None, executor=None, cls_name=None, interval=None, total_tasks=None):
+    def start_as_completed(
+        self,
+        eval_result,
+        futures,
+        timeout,
+        task_manager=None,
+        executor=None,
+        cls_name=None,
+        interval=None,
+        total_tasks=None,
+    ):
         _should_cancel = False
         _as_completed = None
         if task_manager is not None:
             _as_completed = task_manager.as_completed(futures.keys(), timeout=timeout)
         else:
-            _as_completed = concurrent.futures.as_completed(futures.keys(), timeout=timeout)
+            _as_completed = concurrent.futures.as_completed(
+                futures.keys(), timeout=timeout
+            )
         try:
             for future in _as_completed:
                 res = future.result()
@@ -393,7 +474,7 @@ class IOHEvaluator(AbstractEvaluator):
                 _err = eval_basic_result.error
                 _err_type = eval_basic_result.error_type
                 if _err is not None:
-                    eval_result.error = _err 
+                    eval_result.error = _err
                     eval_result.error_type = _err_type
                 else:
                     eval_result.result.append(eval_basic_result)
@@ -403,14 +484,14 @@ class IOHEvaluator(AbstractEvaluator):
                 if eval_result.error is not None:
                     _should_cancel = True
                     break
-        except TimeoutError :
+        except TimeoutError:
             _err = TimeoutError("Evaluation timed out (%d)", timeout)
             _err_type = "Timeout"
             eval_result.error = _err
             eval_result.error_type = _err_type
             self._logging_eval_process(eval_result, interval, total_tasks)
             _should_cancel = True
-        
+
         _logger.info("Evaluating %s: Shutting down executor", cls_name)
         # better to wait for all running tasks to finish in case of resource competition
         if task_manager is not None:
@@ -420,8 +501,16 @@ class IOHEvaluator(AbstractEvaluator):
         _logger.info("Evaluating %s: Executor shut down", cls_name)
 
         return eval_result
-            
-    def evaluate(self, code, cls_name, cls=None, cls_init_kwargs:dict[str, Any]=None, cls_call_kwargs:dict[str, Any]=None, injector=None) -> EvaluatorResult:
+
+    def evaluate(
+        self,
+        code,
+        cls_name,
+        cls=None,
+        cls_init_kwargs: dict[str, Any] = None,
+        cls_call_kwargs: dict[str, Any] = None,
+        injector=None,
+    ) -> EvaluatorResult:
         """Evaluate an individual."""
         eval_result = EvaluatorResult()
         eval_result.name = cls_name
@@ -442,7 +531,7 @@ class IOHEvaluator(AbstractEvaluator):
                 "ignore_over_budget": self.ignore_over_budget,
                 "cls_init_kwargs": cls_init_kwargs,
                 "cls_call_kwargs": cls_call_kwargs,
-                'injector': injector,
+                "injector": injector,
             }
             new_param.update(param)
             params.append(new_param)
@@ -451,7 +540,7 @@ class IOHEvaluator(AbstractEvaluator):
         interval = min(max(1, total_tasks // 4), 20)
 
         _all_eval_time_start = time.perf_counter()
-        
+
         max_eval_workers = self.max_eval_workers
         use_multi_process = self.use_multi_process
         use_mpi = self.use_mpi
@@ -464,41 +553,92 @@ class IOHEvaluator(AbstractEvaluator):
 
             comm = MPI.COMM_WORLD
             size = comm.Get_size()
-            _logger.info("Evaluating %s: %s tasks, using MPI with %s workers", cls_name, total_tasks, size-1)
+            _logger.info(
+                "Evaluating %s: %s tasks, using MPI with %s workers",
+                cls_name,
+                total_tasks,
+                size - 1,
+            )
 
             task_manager = MPITaskManager()
-            futures = {task_manager.submit(ioh_evaluate_block, **param): param for param in params}
-            self.start_as_completed(eval_result, futures, timeout, task_manager=task_manager, cls_name=cls_name, interval=interval, total_tasks=total_tasks)
-        
+            futures = {
+                task_manager.submit(ioh_evaluate_block, **param): param
+                for param in params
+            }
+            self.start_as_completed(
+                eval_result,
+                futures,
+                timeout,
+                task_manager=task_manager,
+                cls_name=cls_name,
+                interval=interval,
+                total_tasks=total_tasks,
+            )
+
         elif use_mpi_future:
             from mpi4py import MPI
             from mpi4py.futures import MPIPoolExecutor
             from mpi4py.futures import get_comm_workers
-            
+
             comm = MPI.COMM_WORLD
             size = comm.Get_size()
 
             if size < 2:
                 raise ValueError("Requires at least 2 MPI processes.")
 
-            _logger.info("Evaluating %s: %s tasks, using MPI.futures with %s max_workers", cls_name, total_tasks, size)
-                
-            executor = MPIPoolExecutor(max_workers=size)  
-            futures = {executor.submit(ioh_evaluate_block, **param): param for param in params}
-            self.start_as_completed(eval_result, futures, timeout, executor=executor, cls_name=cls_name, interval=interval, total_tasks=total_tasks)
+            _logger.info(
+                "Evaluating %s: %s tasks, using MPI.futures with %s max_workers",
+                cls_name,
+                total_tasks,
+                size,
+            )
+
+            executor = MPIPoolExecutor(max_workers=size)
+            futures = {
+                executor.submit(ioh_evaluate_block, **param): param for param in params
+            }
+            self.start_as_completed(
+                eval_result,
+                futures,
+                timeout,
+                executor=executor,
+                cls_name=cls_name,
+                interval=interval,
+                total_tasks=total_tasks,
+            )
 
         elif max_eval_workers is None or max_eval_workers > 0:
             max_workers = min(os.cpu_count() - 1, max_eval_workers)
             if use_multi_process:
-                _logger.info("Evaluating %s: %s tasks, using ProcessPoolExecutor with %s max_workers", cls_name, total_tasks, max_workers)
+                _logger.info(
+                    "Evaluating %s: %s tasks, using ProcessPoolExecutor with %s max_workers",
+                    cls_name,
+                    total_tasks,
+                    max_workers,
+                )
                 executor_cls = concurrent.futures.ProcessPoolExecutor
             else:
-                _logger.info("Evaluating %s: %s tasks, using ThreadPoolExecutor with %s max_workers", cls_name, total_tasks, max_workers)
+                _logger.info(
+                    "Evaluating %s: %s tasks, using ThreadPoolExecutor with %s max_workers",
+                    cls_name,
+                    total_tasks,
+                    max_workers,
+                )
                 executor_cls = concurrent.futures.ThreadPoolExecutor
 
             executor = executor_cls(max_workers=max_workers)
-            futures = {executor.submit(ioh_evaluate_block, **param): param for param in params}
-            self.start_as_completed(eval_result, futures, timeout, executor=executor, cls_name=cls_name, interval=interval, total_tasks=total_tasks)
+            futures = {
+                executor.submit(ioh_evaluate_block, **param): param for param in params
+            }
+            self.start_as_completed(
+                eval_result,
+                futures,
+                timeout,
+                executor=executor,
+                cls_name=cls_name,
+                interval=interval,
+                total_tasks=total_tasks,
+            )
         else:
             _logger.info("Evaluating %s: %s tasks in sequence", cls_name, total_tasks)
 
@@ -512,7 +652,7 @@ class IOHEvaluator(AbstractEvaluator):
                     _err = TimeoutError("Evaluation timed out (%d)", timeout)
                     _err_type = "Timeout"
                 if _err is not None:
-                    eval_result.error = _err 
+                    eval_result.error = _err
                     eval_result.error_type = _err_type
                 else:
                     eval_result.result.append(eval_basic_result)
@@ -524,13 +664,22 @@ class IOHEvaluator(AbstractEvaluator):
         _all_eval_time = time.perf_counter() - _all_eval_time_start
         if eval_result.error is None:
             eval_result.score = np.mean([r.log_y_aoc for r in eval_result.result])
-            eval_result.ioh_score = np.mean([r.log_y_aoc_ioh for r in eval_result.result])
-            eval_result.total_execution_time = np.sum([r.execution_time for r in eval_result.result])
-            _logger.info("Evaluated %s: %.4f executed %.2fs in %.2fs", cls_name, eval_result.score, eval_result.total_execution_time, _all_eval_time)
-        else:                           
+            eval_result.ioh_score = np.mean(
+                [r.log_y_aoc_ioh for r in eval_result.result]
+            )
+            eval_result.total_execution_time = np.sum(
+                [r.execution_time for r in eval_result.result]
+            )
+            _logger.info(
+                "Evaluated %s: %.4f executed %.2fs in %.2fs",
+                cls_name,
+                eval_result.score,
+                eval_result.total_execution_time,
+                _all_eval_time,
+            )
+        else:
             _logger.error("Evaluated %s: Failed in %.2fs", cls_name, _all_eval_time)
             eval_result.score = 0.0
             eval_result.total_execution_time = 0.0
 
         return eval_result
-

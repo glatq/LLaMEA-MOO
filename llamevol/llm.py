@@ -26,29 +26,101 @@ ONEHUB_BASE_URL = os.getenv("ONEHUB_BASE_URL")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 LLMS = {
-    'llama3-70b-8192': ('llama3-70b-8192', GROQ_API_KEY, GROQ_BASE_URL_FOR_OPENAI_CLIENT, 2, 'groq'),
-    "llama-3.3-70b-versatile": ('llama-3.3-70b-versatile', GROQ_API_KEY, GROQ_BASE_URL_FOR_OPENAI_CLIENT, 15, 'groq'),
-    'llama-4-maverick': ('meta-llama/llama-4-maverick-17b-128e-instruct', GROQ_API_KEY, GROQ_BASE_URL_FOR_OPENAI_CLIENT, 5, 'groq'),
-
-    "gemini-2.0-flash-exp": ('gemini-2.0-flash-exp', GEMINI_API_KEY, GEMINI_BASE_URL, 10, 'google'),
-    "gemini-2.0-flash": ('gemini-2.0-flash', GEMINI_API_KEY, GEMINI_BASE_URL, 10, 'google'),
-    'gemini-2.5-flash': ('gemini-2.5-flash', GEMINI_API_KEY, GEMINI_BASE_URL, 10, 'google'),
-
-    'onehub-gemini-2.0-flash': ('gemini-2.0-flash-exp', ONEHUB_API_KEY, ONEHUB_BASE_URL, 5, None),
-    'onehub-gemma2-9b-it': ('gemma2-9b-it', ONEHUB_API_KEY, ONEHUB_BASE_URL, 5, None),
-
-    'o_deepseek-r1-free': ('deepseek/deepseek-r1-0528:free', OPENROUTER_API_KEY, OPENROUTER_BASE_URL, 5, 'openrouter'),
-    'o_deepseek-r1': ('deepseek/deepseek-r1-0528', OPENROUTER_API_KEY, OPENROUTER_BASE_URL, 5, 'openrouter'),
-
-    'o_qwen3-coder-free': ('qwen/qwen3-coder:free', OPENROUTER_API_KEY, OPENROUTER_BASE_URL, 5, 'openrouter'),
-    'o_qwen3-coder': ('qwen/qwen3-coder', OPENROUTER_API_KEY, OPENROUTER_BASE_URL, 5, 'openrouter'),
-
-    'o_gpt4o': ('openai/gpt-4o-2024-11-20', OPENROUTER_API_KEY, OPENROUTER_BASE_URL, 5, 'openrouter'),
-
-    'o_gemini-2.0-flash': ('google/gemini-2.0-flash-001', OPENROUTER_API_KEY, OPENROUTER_BASE_URL, 5, 'openrouter'),
-
-    'gpt-4o': ('gpt-4o-2024-11-20', OPENAI_API_KEY, None, 5, 'openai'),
+    "llama3-70b-8192": (
+        "llama3-70b-8192",
+        GROQ_API_KEY,
+        GROQ_BASE_URL_FOR_OPENAI_CLIENT,
+        2,
+        "groq",
+    ),
+    "llama-3.3-70b-versatile": (
+        "llama-3.3-70b-versatile",
+        GROQ_API_KEY,
+        GROQ_BASE_URL_FOR_OPENAI_CLIENT,
+        15,
+        "groq",
+    ),
+    "llama-4-maverick": (
+        "meta-llama/llama-4-maverick-17b-128e-instruct",
+        GROQ_API_KEY,
+        GROQ_BASE_URL_FOR_OPENAI_CLIENT,
+        5,
+        "groq",
+    ),
+    "gemini-2.0-flash-exp": (
+        "gemini-2.0-flash-exp",
+        GEMINI_API_KEY,
+        GEMINI_BASE_URL,
+        10,
+        "google",
+    ),
+    "gemini-2.0-flash": (
+        "gemini-2.0-flash",
+        GEMINI_API_KEY,
+        GEMINI_BASE_URL,
+        10,
+        "google",
+    ),
+    "gemini-2.5-flash": (
+        "gemini-2.5-flash",
+        GEMINI_API_KEY,
+        GEMINI_BASE_URL,
+        10,
+        "google",
+    ),
+    "onehub-gemini-2.0-flash": (
+        "gemini-2.0-flash-exp",
+        ONEHUB_API_KEY,
+        ONEHUB_BASE_URL,
+        5,
+        None,
+    ),
+    "onehub-gemma2-9b-it": ("gemma2-9b-it", ONEHUB_API_KEY, ONEHUB_BASE_URL, 5, None),
+    "o_deepseek-r1-free": (
+        "deepseek/deepseek-r1-0528:free",
+        OPENROUTER_API_KEY,
+        OPENROUTER_BASE_URL,
+        5,
+        "openrouter",
+    ),
+    "o_deepseek-r1": (
+        "deepseek/deepseek-r1-0528",
+        OPENROUTER_API_KEY,
+        OPENROUTER_BASE_URL,
+        5,
+        "openrouter",
+    ),
+    "o_qwen3-coder-free": (
+        "qwen/qwen3-coder:free",
+        OPENROUTER_API_KEY,
+        OPENROUTER_BASE_URL,
+        5,
+        "openrouter",
+    ),
+    "o_qwen3-coder": (
+        "qwen/qwen3-coder",
+        OPENROUTER_API_KEY,
+        OPENROUTER_BASE_URL,
+        5,
+        "openrouter",
+    ),
+    "o_gpt4o": (
+        "openai/gpt-4o-2024-11-20",
+        OPENROUTER_API_KEY,
+        OPENROUTER_BASE_URL,
+        5,
+        "openrouter",
+    ),
+    "o_gemini-2.0-flash": (
+        "google/gemini-2.0-flash-001",
+        OPENROUTER_API_KEY,
+        OPENROUTER_BASE_URL,
+        5,
+        "openrouter",
+    ),
+    "gpt-4o": ("gpt-4o-2024-11-20", OPENAI_API_KEY, None, 5, "openai"),
 }
+
 
 class LLMClientResponse:
     def __init__(self, response):
@@ -61,7 +133,7 @@ class LLMClientResponse:
     @property
     def prompt_token_count(self):
         return self._prompt_token_count
-    
+
     @prompt_token_count.setter
     def prompt_token_count(self, value):
         if value is not None:
@@ -70,7 +142,7 @@ class LLMClientResponse:
     @property
     def response_token_count(self):
         return self._response_token_count
-    
+
     @response_token_count.setter
     def response_token_count(self, value):
         if value is not None:
@@ -81,8 +153,10 @@ class LLMClientResponse:
             return str(self.error)
         return str(self.response)
 
+
 class LLMClient(ABC):
     """Abstract base class for LLM backends."""
+
     def __init__(self, api_key: str, model_name: str, base_url: Optional[str] = None):
         self.model_name = model_name
         self.base_url = base_url
@@ -94,13 +168,13 @@ class LLMClient(ABC):
         messages: list[dict[str, str]],
         **kwargs: Any,
     ) -> LLMClientResponse:
-        """Generate a raw completion from the LLM.
-        """
+        """Generate a raw completion from the LLM."""
 
     @property
     def name(self) -> str:
         """Return the name of the LLM backend."""
         return f"{self.model_name}"
+
 
 class GoogleGenAIClient(LLMClient):
     def __init__(self, api_key: str, model_name: str, base_url: Optional[str] = None):
@@ -110,9 +184,9 @@ class GoogleGenAIClient(LLMClient):
         else:
             self.client = genai.Client(
                 vertexai=True,
-                project='starry-seat-441021-m2',
-                location='us-central1',
-                http_options=types.HttpOptions(api_version='v1')
+                project="starry-seat-441021-m2",
+                location="us-central1",
+                http_options=types.HttpOptions(api_version="v1"),
             )
 
     def raw_completion(
@@ -125,20 +199,19 @@ class GoogleGenAIClient(LLMClient):
             sys_prompt = None
             user_contents = []
             for _msg in messages:
-                if _msg['role'] == 'system':
-                    sys_prompt = _msg['content']
+                if _msg["role"] == "system":
+                    sys_prompt = _msg["content"]
                 else:
-                    user_contents.append(types.Part.from_text(text=_msg['content']))
-                    user_contents.append(_msg['content'])
+                    user_contents.append(types.Part.from_text(text=_msg["content"]))
+                    user_contents.append(_msg["content"])
 
             response = self.client.models.generate_content(
                 model=self.model_name,
-                contents= user_contents,
+                contents=user_contents,
                 config=types.GenerateContentConfig(
-                    system_instruction=sys_prompt,
-                    **kwargs
+                    system_instruction=sys_prompt, **kwargs
                 ),
-            )   
+            )
             res = LLMClientResponse(response)
             res.text = response.text
             res.prompt_token_count = response.usage_metadata.prompt_token_count
@@ -149,10 +222,10 @@ class GoogleGenAIClient(LLMClient):
             res.error = e
             return res
 
+
 class CustomGroqMessageConverter(GroqMessageConverter):
     @staticmethod
     def convert_response(response_data):
-
         res = GroqMessageConverter.convert_response(response_data)
 
         current_timestamp = time.time()
@@ -161,11 +234,12 @@ class CustomGroqMessageConverter(GroqMessageConverter):
         AISuiteClient.raw_response_map[current_timestamp] = response_data
 
         return res
-    
+
+
 class AISuiteClient(LLMClient):
     # content should be deleted after use
     raw_response_map = {}
-    
+
     def __init__(self, model_key: str):
         if model_key not in LLMS:
             raise ValueError(f"Invalid model key: {model_key}")
@@ -175,14 +249,14 @@ class AISuiteClient(LLMClient):
         base_url = _model[2]
 
         self.provider = _model[4]
-        
+
         super().__init__(api_key, model_name, base_url)
         _config = {
             "groq": {
                 "api_key": GROQ_API_KEY,
             },
         }
-        
+
         self.client = ai.Client(provider_configs=_config)
 
         if self.provider == "groq":
@@ -199,9 +273,7 @@ class AISuiteClient(LLMClient):
         try:
             _aisuite_model = f"{self.provider}:{self.model_name}"
             response = self.client.chat.completions.create(
-                model=_aisuite_model,
-                messages=messages,
-                **kwargs
+                model=_aisuite_model, messages=messages, **kwargs
             )
 
             res = LLMClientResponse(response)
@@ -210,17 +282,22 @@ class AISuiteClient(LLMClient):
             raw_response = None
             if getattr(response, "_response_timestamp", None) is not None:
                 _response_timestamp = getattr(response, "_response_timestamp")
-                raw_response = AISuiteClient.raw_response_map.pop(_response_timestamp, None)
+                raw_response = AISuiteClient.raw_response_map.pop(
+                    _response_timestamp, None
+                )
                 res.response = raw_response
                 if self.provider == "groq":
                     res.prompt_token_count = raw_response["usage"]["prompt_tokens"]
-                    res.response_token_count = raw_response["usage"]["completion_tokens"]
+                    res.response_token_count = raw_response["usage"][
+                        "completion_tokens"
+                    ]
 
             return res
         except Exception as e:
             res = LLMClientResponse(None)
             res.error = e
             return res
+
 
 class OpenAIClient(LLMClient):
     """OpenAI GPT backend implementation."""
@@ -238,9 +315,7 @@ class OpenAIClient(LLMClient):
         res = None
         try:
             response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
-                **kwargs
+                model=self.model_name, messages=messages, **kwargs
             )
             res = LLMClientResponse(response)
             res.text = response.choices[0].message.content
@@ -252,6 +327,7 @@ class OpenAIClient(LLMClient):
             res.error = e
             return res
 
+
 class RequestClient(LLMClient):
     def raw_completion(
         self,
@@ -259,15 +335,11 @@ class RequestClient(LLMClient):
         **kwargs: Any,
     ) -> LLMClientResponse:
         url = self.base_url + "/chat/completions"
-        payload = {
-            "model": self.model_name,
-            "messages": messages,
-            **kwargs
-        }
+        payload = {"model": self.model_name, "messages": messages, **kwargs}
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
+            "Authorization": f"Bearer {self.api_key}",
         }
 
         response = requests.post(url, json=payload, headers=headers, timeout=30)
@@ -286,10 +358,19 @@ class RequestClient(LLMClient):
             res.error = e
             return res
 
-class LLMmanager:
-    def __init__(self, model_key: str = None, model_name: str = None, api_key: str = None, base_url: str = None, client_str: str = None):
 
-        use_vertex = (client_str == "vertex") or (os.getenv("GOOGLE_GENAI_USE_VERTEXAI") == "1")
+class LLMmanager:
+    def __init__(
+        self,
+        model_key: str = None,
+        model_name: str = None,
+        api_key: str = None,
+        base_url: str = None,
+        client_str: str = None,
+    ):
+        use_vertex = (client_str == "vertex") or (
+            os.getenv("GOOGLE_GENAI_USE_VERTEXAI") == "1"
+        )
 
         if model_key is None:
             if model_name is None:
@@ -325,7 +406,7 @@ class LLMmanager:
             self.client = AISuiteClient(model_key)
 
         self.max_interval = _model[3]
-        self.mock_res_provider:Callable[..., str] = None
+        self.mock_res_provider: Callable[..., str] = None
 
     def model_name(self) -> str:
         return self.client.name
@@ -335,14 +416,11 @@ class LLMmanager:
             _content = self.mock_res_provider(session_messages, **kwargs)
             res = LLMClientResponse(None)
             res.text = _content
-            res.response_token_count = len(_content.split()) 
+            res.response_token_count = len(_content.split())
             return res
-        
-        logging.info("LLM: %s, %s", self.model_name(), kwargs) 
-        response = self.client.raw_completion(
-            session_messages,
-            **kwargs
-        )
+
+        logging.info("LLM: %s, %s", self.model_name(), kwargs)
+        response = self.client.raw_completion(session_messages, **kwargs)
 
         if response.error is not None:
             logging.error("LLM: %s, %s", self.model_name(), response.error)

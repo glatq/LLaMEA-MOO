@@ -1,9 +1,13 @@
-
 import random
 import re
 import numpy as np
 from llamevol.evaluator import EvaluatorResult
-from .abstract_prompt_generator import PromptGenerator, GenerationTask, ResponseImpReturnChecker, ResponseHandler
+from .abstract_prompt_generator import (
+    PromptGenerator,
+    GenerationTask,
+    ResponseImpReturnChecker,
+    ResponseHandler,
+)
 
 
 class BOPromptGeneratorReturnChecker(ResponseImpReturnChecker):
@@ -15,11 +19,15 @@ class BOPromptGeneratorReturnChecker(ResponseImpReturnChecker):
             err_str = ""
             all_y = func_return[0]
             if not isinstance(all_y, np.ndarray):
-                err_str += "The first element of the return value should be a numpy array."
+                err_str += (
+                    "The first element of the return value should be a numpy array."
+                )
 
             all_x = func_return[1]
             if not isinstance(all_x, np.ndarray):
-                err_str += "The second element of the return value should be a numpy array."
+                err_str += (
+                    "The second element of the return value should be a numpy array."
+                )
 
             loss_tuple = func_return[2]
             if not isinstance(loss_tuple, tuple) or len(loss_tuple) != 2:
@@ -34,13 +42,14 @@ class BOPromptGeneratorReturnChecker(ResponseImpReturnChecker):
 
             return err_str
 
+
 class BoZeroPlusResponseHandler(ResponseHandler):
     def __init__(self):
         super().__init__()
 
         self.problem_analysis = ""
         self.feedback_analysis = ""
-        self.potential_techniques= ""
+        self.potential_techniques = ""
         self.improvement = ""
         self.proposed_strategies = ""
         self.algorithm_design = ""
@@ -50,7 +59,6 @@ class BoZeroPlusResponseHandler(ResponseHandler):
         self.proposed_solutions = ""
         # Feedback for error_analysis and proposed_solutions
         self.error_feedback = ""
-
 
     def __to_json__(self):
         d = super().__to_json__()
@@ -66,30 +74,35 @@ class BoZeroPlusResponseHandler(ResponseHandler):
         d["error_feedback"] = self.error_feedback
         return d
 
-    def extract_response(self, response:str, task:GenerationTask):
+    def extract_response(self, response: str, task: GenerationTask):
         if not response:
             return
 
         self.raw_response = response
-        
+
         if task == GenerationTask.INITIALIZE_SOLUTION:
             self.__extract_for_initial_solution(response)
-        elif task == GenerationTask.FIX_ERRORS or task == GenerationTask.FIX_ERRORS_FROM_ERROR:
+        elif (
+            task == GenerationTask.FIX_ERRORS
+            or task == GenerationTask.FIX_ERRORS_FROM_ERROR
+        ):
             self.__extract_for_error_fixing(response)
         elif task == GenerationTask.OPTIMIZE_PERFORMANCE:
             self.__extract_for_improvement(response)
 
-    def __extract_for_improvement(self, response:str):
+    def __extract_for_improvement(self, response: str):
         self.raw_response = response
-        sections = ["Problem Analysis", 
-                    "Feedback Analysis", 
-                    "Potential Techniques", 
-                    "Improvements",
-                    "Proposed Strategies",
-                    "Proposed Strategies", 
-                    "Final Algorithm Design", 
-                    "Pseudocode", 
-                    "Code"]
+        sections = [
+            "Problem Analysis",
+            "Feedback Analysis",
+            "Potential Techniques",
+            "Improvements",
+            "Proposed Strategies",
+            "Proposed Strategies",
+            "Final Algorithm Design",
+            "Pseudocode",
+            "Code",
+        ]
         for section in sections:
             if section == "Code":
                 self.code, _ = self.extract_from_response(response, section)
@@ -99,33 +112,53 @@ class BoZeroPlusResponseHandler(ResponseHandler):
             elif section == "Pseudocode":
                 self.pseudocode, _ = self.extract_from_response(response, section)
             elif section == "Proposed Strategies":
-                self.proposed_strategies, _ = self.extract_from_response(response, section)
+                self.proposed_strategies, _ = self.extract_from_response(
+                    response, section
+                )
             elif section == "Potential Techniques":
-                self.potential_techniques, _ = self.extract_from_response(response, section)
+                self.potential_techniques, _ = self.extract_from_response(
+                    response, section
+                )
             elif section == "Feedback Analysis":
-                self.feedback_analysis, _ = self.extract_from_response(response, section)
+                self.feedback_analysis, _ = self.extract_from_response(
+                    response, section
+                )
             elif section == "Problem Analysis":
                 self.problem_analysis, _ = self.extract_from_response(response, section)
             elif section == "Improvements":
                 self.improvement, _ = self.extract_from_response(response, section)
 
-    def __extract_for_error_fixing(self, response:str):
+    def __extract_for_error_fixing(self, response: str):
         self.raw_response = response
-        sections = ["Identified Errors", "Proposed Solutions", "Code", "Previous Analysis Feedback"]
+        sections = [
+            "Identified Errors",
+            "Proposed Solutions",
+            "Code",
+            "Previous Analysis Feedback",
+        ]
         for section in sections:
             if section == "Identified Errors":
                 self.error_analysis, _ = self.extract_from_response(response, section)
             elif section == "Proposed Solutions":
-                self.proposed_solutions, _ = self.extract_from_response(response, section)
+                self.proposed_solutions, _ = self.extract_from_response(
+                    response, section
+                )
             elif section == "Code":
                 self.code, _ = self.extract_from_response(response, section)
                 self.code_name, _ = self.extract_from_response(response, "class_name")
             elif section == "Previous Analysis Feedback":
                 self.error_feedback, _ = self.extract_from_response(response, section)
 
-    def __extract_for_initial_solution(self, response:str):
+    def __extract_for_initial_solution(self, response: str):
         self.raw_response = response
-        sections = ["Problem Analysis", "Potential Techniques", "Proposed Strategies", "Final Algorithm Design", "Pseudocode", "Code"]
+        sections = [
+            "Problem Analysis",
+            "Potential Techniques",
+            "Proposed Strategies",
+            "Final Algorithm Design",
+            "Pseudocode",
+            "Code",
+        ]
         for section in sections:
             if section == "Code":
                 self.code, _ = self.extract_from_response(response, section)
@@ -135,13 +168,19 @@ class BoZeroPlusResponseHandler(ResponseHandler):
             elif section == "Pseudocode":
                 self.pseudocode, _ = self.extract_from_response(response, section)
             elif section == "Proposed Strategies":
-                self.proposed_strategies, _ = self.extract_from_response(response, section)
+                self.proposed_strategies, _ = self.extract_from_response(
+                    response, section
+                )
             elif section == "Potential Techniques":
-                self.potential_techniques, _ = self.extract_from_response(response, section)
+                self.potential_techniques, _ = self.extract_from_response(
+                    response, section
+                )
             elif section == "Problem Analysis":
                 self.problem_analysis, _ = self.extract_from_response(response, section)
 
-    def extract_from_response(self, response: str, section: str, pattern=None) -> tuple[str, str]:
+    def extract_from_response(
+        self, response: str, section: str, pattern=None
+    ) -> tuple[str, str]:
         error_str = ""
         res = ""
         if pattern is None:
@@ -159,7 +198,8 @@ class BoZeroPlusResponseHandler(ResponseHandler):
             error_str = f"{section} not found in the response."
         return res, error_str
 
-class ZeroPlusBOPromptSharedboard():
+
+class ZeroPlusBOPromptSharedboard:
     def __init__(self):
         self.problem_analysis = []
         self.tech_base = []
@@ -178,6 +218,7 @@ class ZeroPlusBOPromptSharedboard():
                 return last
         return None
 
+
 class BoZeroPlusPromptGenerator(PromptGenerator):
     def __init__(self):
         super().__init__()
@@ -187,7 +228,7 @@ class BoZeroPlusPromptGenerator(PromptGenerator):
         self.evolved_techs = []
         self.evolved_problem_analysis = []
 
-# method list
+    # method list
 
     def surrogate_models(self) -> list[str]:
         surrogate_models = [
@@ -195,30 +236,24 @@ class BoZeroPlusPromptGenerator(PromptGenerator):
             "Standard Gaussian Process (GP)",
             "Variational Sparse GP",
             "Fully Independent Training Conditional (FITC) GP",
-
             "Deep Gaussian Processes (Deep GPs)",
             "Heteroscedastic Gaussian Processes",
-
             # Tree-Based Models
             "Random Forest (RF)",
             "Tree Parzen Estimator (TPE)",
-
             # Neural Network Based Models
             "Bayesian Neural Networks (BNNs)",
             "Neural Networks with Attention Mechanisms",
-
             # Regression-Based Models
             "Support Vector Regression (SVR)",
             "Kernelized Ridge Regression",
             "Polynomial Regression",
             "Local Polynomial Regression",
             "Radial Basis Function (RBF) Networks",
-
             # Other Models
             "Polynomial Chaos Expansions (PCE)",
             "Gaussian Mixture Models (GMMs)",
             "B-splines",
-
             # Ensemble and Hybrid Approaches
             "Ensemble of Models",
             "Hybrid Models Combining Different Surrogate Models",
@@ -255,33 +290,32 @@ class BoZeroPlusPromptGenerator(PromptGenerator):
         initialization_strategies = [
             "Uniform Sampling",
             "Latin Hypercube Sampling (LHS)",
-
             "Sobol Sequence",
             "Halton Sequence",
             "Faure Sequences",
             "Low-discrepancy Sampling",
-
             "Orthogonal Array Sampling",
             "Maximin Distance Sampling",
             "Orthogonal Latin Hypercube Sampling",
             "Quasi-Monte Carlo Sampling",
-
             "Domain expertise-based initialization",
         ]
         return initialization_strategies
 
     def other_techniques(self) -> list[str]:
-        other_techniques = [
-        ]
+        other_techniques = []
         return other_techniques
 
-# prompt generation
+    # prompt generation
 
-    def get_prompt(self, task:GenerationTask, problem_desc:str, 
-                   candidates:list[BoZeroPlusResponseHandler]= None,
-                   population=None,
-                   options=None,
-                   ) -> tuple[str, str]:
+    def get_prompt(
+        self,
+        task: GenerationTask,
+        problem_desc: str,
+        candidates: list[BoZeroPlusResponseHandler] = None,
+        population=None,
+        options=None,
+    ) -> tuple[str, str]:
         if task == GenerationTask.INITIALIZE_SOLUTION:
             final_prompt = ""
 
@@ -299,7 +333,10 @@ class BoZeroPlusPromptGenerator(PromptGenerator):
 
             response_format_prompt = self.response_format(task=task)
             final_prompt += f"{response_format_prompt}\n"
-        elif task == GenerationTask.FIX_ERRORS or task == GenerationTask.FIX_ERRORS_FROM_ERROR:
+        elif (
+            task == GenerationTask.FIX_ERRORS
+            or task == GenerationTask.FIX_ERRORS_FROM_ERROR
+        ):
             if candidates is None or len(candidates) == 0:
                 return "", ""
 
@@ -343,9 +380,13 @@ class BoZeroPlusPromptGenerator(PromptGenerator):
             previous_problem_analysis = candidate.problem_analysis
             previous_proposed_techniques = candidate.proposed_strategies
             if len(previous_problem_analysis) > 0:
-                final_prompt += f"""### Problem Analysis\n{previous_problem_analysis}\n"""
+                final_prompt += (
+                    f"""### Problem Analysis\n{previous_problem_analysis}\n"""
+                )
             if len(previous_problem_analysis) > 0:
-                final_prompt += f"""### Potential Techniques\n{previous_proposed_techniques}\n"""
+                final_prompt += (
+                    f"""### Potential Techniques\n{previous_proposed_techniques}\n"""
+                )
 
             final_prompt += f"### Solution\n```python\n{candidate.code}\n```\n"
             response_format_prompt = self.response_format(task)
@@ -353,25 +394,33 @@ class BoZeroPlusPromptGenerator(PromptGenerator):
 
         return "", final_prompt
 
-    def task_description(self, task:GenerationTask) -> str:
+    def task_description(self, task: GenerationTask) -> str:
         desc = """## Task Description\n"""
         if task == GenerationTask.INITIALIZE_SOLUTION:
             desc += "You will be given minimization optimization problems. Your tasks are to analyze the problem, design a feasible Bayesian Optimization algorithm, and implement it."
-        elif task == GenerationTask.FIX_ERRORS or task == GenerationTask.FIX_ERRORS_FROM_ERROR:
+        elif (
+            task == GenerationTask.FIX_ERRORS
+            or task == GenerationTask.FIX_ERRORS_FROM_ERROR
+        ):
             desc += "You will be given a Bayesian Optimization solution with errors. Your task is to identify and correct the errors in the provided solution."
         elif task == GenerationTask.OPTIMIZE_PERFORMANCE:
             desc += "You will be given a Bayesian Optimization solution with evaluation feedback, problem analysis, and other information. Your task is to optimize the performance of the solution."
         return desc
 
-    def task_instruction(self, task:GenerationTask) -> str:
+    def task_instruction(self, task: GenerationTask) -> str:
         desc = """## Task Instruction\n"""
         if task == GenerationTask.INITIALIZE_SOLUTION:
             desc += "You need to act as a mathematician, computer scientist, and programmer independently.\n"
             desc += self.task_instruction_for_mathematician(task)
             desc += self.task_instruction_for_scientist(task, self.aggressiveness)
             desc += self.task_instruction_for_programmer(task, self.use_botorch)
-        elif task == GenerationTask.FIX_ERRORS or task == GenerationTask.FIX_ERRORS_FROM_ERROR:
-            desc += "You need to act as computer scientist and programmer independently.\n"
+        elif (
+            task == GenerationTask.FIX_ERRORS
+            or task == GenerationTask.FIX_ERRORS_FROM_ERROR
+        ):
+            desc += (
+                "You need to act as computer scientist and programmer independently.\n"
+            )
             desc += self.task_instruction_for_scientist(task)
             desc += self.task_instruction_for_programmer(task, self.use_botorch)
         elif task == GenerationTask.OPTIMIZE_PERFORMANCE:
@@ -381,14 +430,17 @@ class BoZeroPlusPromptGenerator(PromptGenerator):
             desc += self.task_instruction_for_programmer(task, self.use_botorch)
         return desc
 
-    def task_instruction_for_mathematician(self, task:GenerationTask) -> str:
+    def task_instruction_for_mathematician(self, task: GenerationTask) -> str:
         instruction = """\n**as a mathematician specialized in optimization**
 """
-        if task == GenerationTask.INITIALIZE_SOLUTION: 
+        if task == GenerationTask.INITIALIZE_SOLUTION:
             instruction += """- Identify the key characteristics of the problems relevant to optimization, not limited to its multi-modality, separability, and the location of its global minimum.
 - Analyze the problem, focusing on the challenges posed by the problems for optimization algorithms. Consider aspects should be included but not limited to local optima, ruggedness, and the search space dimensionality.
 """
-        elif task == GenerationTask.FIX_ERRORS or task == GenerationTask.FIX_ERRORS_FROM_ERROR:
+        elif (
+            task == GenerationTask.FIX_ERRORS
+            or task == GenerationTask.FIX_ERRORS_FROM_ERROR
+        ):
             instruction += ""
         elif task == GenerationTask.OPTIMIZE_PERFORMANCE:
             instruction += """- Review the provided problem analysis on correctness and comprehensiveness.
@@ -396,7 +448,9 @@ class BoZeroPlusPromptGenerator(PromptGenerator):
 """
         return instruction
 
-    def task_instruction_for_programmer(self, task:GenerationTask, use_botorch:bool=False) -> str:
+    def task_instruction_for_programmer(
+        self, task: GenerationTask, use_botorch: bool = False
+    ) -> str:
         instruction = """\n**as a programmer specialized in python.**\n"""
         lib_instruction = "- as a expert of numpy, scipy, scikit-learn, torch, GPytorch, you are allowed to use these libraries."
         if use_botorch:
@@ -412,7 +466,10 @@ class BoZeroPlusPromptGenerator(PromptGenerator):
 - Implement the algorithm in Python strictly following the provided code structure guide. Ensure that the implementation aligns with the pseudocode developed in the previous step, paying particular attention to the implementation of any novel methods.
 {lib_instruction}
 """
-        elif task == GenerationTask.FIX_ERRORS or task == GenerationTask.FIX_ERRORS_FROM_ERROR:
+        elif (
+            task == GenerationTask.FIX_ERRORS
+            or task == GenerationTask.FIX_ERRORS_FROM_ERROR
+        ):
             instruction += f"""1. Identify the cause of the provided errors.
 2. Review the code for potential errors related to the implementation. Here, only make most confident guesses.
 3. Propose solutions for the identified errors, ensuring that the proposed modifications align with the original algorithm's design and intention.
@@ -431,8 +488,12 @@ class BoZeroPlusPromptGenerator(PromptGenerator):
 """
         return instruction
 
-    def task_instruction_for_scientist(self, task:GenerationTask, aggressiveness:float = None) -> str:
-        instruction = """\n**as a computer scientist specialized in bayesian optimization**\n"""
+    def task_instruction_for_scientist(
+        self, task: GenerationTask, aggressiveness: float = None
+    ) -> str:
+        instruction = (
+            """\n**as a computer scientist specialized in bayesian optimization**\n"""
+        )
         if task == GenerationTask.INITIALIZE_SOLUTION:
             # ss_candidates = ", ".join(self.initialization_strategies())
             # sm_candidates = ", ".join(self.surrogate_models())
@@ -454,7 +515,10 @@ class BoZeroPlusPromptGenerator(PromptGenerator):
 - Be aware: AGGRESSIVENESS only affects the choice of techniques, not the implementation as a parameter.
 4. Pseudocode: Write down the key steps of your chosen algorithm in plain and consise pseudocode, highlighting any novel components or adaptations.
 """
-        elif task == GenerationTask.FIX_ERRORS or task == GenerationTask.FIX_ERRORS_FROM_ERROR:
+        elif (
+            task == GenerationTask.FIX_ERRORS
+            or task == GenerationTask.FIX_ERRORS_FROM_ERROR
+        ):
             instruction += """1. Identify the cause of the provided errors.
 2. Review the code for potential errors related to algorithm design. Here, only make most confident guesses.
 3. Propose solutions for the identified errors, ensuring that the proposed modifications align with the original algorithm's design and intention. 
@@ -475,7 +539,7 @@ class BoZeroPlusPromptGenerator(PromptGenerator):
 """
         return instruction
 
-    def __get_result_feedback(self, eval_result:EvaluatorResult, name=None) -> str:
+    def __get_result_feedback(self, eval_result: EvaluatorResult, name=None) -> str:
         if eval_result is None:
             return ""
 
@@ -488,9 +552,15 @@ class BoZeroPlusPromptGenerator(PromptGenerator):
             feedback_prompt += f"- best y: {result.best_y:.2f}\n"
             if result.n_initial_points > 0:
                 if result.y_best_tuple is not None:
-                    feedback_prompt += f"- initial best y: {result.y_best_tuple[0]:.2f}\n"
-                    feedback_prompt += f"- non-initial best y: {result.y_best_tuple[1]:.2f}\n"
-                feedback_prompt += f"- AOC for non-initial y: {result.non_init_y_aoc:.2f}\n"
+                    feedback_prompt += (
+                        f"- initial best y: {result.y_best_tuple[0]:.2f}\n"
+                    )
+                    feedback_prompt += (
+                        f"- non-initial best y: {result.y_best_tuple[1]:.2f}\n"
+                    )
+                feedback_prompt += (
+                    f"- AOC for non-initial y: {result.non_init_y_aoc:.2f}\n"
+                )
             else:
                 feedback_prompt += f"- AOC for all y: {result.y_aoc:.2f}\n"
                 if result.x_mean is not None and result.x_std is not None:
@@ -501,35 +571,57 @@ class BoZeroPlusPromptGenerator(PromptGenerator):
 
         return feedback_prompt
 
-    def evaluation_feedback_prompt(self, eval_res:EvaluatorResult, options=None) -> str:
+    def evaluation_feedback_prompt(
+        self, eval_res: EvaluatorResult, options=None
+    ) -> str:
         if eval_res is None or len(eval_res.result) == 0:
             return ""
         final_feedback_prompt = "### Feedback\n"
         final_feedback_prompt += f"- Budget: {eval_res.result[0].budget}\n"
         if len(eval_res.result) == 1:
             if eval_res.result[0].optimal_value is not None:
-                final_feedback_prompt += f"- Optimal Value: {eval_res.result[0].optimal_value}\n"
+                final_feedback_prompt += (
+                    f"- Optimal Value: {eval_res.result[0].optimal_value}\n"
+                )
         else:
             final_feedback_prompt += "- Optimal Value\n"
-            for result in eval_res.result: 
+            for result in eval_res.result:
                 if result.optimal_value is not None:
-                    final_feedback_prompt += f"- {result.name}: {result.optimal_value}\n"
+                    final_feedback_prompt += (
+                        f"- {result.name}: {result.optimal_value}\n"
+                    )
 
         last_feedback = None if options is None else options.get("last_feedback", None)
         res_name = None
         last_res_name = None
         if last_feedback is not None:
-            res_name = f"{eval_res.name}(After Optimization)" if last_feedback is not None else None
-            last_res_name = f"{last_feedback.name}(Before Optimization)" if last_feedback is not None else None
+            res_name = (
+                f"{eval_res.name}(After Optimization)"
+                if last_feedback is not None
+                else None
+            )
+            last_res_name = (
+                f"{last_feedback.name}(Before Optimization)"
+                if last_feedback is not None
+                else None
+            )
         final_feedback_prompt += self.__get_result_feedback(eval_res, res_name)
-        final_feedback_prompt += self.__get_result_feedback(last_feedback, last_res_name)
+        final_feedback_prompt += self.__get_result_feedback(
+            last_feedback, last_res_name
+        )
 
         other_res = None if options is None else options.get("other_res", None)
         if other_res is not None:
             for other in other_res:
-                final_feedback_prompt += self.__get_result_feedback(other, f"{other.name}(Baseline)")
+                final_feedback_prompt += self.__get_result_feedback(
+                    other, f"{other.name}(Baseline)"
+                )
 
-        bounds_prompt = f"bounded by {np.array_str(eval_res.result[0].bounds, precision=2)}" if eval_res.result[0].bounds is not None else ""
+        bounds_prompt = (
+            f"bounded by {np.array_str(eval_res.result[0].bounds, precision=2)}"
+            if eval_res.result[0].bounds is not None
+            else ""
+        )
         # bounds_prompt = ""
         final_feedback_prompt += f"""#### Note:
 - AOC(Area Over the Convergence Curve): a measure of the convergence speed of the algorithm, ranged between 0.0 and 1.0. A higher value is better.
@@ -596,7 +688,7 @@ class <AlgorithmName>:
 ```
 """
 
-    def response_format(self, task:GenerationTask, extra:str="") -> str:
+    def response_format(self, task: GenerationTask, extra: str = "") -> str:
         if task == GenerationTask.INITIALIZE_SOLUTION:
             return f"""
 ## Response Format('### <section_name>' and '### /<section_name>' are used to mark the start and end of each section. Do not remove them.)
@@ -626,7 +718,10 @@ class <AlgorithmName>:
 ```
 ### /Code
 """
-        elif task == GenerationTask.FIX_ERRORS or task == GenerationTask.FIX_ERRORS_FROM_ERROR:
+        elif (
+            task == GenerationTask.FIX_ERRORS
+            or task == GenerationTask.FIX_ERRORS_FROM_ERROR
+        ):
             # previous_feedback = "\n### Previous Analysis Feedback\n- feedback analysis\n- contributions to errors\n### /Previous Analysis Feedback\n" if task == GenerationTask.FIX_ERRORS_FROM_ERROR else ""
             previous_feedback = ""
             return f"""
@@ -681,8 +776,8 @@ class <AlgorithmName>:
 ### /Code
 """
 
-# Helper functions
-    def prompt_extract_keywords_from_code(self, code:str) -> str:
+    # Helper functions
+    def prompt_extract_keywords_from_code(self, code: str) -> str:
         return f"""Extract and list up to 6 key technical components from the provided Python code implementing a Bayesian optimization algorithm.
 - Focus on the core techniques and mathematical concepts used. 
 - Exclude the general terms like 'BayesianOptimization', 'AcquisitionFunction', 'Minimization', etc.
