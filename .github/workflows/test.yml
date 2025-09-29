@@ -48,7 +48,7 @@ jobs:
       #              run black
       #----------------------------------------------
       - name: Check black
-        run: poetry run black --check --verbose ./llamea/
+        run: poetry run black --check --verbose ./llamevol/
       #----------------------------------------------
       #              run test suite
       #----------------------------------------------
