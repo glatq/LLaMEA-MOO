@@ -1,21 +1,32 @@
 name: Test
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   lint:
+    name: Lint & Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+
     steps:
       - name: Check out repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
       - name: Set up python
         id: setup-python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-      #----------------------------------------------
-      #  -----  install & configure poetry  -----
-      #----------------------------------------------
+          python-version: ${{ matrix.python-version }}
+
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
@@ -24,43 +35,32 @@ jobs:
           virtualenvs-in-project: true
           installer-parallel: true
 
-      #----------------------------------------------
-      #       load cached venv if cache exists
-      #----------------------------------------------
       - name: Load cached venv
         id: cached-poetry-dependencies
         uses: actions/cache@v3
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
-      #----------------------------------------------
-      # install dependencies if cache does not exist
-      #----------------------------------------------
+          restore-keys: |
+            venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-
+
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --no-interaction --no-root --with dev
-      #----------------------------------------------
-      # install your root project, if required
-      #----------------------------------------------
+
       - name: Install project
         run: poetry install --no-interaction
-      #----------------------------------------------
-      #              run black
-      #----------------------------------------------
+
       - name: Check black
         run: poetry run black --check --verbose ./llamevol/
-      #----------------------------------------------
-      #              run test suite
-      #----------------------------------------------
+
       - name: Test with pytest
-        run: poetry run pytest --cov=llamea --cov-report=xml tests/
-      #----------------------------------------------
-      #             upload coverage stats
-      # (requires CODECOV_TOKEN in repository secrets)
-      #----------------------------------------------
+        run: poetry run pytest --cov=llamevol --cov-report=xml tests/
+
       - name: Upload coverage
-        uses: codecov/codecov-action@v4.0.1
+        if: ${{ success() && secrets.CODECOV_TOKEN != '' }}
+        uses: codecov/codecov-action@v4
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}  # Only required for private repositories
+          token: ${{ secrets.CODECOV_TOKEN }}
           file: ./coverage.xml
           fail_ci_if_error: true
