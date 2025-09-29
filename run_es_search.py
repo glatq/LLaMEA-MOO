@@ -8,6 +8,7 @@ from llamevol.llm import LLMmanager
 from llamevol import LLaMEvol
 from llamevol.utils import setup_logger
 from Experiments.plot_search_res import plot_search_result
+from omegaconf import DictConfig
 
 
 def get_IOHEvaluator():
@@ -26,8 +27,8 @@ def get_IOHEvaluator():
     return evaluator
 
 # create an prompt generator
-def get_bo_prompt_generator():
-    prompt_generator = BaselinePromptGenerator()
+def get_bo_prompt_generator(prompts_cfg: DictConfig) -> BaselinePromptGenerator:
+    prompt_generator = BaselinePromptGenerator(prompts_cfg)
     prompt_generator.is_bo = True
     return prompt_generator
 
@@ -54,13 +55,13 @@ def get_es_population(es_options):
     return population
 
 
-def run_exp(n_parent, n_offspring, is_elitist, api_key, n_population=4):
+def run_exp(cfg: DictConfig, n_parent, n_offspring, is_elitist, api_key, n_population=4):
     # create an IOHEvaluator
     evaluator = get_IOHEvaluator()
     evaluator.timeout = 30 * 60 # set the timeout(seconds) for each evaluation(all tasks) 
 
     # create a prompt generator
-    prompt_generator = get_bo_prompt_generator()
+    prompt_generator = get_bo_prompt_generator(cfg.prompts)
 
     # create a LLM Manager
     model_name = 'gemini-2.5-flash'
