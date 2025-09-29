@@ -2,10 +2,19 @@ import re
 from typing import Any
 import numpy as np
 import torch
-from .abstract_prompt_generator import PromptGenerator, ResponseHandler, GenerationTask, EvaluatorResult
+from .abstract_prompt_generator import (
+    PromptGenerator,
+    ResponseHandler,
+    GenerationTask,
+    EvaluatorResult,
+)
 from .bo_zeroplus_prompt_generator import BOPromptGeneratorReturnChecker
 from ..individual import Individual
 from ..population import Population
+
+# add these
+from dataclasses import dataclass
+from omegaconf import DictConfig, OmegaConf, open_dict
 
 
 class BaselineResponseHandler(ResponseHandler):
@@ -19,17 +28,15 @@ class BaselineResponseHandler(ResponseHandler):
             "desc": self.desc,
             "code": self.code,
             "code_name": self.code_name,
-            "raw_response": self.raw_response
+            "raw_response": self.raw_response,
         }
 
-    def extract_response(self, response:str, task:GenerationTask):
+    def extract_response(self, response: str, task: GenerationTask):
         if not response:
             return
 
         self.raw_response = response
-        sections = ["Description",
-                    "Justification",
-                    "Code"]
+        sections = ["Description", "Justification", "Code"]
         for section in sections:
             if section == "Code":
                 self.code, err = self.extract_from_response(response, section)
@@ -41,7 +48,9 @@ class BaselineResponseHandler(ResponseHandler):
             elif section == "Justification":
                 self.reason, _ = self.extract_from_response(response, section)
 
-    def extract_from_response(self, response: str, section: str, pattern=None) -> tuple[str, str]:
+    def extract_from_response(
+        self, response: str, section: str, pattern=None
+    ) -> tuple[str, str]:
         error_str = ""
         res = ""
         ignore_case = True
@@ -65,12 +74,12 @@ class BaselineResponseHandler(ResponseHandler):
 
 
 class BaselinePromptGenerator(PromptGenerator):
-
-    def __init__(self):
+    def __init__(self, prompts_cfg: DictConfig):
         super().__init__()
         self.is_bo = False
         self.use_mini_bo = False
-        self.problem_desc = "24 noiseless functions"
+        self.prompts: DictConfig = prompts_cfg
+        self.problem_desc = self.prompts.problem_desc
 
     def __str__(self):
         suffix = ""
@@ -81,18 +90,20 @@ class BaselinePromptGenerator(PromptGenerator):
                 suffix = "BO"
         return f"{suffix}BaselinePromptGenerator"
 
-# prompt generation
-    def get_prompt(self, task:GenerationTask, problem_desc:str,
-                   candidates:list[BaselineResponseHandler]= None,
-                   population:Population= None,
-                   options:dict = None
-                   ) -> tuple[str, str]:
-
+    # prompt generation
+    def get_prompt(
+        self,
+        task: GenerationTask,
+        problem_desc: str,
+        candidates: list[BaselineResponseHandler] = None,
+        population: Population = None,
+        options: dict = None,
+    ) -> tuple[str, str]:
         if task != GenerationTask.INITIALIZE_SOLUTION:
             if candidates is None or len(candidates) == 0:
                 return "", ""
 
-        role_prompt = "You are a highly skilled computer scientist in the field of natural computing. Your task is to design novel metaheuristic algorithms to solve black box optimization problems"
+        role_prompt = self.prompts.role_prompt
 
         task_prompt = self.task_description(task)
 
@@ -106,12 +117,16 @@ class BaselinePromptGenerator(PromptGenerator):
                 pre_solution_prompt += "If the errors from the previous algorithms are provided, analyze them. The new algorithm should be designed to avoid these errors.\n"
                 for i, candidate in enumerate(candidates):
                     candidate_prompt = self.__get_candidate_prompt(candidate)
-                    pre_solution_prompt += f"## {candidate.code_name}\n{candidate_prompt}\n"
+                    pre_solution_prompt += (
+                        f"## {candidate.code_name}\n{candidate_prompt}\n"
+                    )
 
                     # pre_solution_prompt += f"- {candidate.desc}\n"
                 pre_solution_prompt += "\n"
-
-            code_structure_prompt = "A code structure guide is as follows and keep the comments from the guide when generating the code.\n" + self.code_structure()
+            code_structure_prompt = (
+                "A code structure guide is as follows and keep the comments from the guide when generating the code.\n"
+                + self.code_structure()
+            )
             final_prompt = f"""{task_prompt}\n{pre_solution_prompt}\n{code_structure_prompt}\n{response_format_prompt}"""
         else:
             if len(candidates) > 1:
@@ -127,7 +142,9 @@ class BaselinePromptGenerator(PromptGenerator):
             else:
                 candidate = candidates[0]
                 candidate_prompt = self.__get_candidate_prompt(candidate)
-                mutation_operator = "Refine the strategy of the selected solution to improve it."
+                mutation_operator = (
+                    "Refine the strategy of the selected solution to improve it."
+                )
 
                 selected_prompt = f"""The selected solution to update is:\n{candidate_prompt}\n{mutation_operator}\n"""
 
@@ -143,7 +160,9 @@ class BaselinePromptGenerator(PromptGenerator):
                     score = handler.eval_result.score
                     runtime = handler.eval_result.total_execution_time
                     desc = handler.desc
-                    population_summary += f"- {name}: {score:.4f}, {runtime:.2f} seconds, {desc}\n"
+                    population_summary += (
+                        f"- {name}: {score:.4f}, {runtime:.2f} seconds, {desc}\n"
+                    )
 
             final_prompt = f"""{task_prompt}
 {population_summary}
@@ -154,7 +173,7 @@ class BaselinePromptGenerator(PromptGenerator):
 """
         return role_prompt, final_prompt
 
-    def __get_candidate_prompt(self, candidate:BaselineResponseHandler) -> str:
+    def __get_candidate_prompt(self, candidate: BaselineResponseHandler) -> str:
         description = candidate.desc
         solution = f"```python\n{candidate.code}\n```"
         if candidate.error:
@@ -165,31 +184,24 @@ class BaselinePromptGenerator(PromptGenerator):
         else:
             feedback = self.evaluation_feedback_prompt(candidate.eval_result)
 
-        
         return f"{description}\nWith code:\n{solution}\n{feedback}\n"
 
-    def task_description(self, task:GenerationTask) -> str:
+    def task_description(self, task: GenerationTask) -> str:
         if self.is_bo:
             return self.__bo_task_description(task)
         return self.__task_description(task)
 
     def __bo_task_description(self, task):
-        # lib_prompt = "As an expert of numpy, scipy, scikit-learn, you are allowed to use these libraries."
-        lib_prompt = "As an expert of numpy, scipy, scikit-learn, torch, gpytorch, you are allowed to use these libraries."
-        if torch.cuda.is_available():
-            lib_prompt = "As an expert of numpy, scipy, scikit-learn, torch, gpytorch, you are allowed to use these libraries, and using GPU for acceleration is mandatory."
+        with open_dict(self.prompts):
+            self.prompts.chosen_lib_prompt = (
+                "gpu_lib_prompt" if torch.cuda.is_available() else "cpu_lib_prompt"
+            )
         # problem_desc = "one noiseless functions:f6-Attractive Sector Function"
-        task_prompt = f"""
-The optimization algorithm should handle a wide range of tasks, which is evaluated on the BBOB test suite of {self.problem_desc}. Your task is to write the optimization algorithm in Python code. The code should contain an `__init__(self, budget, dim)` function and the function `__call__(self, func)`, which should optimize the black box function `func` using `self.budget` function evaluations.
-The func() can only be called as many times as the budget allows, not more. Each of the optimization functions has a search space between -5.0 (lower bound) and 5.0 (upper bound). The dimensionality can be varied.
-{lib_prompt} Do not use any other libraries unless they cannot be replaced by the above libraries.  Do not remove the comments from the code.
-Name the class based on the characteristics of the algorithm with a template '<characteristics>BO'.
-
-Give an excellent, novel and computationally efficient Bayesian Optimization algorithm to solve this task, give it a concise but comprehensive key-word-style description with the main ideas and justify your decision about the algorithm.
-"""
+        OmegaConf.resolve(self.prompts)
+        task_prompt = self.prompts.task_prompt
         return task_prompt
 
-    def __task_description(self, task:GenerationTask) -> str:
+    def __task_description(self, task: GenerationTask) -> str:
         task_prompt = """
 The optimization algorithm should handle a wide range of tasks, which is evaluated on the BBOB test suite of 24 noiseless functions. Your task is to write the optimization algorithm in Python code. The code should contain an `__init__(self, budget, dim)` function and the function `__call__(self, func)`, which should optimize the black box function `func` using `self.budget` function evaluations.
 The func() can only be called as many times as the budget allows, not more. Each of the optimization functions has a search space between -5.0 (lower bound) and 5.0 (upper bound). The dimensionality can be varied.
@@ -197,7 +209,7 @@ Give an excellent, novel and computationally efficient heuristic algorithm to so
 """
         return task_prompt
 
-    def response_format(self, task:GenerationTask) -> str:
+    def response_format(self, task: GenerationTask) -> str:
         output_format_prompt = """
 Give the response in the format:
 # Description 
@@ -347,7 +359,9 @@ class <AlgorithmName>:
 ```
 """
 
-    def evaluation_feedback_prompt(self, eval_res:EvaluatorResult, options:dict = None) -> str:
+    def evaluation_feedback_prompt(
+        self, eval_res: EvaluatorResult, options: dict = None
+    ) -> str:
         if eval_res is None or len(eval_res.result) == 0:
             return ""
 
@@ -379,7 +393,7 @@ class <AlgorithmName>:
                 "problem_id": problem_id,
                 "instance_id": instance_id,
                 "repeat_id": repeat_id,
-                "y_aoc": aoc
+                "y_aoc": aoc,
             }
             grouped_aocs[group_idx].append(content)
 
@@ -388,7 +402,7 @@ class <AlgorithmName>:
 
         separated_aocs = [content["y_aoc"] for content in grouped_aocs[0]]
         separated_auc = np.mean(separated_aocs) if len(separated_aocs) > 0 else 0
-        
+
         low_mod_aocs = [content["y_aoc"] for content in grouped_aocs[1]]
         low_mod_auc = np.mean(low_mod_aocs) if len(low_mod_aocs) > 0 else 0
 
@@ -396,14 +410,16 @@ class <AlgorithmName>:
         high_uni_auc = np.mean(high_uni_aocs) if len(high_uni_aocs) > 0 else 0
 
         multi_adequate_aocs = [content["y_aoc"] for content in grouped_aocs[3]]
-        multi_adequate_auc = np.mean(multi_adequate_aocs) if len(multi_adequate_aocs) > 0 else 0
+        multi_adequate_auc = (
+            np.mean(multi_adequate_aocs) if len(multi_adequate_aocs) > 0 else 0
+        )
 
         multi_weak_aocs = [content["y_aoc"] for content in grouped_aocs[4]]
         multi_weak_auc = np.mean(multi_weak_aocs) if len(multi_weak_aocs) > 0 else 0
 
         execution_time = eval_res.total_execution_time
         time_prompt = f"took {execution_time:0.2f} seconds to run."
-            
+
         main_aoc_prompt = f"""The algorithm {algorithm_name} got an average Area over the convergence curve (AOCC, 1.0 is the best) score of {auc_mean:0.4f} with standard deviation {auc_std:0.4f}.
 """
         detailed_aoc_prompt = f"""
@@ -412,19 +428,23 @@ The mean AOCC score of the algorithm {algorithm_name} on Separable functions was
         final_feedback_prompt = f"{main_aoc_prompt}\n{time_prompt}"
         return final_feedback_prompt
 
-    
-# Helper functions
+    # Helper functions
     def get_response_handler(self):
         return BaselineResponseHandler()
 
+
 class LightBaselinePromptGenerator(BaselinePromptGenerator):
-    def evaluation_feedback_prompt(self, eval_res:EvaluatorResult, options:dict = None) -> str:
+    def evaluation_feedback_prompt(
+        self, eval_res: EvaluatorResult, options: dict = None
+    ) -> str:
         if eval_res is None or len(eval_res.result) == 0:
             return ""
 
         algorithm_name = eval_res.name
-        
+
         execution_time = eval_res.total_execution_time
-        time_prompt = f"The algorithm {algorithm_name} took {execution_time:0.2f} seconds to run."
+        time_prompt = (
+            f"The algorithm {algorithm_name} took {execution_time:0.2f} seconds to run."
+        )
 
         return time_prompt

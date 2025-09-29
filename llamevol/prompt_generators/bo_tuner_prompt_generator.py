@@ -1,8 +1,14 @@
 import re
 from typing import Any
 import numpy as np
-from .abstract_prompt_generator import PromptGenerator, ResponseHandler, GenerationTask, EvaluatorResult
+from .abstract_prompt_generator import (
+    PromptGenerator,
+    ResponseHandler,
+    GenerationTask,
+    EvaluatorResult,
+)
 from ..population import Population
+
 
 class TunerResponseHandler(ResponseHandler):
     def __init__(self):
@@ -15,29 +21,28 @@ class TunerResponseHandler(ResponseHandler):
 
     def __to_json__(self):
         return {
-            'reason': self.reason,
+            "reason": self.reason,
             "code": self.code,
             "code_name": self.code_name,
-            "raw_response": self.raw_response
+            "raw_response": self.raw_response,
         }
 
-    def extract_response(self, response:str, task:GenerationTask):
+    def extract_response(self, response: str, task: GenerationTask):
         if not response:
             return
-        
+
         self.raw_response = response
-        sections = [
-                    "Justifications",
-                    "Code"
-                ]
+        sections = ["Justifications", "Code"]
         for section in sections:
             if section == "Code":
                 self.code, _ = self.extract_from_response(response, section)
                 self.code_name, _ = self.extract_from_response(response, "class_name")
             elif section == "Justifications":
                 self.reason, _ = self.extract_from_response(response, section)
-        
-    def extract_from_response(self, response: str, section: str, pattern=None) -> tuple[str, str]:
+
+    def extract_from_response(
+        self, response: str, section: str, pattern=None
+    ) -> tuple[str, str]:
         error_str = ""
         res = ""
         if pattern is None:
@@ -54,17 +59,20 @@ class TunerResponseHandler(ResponseHandler):
             error_str = f"{section} not found in the response."
         return res, error_str
 
+
 class TunerPromptGenerator(PromptGenerator):
     def __str__(self):
         return "TunerPromptGenerator"
 
-# prompt generation
-    def get_prompt(self, task:GenerationTask, problem_desc:str,
-                   candidates:list[TunerResponseHandler]= None,
-                   population:Population= None,
-                   options:dict= None,
-                   ) -> tuple[str, str]:
-
+    # prompt generation
+    def get_prompt(
+        self,
+        task: GenerationTask,
+        problem_desc: str,
+        candidates: list[TunerResponseHandler] = None,
+        population: Population = None,
+        options: dict = None,
+    ) -> tuple[str, str]:
         if candidates is None or len(candidates) == 0:
             raise ValueError("No candidates provided.")
 
@@ -74,7 +82,9 @@ class TunerPromptGenerator(PromptGenerator):
 
         response_format_prompt = self.response_format(task=task)
 
-        pre_solution_prompt = "The provided Bayesian Optimization algorithm is as follows:\n"
+        pre_solution_prompt = (
+            "The provided Bayesian Optimization algorithm is as follows:\n"
+        )
         for i, candidate in enumerate(candidates):
             candidate_prompt = self.__get_candidate_prompt(candidate)
             pre_solution_prompt += f"## {candidate.code_name}\n{candidate_prompt}\n"
@@ -91,17 +101,22 @@ class TunerPromptGenerator(PromptGenerator):
 
             ignored = False
             for cand in candidates:
-                if cand.code_name == handler.code_name and cand.reason == handler.reason:
+                if (
+                    cand.code_name == handler.code_name
+                    and cand.reason == handler.reason
+                ):
                     ignored = True
                     break
             if ignored:
                 continue
             feedback = self.evaluation_feedback_prompt(handler.eval_result)
-            other_solutions_prompt += f"## {handler.code_name}\n{handler.reason}\n{feedback}\n"
+            other_solutions_prompt += (
+                f"## {handler.code_name}\n{handler.reason}\n{feedback}\n"
+            )
 
         if len(other_solutions_prompt) > 0:
             other_solutions_prompt = f"The Eliminated solutions are:\n{other_solutions_prompt}\nThe new solution should avoid the mistakes made by the eliminated solutions and explore new ideas.\n"
-            
+
         final_prompt = f"""{task_prompt}
 
 {pre_solution_prompt}
@@ -112,7 +127,7 @@ class TunerPromptGenerator(PromptGenerator):
 """
         return role_prompt, final_prompt
 
-    def __get_candidate_prompt(self, candidate:TunerResponseHandler) -> str:
+    def __get_candidate_prompt(self, candidate: TunerResponseHandler) -> str:
         solution = f"```python\n{candidate.code}\n```"
         if candidate.error:
             if candidate.error_type == "NoCodeException":
@@ -123,10 +138,10 @@ class TunerPromptGenerator(PromptGenerator):
             feedback = self.evaluation_feedback_prompt(candidate.eval_result)
 
         desc = candidate.reason
-        
+
         return f"{solution}\n{feedback}\n{desc}\n"
 
-    def task_description(self, task:GenerationTask) -> str:
+    def task_description(self, task: GenerationTask) -> str:
         lib_prompt = "As an expert of numpy, scipy, scikit-learn, torch, gpytorch and botorch, you are allowed to use these libraries."
         problem_desc = "24 noiseless functions"
         task_prompt = f"""
@@ -148,8 +163,8 @@ The code should contain an `__init__(self, budget, dim)` function and the functi
 {lib_prompt} Do not use any other libraries unless they cannot be replaced by the above libraries. Name the class based on the characteristics of the algorithm with a template '<characteristics>BOv<version>'.
 """
         return task_prompt
-    
-    def response_format(self, task:GenerationTask) -> str:
+
+    def response_format(self, task: GenerationTask) -> str:
         output_format_prompt = """
 Give the response in the format:
 ## Justifications 
@@ -162,11 +177,13 @@ Give the response in the format:
 """
         return output_format_prompt
 
-    def evaluation_feedback_prompt(self, eval_res:EvaluatorResult, options:dict= None) -> str:
+    def evaluation_feedback_prompt(
+        self, eval_res: EvaluatorResult, options: dict = None
+    ) -> str:
         if eval_res is None or len(eval_res.result) == 0:
             return ""
 
-        def _mean_ground_content(key:str, ground:int, ground_dic) -> float:
+        def _mean_ground_content(key: str, ground: int, ground_dic) -> float:
             _ground = ground_dic[ground]
             _contents = [content[key] for content in _ground]
             return np.mean(_contents) if len(_contents) > 0 else 0
@@ -183,7 +200,7 @@ Give the response in the format:
             aocs.append(aoc)
 
             _exploitations = res.search_result.k_distance_exploitation_list
-            _exploitations = [x for x in _exploitations if x is not None] 
+            _exploitations = [x for x in _exploitations if x is not None]
             _mean_exploitation = np.nanmean(_exploitations)
             exploitations.append(_mean_exploitation)
 
@@ -207,7 +224,7 @@ Give the response in the format:
                 "instance_id": instance_id,
                 "repeat_id": repeat_id,
                 "y_aoc": aoc,
-                'exploitation': _mean_exploitation,
+                "exploitation": _mean_exploitation,
             }
             grouped_aocs[group_idx].append(content)
 
@@ -226,9 +243,10 @@ Give the response in the format:
         separated_exploitation = _mean_ground_content("exploitation", 0, grouped_aocs)
         low_mod_exploitation = _mean_ground_content("exploitation", 1, grouped_aocs)
         high_uni_exploitation = _mean_ground_content("exploitation", 2, grouped_aocs)
-        multi_adequate_exploitation = _mean_ground_content("exploitation", 3, grouped_aocs)
+        multi_adequate_exploitation = _mean_ground_content(
+            "exploitation", 3, grouped_aocs
+        )
         multi_weak_exploitation = _mean_ground_content("exploitation", 4, grouped_aocs)
-
 
         detailed_feedback = f"""
 on Separable functions {separated_auc:.04f} of AOC, {separated_exploitation:.04f} of exploitation
@@ -243,7 +261,6 @@ on Multi-modal functions with weak global structure {multi_weak_auc:.04f} of AOC
 """
         return final_feedback_prompt
 
-
-# Helper functions
+    # Helper functions
     def get_response_handler(self):
         return TunerResponseHandler()

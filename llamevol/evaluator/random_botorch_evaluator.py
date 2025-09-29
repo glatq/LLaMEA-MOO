@@ -11,11 +11,15 @@ from tqdm import tqdm
 import numpy as np
 import torch
 from botorch.test_functions import synthetic
-from botorch.test_functions.synthetic import SyntheticTestFunction, ConstrainedSyntheticTestFunction
+from botorch.test_functions.synthetic import (
+    SyntheticTestFunction,
+    ConstrainedSyntheticTestFunction,
+)
 from llamevol.utils import BOOverBudgetException
-from .evaluator import AbstractEvaluator 
+from .evaluator import AbstractEvaluator
 from .evaluator_result import EvaluatorResult, EvaluatorBasicResult
 from .exec_utils import default_exec
+
 
 def get_all_synthetic_test_function_from_botorch() -> list[SyntheticTestFunction]:
     test_functions = {}
@@ -24,12 +28,20 @@ def get_all_synthetic_test_function_from_botorch() -> list[SyntheticTestFunction
             if name == "Cosine8":
                 # Cosine8 is a maximation problem
                 continue
-            if inspect.isclass(obj) and issubclass(obj, SyntheticTestFunction) and not issubclass(obj, ConstrainedSyntheticTestFunction) and obj != SyntheticTestFunction and obj != ConstrainedSyntheticTestFunction:
+            if (
+                inspect.isclass(obj)
+                and issubclass(obj, SyntheticTestFunction)
+                and not issubclass(obj, ConstrainedSyntheticTestFunction)
+                and obj != SyntheticTestFunction
+                and obj != ConstrainedSyntheticTestFunction
+            ):
                 test_functions[name] = obj
 
     return test_functions
 
+
 botorch_test_functions = []
+
 
 def get_test_function_by_name(name: str = None) -> SyntheticTestFunction:
     global botorch_test_functions
@@ -42,8 +54,7 @@ def get_test_function_by_name(name: str = None) -> SyntheticTestFunction:
         return None
     return botorch_test_functions[name]
 
-    
-    
+
 # Botorch test functions
 class BotorchObjectivexFn:
     def __init__(self, obj_fn, budget=None):
@@ -54,8 +65,15 @@ class BotorchObjectivexFn:
         self.progress_bar = tqdm(total=budget, desc="Evaluating")
 
     def __call__(self, x):
-        if self.x_hist is not None and self.budget is not None and len(self.x_hist) >= self.budget:
-            raise BOOverBudgetException("OverBudgetException", "The total number(during the whole process) of the sample points which evaluated by objective_fn should not exceed the budget. Using the surrogate model, accquisition function or any other methods suited your purposes instead of the objective_fn to evaluate the points is a alternative option.")
+        if (
+            self.x_hist is not None
+            and self.budget is not None
+            and len(self.x_hist) >= self.budget
+        ):
+            raise BOOverBudgetException(
+                "OverBudgetException",
+                "The total number(during the whole process) of the sample points which evaluated by objective_fn should not exceed the budget. Using the surrogate model, accquisition function or any other methods suited your purposes instead of the objective_fn to evaluate the points is a alternative option.",
+            )
 
         if self.x_hist is None:
             self.x_hist = x
@@ -65,13 +83,14 @@ class BotorchObjectivexFn:
         tensor_x = torch.tensor(x, dtype=torch.float64)
         tensor_y = self.obj_fn(tensor_x)
 
-        y = tensor_y.reshape(-1,1).numpy()
+        y = tensor_y.reshape(-1, 1).numpy()
         if self.y_hist is None:
             self.y_hist = y
         else:
             self.y_hist = np.append(self.y_hist, y)
         self.progress_bar.update(len(x))
         return y
+
 
 class RandomBoTorchTestEvaluator(AbstractEvaluator):
     def __init__(self, budget: int = 40, dim: int = 6, obj_fn_name: str = None):
@@ -93,7 +112,12 @@ class RandomBoTorchTestEvaluator(AbstractEvaluator):
 
             self.bounds = self.obj_fn.bounds.numpy()
 
-            logging.info("%s:%s,budget: %s", self.obj_name, (self.bounds[0], self.bounds[1]), self.budget)
+            logging.info(
+                "%s:%s,budget: %s",
+                self.obj_name,
+                (self.bounds[0], self.bounds[1]),
+                self.budget,
+            )
 
         self.optimal_value = None
         try:
@@ -108,7 +132,7 @@ class RandomBoTorchTestEvaluator(AbstractEvaluator):
         return self.obj_name
 
     def problem_prompt(self) -> str:
-        prompt = ''
+        prompt = ""
         # if self.
         if self.obj_fn.__doc__ is not None:
             prompt += self.obj_fn.__doc__
@@ -118,7 +142,7 @@ class RandomBoTorchTestEvaluator(AbstractEvaluator):
         return prompt
 
     def __loading_indicator(self, message):
-        symbols = itertools.cycle(['|', '/', '-', '\\'])
+        symbols = itertools.cycle(["|", "/", "-", "\\"])
         while self.evaluating:
             sys.stdout.write("\rEvaluating " + message + "... " + next(symbols))
             sys.stdout.flush()
@@ -128,7 +152,9 @@ class RandomBoTorchTestEvaluator(AbstractEvaluator):
         thread = threading.Thread(target=self.__loading_indicator, args=(message,))
         thread.start()
 
-    def evaluate(self, code, cls_name, cls=None, max_eval_workers:int = -1, timeout:int=None) -> EvaluatorResult:
+    def evaluate(
+        self, code, cls_name, cls=None, max_eval_workers: int = -1, timeout: int = None
+    ) -> EvaluatorResult:
         """Evaluate an individual."""
 
         eval_result = EvaluatorResult()
@@ -150,18 +176,26 @@ class RandomBoTorchTestEvaluator(AbstractEvaluator):
         call_kwargs = {
             "objective_fn": bo_obj_fn,
             "bounds": self.bounds,
-            "budget": self.budget
+            "budget": self.budget,
         }
         if cls is not None:
             # helper for debugging
             cls_instance = cls(**init_kwargs)
             captured_output_stream = io.StringIO()
-            with contextlib.redirect_stderr(captured_output_stream), contextlib.redirect_stdout(captured_output_stream):
+            with contextlib.redirect_stderr(
+                captured_output_stream
+            ), contextlib.redirect_stdout(captured_output_stream):
                 res = cls_instance.optimize(**call_kwargs)
             captured_output = captured_output_stream.getvalue()
             err = None
         else:
-            res, captured_output, err = default_exec(code=code, cls_name=cls_name, cls=cls, init_kwargs=init_kwargs, call_kwargs=call_kwargs)
+            res, captured_output, err = default_exec(
+                code=code,
+                cls_name=cls_name,
+                cls=cls,
+                init_kwargs=init_kwargs,
+                call_kwargs=call_kwargs,
+            )
         # self.evaluating = False
         eval_basic_result.execution_time = time.perf_counter() - start_time
         eval_basic_result.set_capture_output(captured_output)
@@ -169,7 +203,6 @@ class RandomBoTorchTestEvaluator(AbstractEvaluator):
         if err is not None:
             eval_basic_result.error = str(err)
             eval_basic_result.error_type = err.__class__.__name__
-            
 
         if eval_basic_result.error is None and self.return_checker is not None:
             # check the return value
@@ -183,7 +216,9 @@ class RandomBoTorchTestEvaluator(AbstractEvaluator):
 
             eval_basic_result.bounds = self.bounds
             eval_basic_result.optimal_value = self.optimal_value
-            eval_basic_result.y_hist = y_hist.reshape(-1) if len(y_hist.shape) > 1 else y_hist
+            eval_basic_result.y_hist = (
+                y_hist.reshape(-1) if len(y_hist.shape) > 1 else y_hist
+            )
             eval_basic_result.x_hist = x_hist
             eval_basic_result.n_initial_points = n_initial_points
             eval_basic_result.update_stats()

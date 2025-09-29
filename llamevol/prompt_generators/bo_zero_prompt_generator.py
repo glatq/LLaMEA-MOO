@@ -1,6 +1,11 @@
 import re
 from typing import Any
-from .abstract_prompt_generator import PromptGenerator, ResponseHandler, GenerationTask, EvaluatorResult
+from .abstract_prompt_generator import (
+    PromptGenerator,
+    ResponseHandler,
+    GenerationTask,
+    EvaluatorResult,
+)
 from .bo_zeroplus_prompt_generator import BOPromptGeneratorReturnChecker
 
 
@@ -20,17 +25,19 @@ class BoZeroResponseHandler(ResponseHandler):
             "pseudocode": self.pseudocode,
             "code": self.code,
             "code_name": self.code_name,
-            "raw_response": self.raw_response
+            "raw_response": self.raw_response,
         }
 
-    def extract_response(self, response:str, task:GenerationTask):
+    def extract_response(self, response: str, task: GenerationTask):
         if not response:
             return
-        
+
         self.raw_response = response
-        sections = ["Description",
-                    "Code"]
-        if task == GenerationTask.INITIALIZE_SOLUTION or task == GenerationTask.OPTIMIZE_PERFORMANCE:
+        sections = ["Description", "Code"]
+        if (
+            task == GenerationTask.INITIALIZE_SOLUTION
+            or task == GenerationTask.OPTIMIZE_PERFORMANCE
+        ):
             sections.append("Pseudocode")
         for section in sections:
             if section == "Code":
@@ -40,8 +47,10 @@ class BoZeroResponseHandler(ResponseHandler):
                 self.desc, _ = self.extract_from_response(response, section)
             elif section == "Pseudocode":
                 self.pseudocode, _ = self.extract_from_response(response, section)
-        
-    def extract_from_response(self, response: str, section: str, pattern=None) -> tuple[str, str]:
+
+    def extract_from_response(
+        self, response: str, section: str, pattern=None
+    ) -> tuple[str, str]:
         error_str = ""
         res = ""
         if pattern is None:
@@ -59,22 +68,25 @@ class BoZeroResponseHandler(ResponseHandler):
             error_str = f"{section} not found in the response."
         return res, error_str
 
+
 class BoZeroPromptGenerator(PromptGenerator):
     def __init__(self):
         super().__init__()
         self.use_botorch = False
 
-# prompt generation
-    def get_prompt(self, task:GenerationTask, problem_desc:str,
-                   candidates:list[BoZeroResponseHandler]= None,
-                   population= None,
-                   options:dict = None
-                   ) -> tuple[str, str]:
-
+    # prompt generation
+    def get_prompt(
+        self,
+        task: GenerationTask,
+        problem_desc: str,
+        candidates: list[BoZeroResponseHandler] = None,
+        population=None,
+        options: dict = None,
+    ) -> tuple[str, str]:
         if task != GenerationTask.INITIALIZE_SOLUTION:
             if candidates is None or len(candidates) == 0:
                 return "", ""
-        
+
         final_prompt = ""
 
         task_prompt = self.task_description(task)
@@ -89,7 +101,10 @@ class BoZeroPromptGenerator(PromptGenerator):
 
             code_structure_prompt = self.code_structure()
             final_prompt += f"{code_structure_prompt}\n"
-        elif task == GenerationTask.FIX_ERRORS or task == GenerationTask.FIX_ERRORS_FROM_ERROR:
+        elif (
+            task == GenerationTask.FIX_ERRORS
+            or task == GenerationTask.FIX_ERRORS_FROM_ERROR
+        ):
             candidate = candidates[0]
             final_prompt += f"### Errors\n```bash\n{candidate.eval_result.error}\n```\n"
             final_prompt += f"### Solution\n```python\n{candidate.code}\n```\n"
@@ -106,23 +121,29 @@ class BoZeroPromptGenerator(PromptGenerator):
 
         return "", final_prompt
 
-    def task_description(self, task:GenerationTask) -> str:
+    def task_description(self, task: GenerationTask) -> str:
         desc = """## Task Description\n"""
         if task == GenerationTask.INITIALIZE_SOLUTION:
             desc += "You will be given minimization optimization problems. Your tasks are to analyze the problem, design a feasible Bayesian Optimization algorithm, and implement it."
-        elif task == GenerationTask.FIX_ERRORS or task == GenerationTask.FIX_ERRORS_FROM_ERROR:
+        elif (
+            task == GenerationTask.FIX_ERRORS
+            or task == GenerationTask.FIX_ERRORS_FROM_ERROR
+        ):
             desc += "You will be given a Bayesian Optimization solution with errors. Your task is to identify and correct the errors in the provided solution."
         elif task == GenerationTask.OPTIMIZE_PERFORMANCE:
             desc += "You will be given a Bayesian Optimization solution with evaluation feedback. Your task is to optimize the performance of the solution."
         return desc
 
-    def task_instruction(self, task:GenerationTask) -> str:
+    def task_instruction(self, task: GenerationTask) -> str:
         desc = """## Task Instruction\n"""
         if task == GenerationTask.INITIALIZE_SOLUTION:
             desc += "You need to act as a computer scientist and programmer independently.\n"
             desc += self.task_instruction_for_scientist(task)
             desc += self.task_instruction_for_programmer(task, self.use_botorch)
-        elif task == GenerationTask.FIX_ERRORS or task == GenerationTask.FIX_ERRORS_FROM_ERROR:
+        elif (
+            task == GenerationTask.FIX_ERRORS
+            or task == GenerationTask.FIX_ERRORS_FROM_ERROR
+        ):
             # desc += "You need to act as computer scientist and programmer independently.\n"
             # desc += self.task_instruction_for_scientist(task)
             desc += self.task_instruction_for_programmer(task, self.use_botorch)
@@ -132,14 +153,19 @@ class BoZeroPromptGenerator(PromptGenerator):
             desc += self.task_instruction_for_programmer(task, self.use_botorch)
         return desc
 
-    def task_instruction_for_scientist(self, task:GenerationTask) -> str:
-        instruction = """\n**as a computer scientist specialized in bayesian optimization**\n"""
+    def task_instruction_for_scientist(self, task: GenerationTask) -> str:
+        instruction = (
+            """\n**as a computer scientist specialized in bayesian optimization**\n"""
+        )
         if task == GenerationTask.INITIALIZE_SOLUTION:
             instruction += """1. Analyze the minimization optimization problem.
 2. Design a Bayesian Optimization algorithm that addresses the challenges of the problem. Justify your choices of techniques and hyperparameters.
 3. Pseudocode: Write down the key steps of your chosen Bayesian Optimization algorithm in plain pseudocode, highlighting any novel components or adaptations.
 """
-        elif task == GenerationTask.FIX_ERRORS or task == GenerationTask.FIX_ERRORS_FROM_ERROR:
+        elif (
+            task == GenerationTask.FIX_ERRORS
+            or task == GenerationTask.FIX_ERRORS_FROM_ERROR
+        ):
             instruction += ""
         elif task == GenerationTask.OPTIMIZE_PERFORMANCE:
             instruction += """1. Analyze the minimization optimization problem.
@@ -149,7 +175,9 @@ class BoZeroPromptGenerator(PromptGenerator):
 """
         return instruction
 
-    def task_instruction_for_programmer(self, task:GenerationTask, use_botorch:bool=False) -> str:
+    def task_instruction_for_programmer(
+        self, task: GenerationTask, use_botorch: bool = False
+    ) -> str:
         instruction = """\n**as a programmer specialized in python.**\n"""
         lib_instruction = "- as an expert of numpy, scipy, scikit-learn, torch, GPytorch, you are allowed to use these libraries.\n"
         if use_botorch:
@@ -165,7 +193,10 @@ class BoZeroPromptGenerator(PromptGenerator):
 - Implement the algorithm in Python strictly following the provided code structure guide. Ensure that the implementation aligns with the pseudocode developed in the previous step, paying particular attention to the implementation of any novel methods.
 {lib_instruction}
 """
-        elif task == GenerationTask.FIX_ERRORS or task == GenerationTask.FIX_ERRORS_FROM_ERROR:
+        elif (
+            task == GenerationTask.FIX_ERRORS
+            or task == GenerationTask.FIX_ERRORS_FROM_ERROR
+        ):
             instruction += f"""- Identify the cause of the previous errors.
 - Review all the code for potential errors. Here, only make most confident guesses.
 - Propose solutions for the identified errors, ensuring that the proposed modifications align with the original algorithm's design and intention.
@@ -182,7 +213,7 @@ class BoZeroPromptGenerator(PromptGenerator):
 """
         return instruction
 
-    def __get_result_feedback(self, result:EvaluatorResult, name=None) -> str:
+    def __get_result_feedback(self, result: EvaluatorResult, name=None) -> str:
         if result is None or len(result.result) == 0:
             return ""
         feedback_prompt = f"#### {result.name if name is None else name}\n"
@@ -194,33 +225,51 @@ class BoZeroPromptGenerator(PromptGenerator):
 
         return feedback_prompt
 
-    def evaluation_feedback_prompt(self, eval_res:EvaluatorResult, options:dict=None) -> str:
+    def evaluation_feedback_prompt(
+        self, eval_res: EvaluatorResult, options: dict = None
+    ) -> str:
         if eval_res is None or len(eval_res.result) == 0:
             return ""
         final_feedback_prompt = "### Feedback\n"
         final_feedback_prompt += f"- Budget: {eval_res.result[0].budget}\n"
         if len(eval_res.result) == 1:
             if eval_res.result[0].optimal_value is not None:
-                final_feedback_prompt += f"- Optimal Value: {eval_res.result[0].optimal_value}\n"
+                final_feedback_prompt += (
+                    f"- Optimal Value: {eval_res.result[0].optimal_value}\n"
+                )
         else:
             final_feedback_prompt += "- Optimal Value\n"
             for result in eval_res.result:
                 if result.optimal_value is not None:
-                    final_feedback_prompt += f"- {result.name}: {result.optimal_value}\n"
+                    final_feedback_prompt += (
+                        f"- {result.name}: {result.optimal_value}\n"
+                    )
 
         last_feedback = options.get("last_feedback", None)
         res_name = None
         last_res_name = None
         if last_feedback is not None:
-            res_name = f"{eval_res.name}(After Optimization)" if last_feedback is not None else None
-            last_res_name = f"{last_feedback.name}(Before Optimization)" if last_feedback is not None else None
+            res_name = (
+                f"{eval_res.name}(After Optimization)"
+                if last_feedback is not None
+                else None
+            )
+            last_res_name = (
+                f"{last_feedback.name}(Before Optimization)"
+                if last_feedback is not None
+                else None
+            )
         final_feedback_prompt += self.__get_result_feedback(eval_res, res_name)
-        final_feedback_prompt += self.__get_result_feedback(last_feedback, last_res_name)
+        final_feedback_prompt += self.__get_result_feedback(
+            last_feedback, last_res_name
+        )
 
         other_res = options.get("other_res", None)
         if other_res is not None:
             for other in other_res:
-                final_feedback_prompt += self.__get_result_feedback(other, f"{other.name}(Baseline)")
+                final_feedback_prompt += self.__get_result_feedback(
+                    other, f"{other.name}(Baseline)"
+                )
 
         final_feedback_prompt += """#### Note:
 - AOC(Area Over the Convergence Curve): a measure of the convergence speed of the algorithm, ranged between 0.0 and 1.0. A higher value is better.
@@ -228,7 +277,7 @@ class BoZeroPromptGenerator(PromptGenerator):
 """
         return final_feedback_prompt
 
-    def code_structure(self, extra:str="") -> str:
+    def code_structure(self, extra: str = "") -> str:
         # botorch_import = "from botorch.fit import fit_gpytorch_mll //If you are using BoTorch, otherwise remove this line" if self.use_botorch else ""
         prompt_list_tech = """# add the docstring of the class here"""
         return f"""## Code Structure Guide
@@ -285,7 +334,7 @@ class <AlgorithmName>:
 ```
 """
 
-    def response_format(self, task:GenerationTask, extra:str="") -> str:
+    def response_format(self, task: GenerationTask, extra: str = "") -> str:
         if task == GenerationTask.INITIALIZE_SOLUTION:
             return f"""
 ## Response Format('### <section_name>' and '### /<section_name>' are used to mark the start and end of each section. Do not remove them.)
@@ -305,7 +354,10 @@ class <AlgorithmName>:
 ```
 ### /Code
 """
-        elif task == GenerationTask.FIX_ERRORS or task == GenerationTask.FIX_ERRORS_FROM_ERROR:
+        elif (
+            task == GenerationTask.FIX_ERRORS
+            or task == GenerationTask.FIX_ERRORS_FROM_ERROR
+        ):
             return f"""
 ## Response Format('### <section_name>' and '### /<section_name>' are used to mark the start and end of each section. Do not remove them.)
 
@@ -344,7 +396,7 @@ class <AlgorithmName>:
 ### /Code
 """
 
-# Helper functions
+    # Helper functions
     def get_response_handler(self):
         return BoZeroResponseHandler()
 

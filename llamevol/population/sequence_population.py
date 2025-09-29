@@ -1,6 +1,7 @@
 from .population import Population
 from ..individual import Individual
 
+
 class SequencePopulation(Population):
     """
     Represents a population of individuals in the evolutionary algorithm.
@@ -19,7 +20,7 @@ class SequencePopulation(Population):
     def remove_individual(self, individual):
         self.individuals = [ind for ind in self.individuals if ind.id != individual.id]
 
-    def get_offspring_queryitems(self, n_parent:int=None) -> list[list[Individual]]:
+    def get_offspring_queryitems(self, n_parent: int = None) -> list[list[Individual]]:
         if not self.individuals:
             return [[]]
 

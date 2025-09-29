@@ -15,6 +15,7 @@ from scipy.stats import qmc
 from .evaluator_result import EvaluatorSearchResult
 from .exec_utils import ExecInjector
 
+
 class FunctionProfiler:
     def __init__(self):
         self.name = None
@@ -37,12 +38,13 @@ class FunctionProfiler:
             self._execution_times[func_name].append(execution_time)
             self._call_counts[func_name] += 1
             return result
+
         return wrapper
 
     def wrap_class(self, cls):
         for name, attr in cls.__dict__.items():
-            if isinstance(attr, FunctionType): 
-                setattr(cls, name, self.profile(attr)) 
+            if isinstance(attr, FunctionType):
+                setattr(cls, name, self.profile(attr))
         return cls
 
     def print_report(self):
@@ -58,6 +60,7 @@ class FunctionProfiler:
             print(f"  Ave Time: {avg_time:.4f} seconds")
         print("--- End of Report ---")
 
+
 def critic_wrapper(func):
     functools.wraps(func)
 
@@ -65,7 +68,7 @@ def critic_wrapper(func):
         if isinstance(x, torch.Tensor):
             return x.cpu().numpy()
         return x
-    
+
     def injected_wrapper(self, *args, **kwargs):
         _injected_critic = None
         if hasattr(self, "_injected_critic"):
@@ -95,17 +98,34 @@ def critic_wrapper(func):
                     n_evals = self.n_evals
                 if hasattr(self, "kappa"):
                     kappa = self.kappa
-                    if n_evals and len(_injected_critic.search_result.kappa_list) < n_evals:
-                        len_diff = n_evals - len(_injected_critic.search_result.kappa_list)
-                        _injected_critic.search_result.kappa_list.extend([kappa] * len_diff)
+                    if (
+                        n_evals
+                        and len(_injected_critic.search_result.kappa_list) < n_evals
+                    ):
+                        len_diff = n_evals - len(
+                            _injected_critic.search_result.kappa_list
+                        )
+                        _injected_critic.search_result.kappa_list.extend(
+                            [kappa] * len_diff
+                        )
                     _injected_critic.search_result.kappa_list.append(kappa)
 
                 if hasattr(self, "trust_region_radius"):
                     trust_region_radius = self.trust_region_radius
-                    if n_evals and len(_injected_critic.trust_region_radius_list.kappa_list) < n_evals:
-                        len_diff = n_evals - len(_injected_critic.search_result.trust_region_radius_list)
-                        _injected_critic.search_result.trust_region_radius_list.extend([trust_region_radius] * len_diff)
-                    _injected_critic.search_result.trust_region_radius_list.append(trust_region_radius)
+                    if (
+                        n_evals
+                        and len(_injected_critic.trust_region_radius_list.kappa_list)
+                        < n_evals
+                    ):
+                        len_diff = n_evals - len(
+                            _injected_critic.search_result.trust_region_radius_list
+                        )
+                        _injected_critic.search_result.trust_region_radius_list.extend(
+                            [trust_region_radius] * len_diff
+                        )
+                    _injected_critic.search_result.trust_region_radius_list.append(
+                        trust_region_radius
+                    )
 
         res = func(self, *args, **kwargs)
 
@@ -120,11 +140,15 @@ def critic_wrapper(func):
                     model = res
                     if hasattr(self, "n_evals"):
                         n_evals = self.n_evals
-                    _injected_critic.update_after_model_fit(model, n_evals, new_X, new_y)
+                    _injected_critic.update_after_model_fit(
+                        model, n_evals, new_X, new_y
+                    )
                 except Exception as e:
                     logging.error("Error in _fit_model wrapper: %s", e)
         return res
+
     return injected_wrapper
+
 
 def set_inject_maximize(cls_instance, maximize):
     if cls_instance is None:
@@ -133,6 +157,7 @@ def set_inject_maximize(cls_instance, maximize):
         setattr(cls_instance, "_inject_maximize", maximize)
     else:
         setattr(cls_instance, "_inject_maximize", maximize)
+
 
 def get_inject_maximize(cls_instance):
     if cls_instance is None:
@@ -143,16 +168,20 @@ def get_inject_maximize(cls_instance):
         return getattr(cls_instance, "_inject_maximize")
     return False
 
+
 class BOInjector(ExecInjector):
     def __init__(self):
         self.ignore_metric = True
         self.critic = None
 
     def inject_cls(self, cls, code):
-        methods = ['_update_eval_points', '_fit_model']
+        methods = ["_update_eval_points", "_fit_model"]
         for method in methods:
             original_method = getattr(cls, method, None)
-            if original_method is None or original_method.__name__ == 'injected_wrapper':
+            if (
+                original_method is None
+                or original_method.__name__ == "injected_wrapper"
+            ):
                 continue
             decorated_method = critic_wrapper(original_method)
             setattr(cls, method, decorated_method)
@@ -163,7 +192,12 @@ class BOInjector(ExecInjector):
             dim = init_kwargs.get("dim", 1)
             func = call_kwargs.get("func", None)
             bounds = func.bounds if func is not None else None
-            critic = AlgorithmCritic(dim=dim, bounds=bounds, optimal_value=func.optimal_value, critic_y_range=400)
+            critic = AlgorithmCritic(
+                dim=dim,
+                bounds=bounds,
+                optimal_value=func.optimal_value,
+                critic_y_range=400,
+            )
             critic.update_test_y(func)
             critic.search_result.init_grid(bounds=bounds, dim=dim, budget=func.budget)
             critic.ignore_metric = self.ignore_metric
@@ -173,9 +207,9 @@ class BOInjector(ExecInjector):
             setattr(cls_instance, "_injected_critic", critic)
 
             is_maximize = get_inject_maximize(cls_instance)
-            if not is_maximize and code is not None and 'botorch' in code:
+            if not is_maximize and code is not None and "botorch" in code:
                 is_maximize = True
-            
+
             if is_maximize:
                 critic.maximize = True
                 obj_fn = call_kwargs.get("func", None)
@@ -194,21 +228,21 @@ class BOInjector(ExecInjector):
 
         for line in lines:
             # find the first class in the code. then inject the critic_wrapper function above it
-            if re.search(r'^class\s+(\w+)', line):
+            if re.search(r"^class\s+(\w+)", line):
                 new_lines.extend(critic_wrapper_code_lines)
                 new_lines.append("\n")
-            elif re.search(r'def\s+_update_eval_points', line):
-                stripped_text   = line.lstrip()
-                n_blank_spaces  = len(line) - len(stripped_text)
-                decrator_line = " " * n_blank_spaces + '@critic_wrapper'
+            elif re.search(r"def\s+_update_eval_points", line):
+                stripped_text = line.lstrip()
+                n_blank_spaces = len(line) - len(stripped_text)
+                decrator_line = " " * n_blank_spaces + "@critic_wrapper"
                 new_lines.append(decrator_line)
-                new_lines.append('\n')
-            elif re.search(r'def\s+_fit_model', line):
-                stripped_text   = line.lstrip()
-                n_blank_spaces  = len(line) - len(stripped_text)
-                decrator_line = " " * n_blank_spaces + '@critic_wrapper'
+                new_lines.append("\n")
+            elif re.search(r"def\s+_fit_model", line):
+                stripped_text = line.lstrip()
+                n_blank_spaces = len(line) - len(stripped_text)
+                decrator_line = " " * n_blank_spaces + "@critic_wrapper"
                 new_lines.append(decrator_line)
-                new_lines.append('\n')
+                new_lines.append("\n")
 
             new_lines.append(line)
 
@@ -218,16 +252,19 @@ class BOInjector(ExecInjector):
         if self.critic is not None:
             self.critic.clear()
 
+
 class AlgorithmCritic:
     # - r2 from surrogate model
     # - uncertainty from surrogate model of the same samples
-    def __init__(self, dim:int, bounds:np.ndarray, optimal_value=None, critic_y_range=None):
+    def __init__(
+        self, dim: int, bounds: np.ndarray, optimal_value=None, critic_y_range=None
+    ):
         self.dim = dim
         self.bounds = bounds
         self.n_init = 0
         self.maximize = False
         self.ignore_metric = False
-        
+
         self.n_test_x = 1000
         self.test_x = None
         self.test_y = None
@@ -238,7 +275,9 @@ class AlgorithmCritic:
         self.uncertainty_list_on_train = []
 
         self.search_result = EvaluatorSearchResult()
-        self.search_result.init_acq_score(optimal_value=optimal_value, y_range=critic_y_range)
+        self.search_result.init_acq_score(
+            optimal_value=optimal_value, y_range=critic_y_range
+        )
 
         self.temp_r2_list = []
         self.temp_r2_list_on_train = []
@@ -263,18 +302,24 @@ class AlgorithmCritic:
             return
 
         # n_evals should include the evaluation of next_x
-        
+
         # inverse the y to treat the problem as minimization
         if self.maximize:
             y = -y if y is not None else None
             next_y = -next_y if next_y is not None else None
-        
-        self.search_result.update_next_grid_coverage(X=x, next_X=next_x, bounds=self.bounds, n_evals=n_evals)
-        self.search_result.update_next_dbscan_coverage(X=x, next_X=next_x, bounds=self.bounds, n_evals=n_evals)
-        self.search_result.update_next_exploitation(X=x, next_X=next_x, fX=y, next_fX=next_y, n_evals=n_evals)
+
+        self.search_result.update_next_grid_coverage(
+            X=x, next_X=next_x, bounds=self.bounds, n_evals=n_evals
+        )
+        self.search_result.update_next_dbscan_coverage(
+            X=x, next_X=next_x, bounds=self.bounds, n_evals=n_evals
+        )
+        self.search_result.update_next_exploitation(
+            X=x, next_X=next_x, fX=y, next_fX=next_y, n_evals=n_evals
+        )
         self.search_result.update_next_acq_score(fX=y, next_fX=next_y, n_evals=n_evals)
 
-# model related
+    # model related
     def update_after_model_fit_temp(self, model, new_X, new_y):
         if self.ignore_metric:
             return
@@ -282,7 +327,7 @@ class AlgorithmCritic:
         self.temp_r2_list.append(r2)
         r2_on_train = self._get_model_r2(model, new_X, new_y)
         self.temp_r2_list_on_train.append(r2_on_train)
-        
+
         uncertainty = self._get_model_uncertainty(model)
         self.temp_uncertainty_list.append(uncertainty)
         uncertainty_on_train = self._get_model_uncertainty(model, new_X)
@@ -298,13 +343,15 @@ class AlgorithmCritic:
         mean_r2_on_train = np.mean(self.temp_r2_list_on_train)
         self._update_r2(mean_r2_on_train, n_evals, self.r_2_list_on_train)
         self.temp_r2_list_on_train = []
-        
+
         mean_uncertainty = np.mean(self.temp_uncertainty_list)
         self._update_uncertainty(mean_uncertainty, n_evals, self.uncertainty_list)
         self.temp_uncertainty_list = []
 
         mean_uncertainty_on_train = np.mean(self.temp_uncertainty_list_on_train)
-        self._update_uncertainty(mean_uncertainty_on_train, n_evals, self.uncertainty_list_on_train)
+        self._update_uncertainty(
+            mean_uncertainty_on_train, n_evals, self.uncertainty_list_on_train
+        )
         self.temp_uncertainty_list_on_train = []
 
     def update_after_model_fit(self, model, n_evals, new_X, new_y):
@@ -319,9 +366,11 @@ class AlgorithmCritic:
         uncertainty = self._get_model_uncertainty(model)
         self._update_uncertainty(uncertainty, n_evals, self.uncertainty_list)
         uncertainty_on_train = self._get_model_uncertainty(model, new_X)
-        self._update_uncertainty(uncertainty_on_train, n_evals, self.uncertainty_list_on_train)
+        self._update_uncertainty(
+            uncertainty_on_train, n_evals, self.uncertainty_list_on_train
+        )
 
-# r squared 
+    # r squared
     def _get_model_r2(self, model, new_X=None, new_y=None):
         def _get_single_model_r2(model, x, y):
             _r_squared = 0.0
@@ -346,7 +395,7 @@ class AlgorithmCritic:
         eval_y = new_y
         if eval_x is None or eval_y is None:
             eval_x = self.test_x
-            eval_y = self.test_y 
+            eval_y = self.test_y
 
         r_squared = 0.0
         if isinstance(model, list) or isinstance(model, tuple):
@@ -366,7 +415,7 @@ class AlgorithmCritic:
         target_list.extend([np.nan] * n_fill)
         target_list.append(r_squared)
 
-# uncertainty
+    # uncertainty
     def _get_model_uncertainty(self, model, new_X=None):
         def _get_single_model_uncertainty(model, x):
             _uncertainty = 0.0
@@ -386,11 +435,11 @@ class AlgorithmCritic:
                 _, _uncertainty = model.predict(x, return_std=True)
             mean_uncertainty = np.mean(_uncertainty)
             return mean_uncertainty
-        
+
         eval_x = new_X
         if eval_x is None:
             eval_x = self.test_x
-        
+
         uncertainty = 0.0
         if isinstance(model, list):
             uncertainty_list = [_get_single_model_uncertainty(m, eval_x) for m in model]

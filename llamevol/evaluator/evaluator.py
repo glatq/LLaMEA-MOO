@@ -3,9 +3,10 @@ from collections.abc import Callable
 from typing import Any
 from .evaluator_result import EvaluatorResult
 
+
 class AbstractEvaluator(ABC):
     def __init__(self):
-        self.return_checker:Callable[[tuple], str] = lambda x: ""
+        self.return_checker: Callable[[tuple], str] = lambda x: ""
         self.ignore_over_budget = False
         self.ignore_capture = True
 
@@ -21,5 +22,13 @@ class AbstractEvaluator(ABC):
         pass
 
     @abstractmethod
-    def evaluate(self, code, cls_name, cls=None, cls_init_kwargs:dict[str, Any]=None, cls_call_kwargs:dict[str, Any]=None, injector=None) -> EvaluatorResult:
+    def evaluate(
+        self,
+        code,
+        cls_name,
+        cls=None,
+        cls_init_kwargs: dict[str, Any] = None,
+        cls_call_kwargs: dict[str, Any] = None,
+        injector=None,
+    ) -> EvaluatorResult:
         pass

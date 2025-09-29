@@ -13,11 +13,12 @@ from .population.population import Population, PopulationQueryItem
 from .individual import Individual
 from .llm import LLMmanager
 from .prompt_generators import PromptGenerator, GenerationTask, ResponseHandler
-from .utils import IndividualLogger, NoCodeException 
+from .utils import IndividualLogger, NoCodeException
 from .evaluator import EvaluatorResult, AbstractEvaluator
 
+
 class LLaMEvolTokenLogItem:
-    def __init__(self, generation:int=0):
+    def __init__(self, generation: int = 0):
         self.generation = generation
         self.prompt_token_count = 0
         self.response_token_count = 0
@@ -31,7 +32,10 @@ class LLaMEvol:
     """
     A class that represents the Language Model powered Bayesian Optimization(LLaMEvol).
     """
-    def update_current_task(self, query_item:PopulationQueryItem = None, generation:int = 0) -> GenerationTask:
+
+    def update_current_task(
+        self, query_item: PopulationQueryItem = None, generation: int = 0
+    ) -> GenerationTask:
         if query_item.is_initialized or query_item.parent is None or generation == 0:
             return GenerationTask.INITIALIZE_SOLUTION
         elif len(query_item.parent) == 1:
@@ -42,15 +46,16 @@ class LLaMEvol:
         else:
             return GenerationTask.OPTIMIZE_PERFORMANCE
 
-    def evalution_func(self,
-                       session_messages:list[dict[str, str]],
-                       llm:LLMmanager,
-                       response_handler:ResponseHandler,
-                       task:GenerationTask,
-                       evaluator:AbstractEvaluator,
-                       retry:int=3,
-                       options=None,
-                       ) -> ResponseHandler:
+    def evalution_func(
+        self,
+        session_messages: list[dict[str, str]],
+        llm: LLMmanager,
+        response_handler: ResponseHandler,
+        task: GenerationTask,
+        evaluator: AbstractEvaluator,
+        retry: int = 3,
+        options=None,
+    ) -> ResponseHandler:
         if session_messages is None:
             return response_handler
 
@@ -58,7 +63,7 @@ class LLaMEvol:
         if options is not None:
             _llm_params.update(options.get("llm_params", {}))
         logging.info("Querying with: %s", _llm_params)
-        res_content = ''
+        res_content = ""
         for i_try in range(retry):
             response = llm.chat(session_messages, **_llm_params)
             res_content = response.text
@@ -67,8 +72,8 @@ class LLaMEvol:
             response_handler.response_token_count += response.response_token_count
 
             # Retry if no response from the model
-            if res_content is None or res_content == "" :
-                logging.error("No response from the model.") 
+            if res_content is None or res_content == "":
+                logging.error("No response from the model.")
                 logging.error("Retrying: %s/%s", i_try + 1, retry)
             else:
                 response_handler.extract_response(res_content, task=task)
@@ -78,7 +83,7 @@ class LLaMEvol:
                     logging.error("\n%s", res_content)
                 else:
                     break
-        
+
         response_handler.sys_prompt = session_messages[0]["content"]
         response_handler.prompt = session_messages[1]["content"]
         response_handler.llm_model = llm.model_name()
@@ -92,23 +97,31 @@ class LLaMEvol:
         if response_handler.error:
             return response_handler
 
-        res = evaluator.evaluate(code=response_handler.code, cls_name=response_handler.code_name)
+        res = evaluator.evaluate(
+            code=response_handler.code, cls_name=response_handler.code_name
+        )
 
         response_handler.eval_result = res
 
         return response_handler
 
-    def _update_ind_and_handler(self, query_item:PopulationQueryItem, handler:ResponseHandler, current_generation:int, promptor:PromptGenerator):
+    def _update_ind_and_handler(
+        self,
+        query_item: PopulationQueryItem,
+        handler: ResponseHandler,
+        current_generation: int,
+        promptor: PromptGenerator,
+    ):
         if handler.code is None or handler.code_name is None:
             return
-        
+
         parent_ids = []
         if not query_item.is_initialized:
             parent_ids = [p.id for p in query_item.parent if p is not None]
         handler.parent_ids = parent_ids
 
         ind = query_item.offspring
-        ind.description = getattr(handler , "desc", "")
+        ind.description = getattr(handler, "desc", "")
         ind.solution = handler.code
         ind.name = handler.code_name
         ind.parent_id = parent_ids
@@ -126,47 +139,61 @@ class LLaMEvol:
         tags.append(f"gen:{current_generation}")
         ind.add_metadata("tags", tags)
 
-    def _update_token_log(self, token_log:list[LLaMEvolTokenLogItem], handler:ResponseHandler):
+    def _update_token_log(
+        self, token_log: list[LLaMEvolTokenLogItem], handler: ResponseHandler
+    ):
         if len(token_log) == 0:
             return
         token_log[-1].query_time += handler.query_time
         token_log[-1].prompt_token_count += handler.prompt_token_count
         token_log[-1].response_token_count += handler.response_token_count
 
-    def run_evolutions(self, llm: LLMmanager,
-                       evaluator: AbstractEvaluator,
-                       prompt_generator: PromptGenerator,
-                       population: Population,
-                       n_generation: int = np.inf,
-                       n_population: int = 1,
-                       n_retry: int = 3,
-                       n_query_threads: int = 0,
-                       max_interval: int = 0,
-                       options=None,
-                       ):
-
+    def run_evolutions(
+        self,
+        llm: LLMmanager,
+        evaluator: AbstractEvaluator,
+        prompt_generator: PromptGenerator,
+        population: Population,
+        n_generation: int = np.inf,
+        n_population: int = 1,
+        n_retry: int = 3,
+        n_query_threads: int = 0,
+        max_interval: int = 0,
+        options=None,
+    ):
         logging.info("==========Starting==========")
         logging.info("%s", llm.model_name())
         logging.info("%s", prompt_generator)
         logging.info("%s", evaluator)
         logging.info("%s", population)
 
-        _token_log:list[LLaMEvolTokenLogItem] = []
+        _token_log: list[LLaMEvolTokenLogItem] = []
 
         last_query_time = 0
         current_generation = population.get_current_generation()
         current_population = population.get_population_size()
         while current_population < n_population and current_generation < n_generation:
-            logging.info("""======Start Generation %s/%s with %s/%s Population=======""", current_generation, n_generation, current_population, n_population)
+            logging.info(
+                """======Start Generation %s/%s with %s/%s Population=======""",
+                current_generation,
+                n_generation,
+                current_population,
+                n_population,
+            )
 
             _token_log.append(LLaMEvolTokenLogItem(current_generation))
-            
+
             _max_n_offspring = n_population - current_population
-            _query_items = population.get_offspring_queryitems(max_n_offspring=_max_n_offspring)
+            _query_items = population.get_offspring_queryitems(
+                max_n_offspring=_max_n_offspring
+            )
 
             current_query_time = time.time()
             if current_query_time - last_query_time < max_interval:
-                logging.info("Sleeping for %s seconds", max_interval - (current_query_time - last_query_time))
+                logging.info(
+                    "Sleeping for %s seconds",
+                    max_interval - (current_query_time - last_query_time),
+                )
                 time.sleep(max_interval - (current_query_time - last_query_time))
             last_query_time = time.time()
 
@@ -175,13 +202,19 @@ class LLaMEvol:
 
             _round = 0
             while len(_query_queue) > 0:
-                logging.info("==Round %s: %s offspring==",_round, len(_query_queue))
+                logging.info("==Round %s: %s offspring==", _round, len(_query_queue))
                 params = []
                 for i, query_item in enumerate(_query_queue):
-                    current_task = self.update_current_task(query_item=query_item, generation=current_generation)
+                    current_task = self.update_current_task(
+                        query_item=query_item, generation=current_generation
+                    )
 
                     # Get prompt
-                    parent_handlers = [Population.get_handler_from_individual(p) for p in query_item.parent if p is not None]
+                    parent_handlers = [
+                        Population.get_handler_from_individual(p)
+                        for p in query_item.parent
+                        if p is not None
+                    ]
                     _promptor = population.get_promptor(query_item=query_item)
                     if _promptor is None:
                         _promptor = prompt_generator
@@ -201,12 +234,13 @@ class LLaMEvol:
                         task=current_task,
                         problem_desc=_problem_description,
                         candidates=parent_handlers,
-                        population=population)
+                        population=population,
+                    )
                     session_messages = [
                         {"role": "system", "content": role_setting},
                         {"role": "user", "content": prompt},
                     ]
-                    
+
                     next_handler = _promptor.get_response_handler()
                     kwargs = {
                         "session_messages": session_messages,
@@ -215,14 +249,15 @@ class LLaMEvol:
                         "task": current_task,
                         "evaluator": _evaluator,
                         "retry": n_retry,
-                        'options': options,
+                        "options": options,
                     }
                     params.append((kwargs, query_item))
 
-
                 _next_query_items = []
                 if n_query_threads > 0:
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=n_query_threads) as executor:
+                    with concurrent.futures.ThreadPoolExecutor(
+                        max_workers=n_query_threads
+                    ) as executor:
                         futures = {}
                         for i, param in enumerate(params):
                             kwargs, _query_item = param
@@ -233,43 +268,69 @@ class LLaMEvol:
                             _query_item = futures[future]
                             handler = future.result()
 
+                            self._update_ind_and_handler(
+                                _query_item, handler, current_generation, _promptor
+                            )
 
-                            self._update_ind_and_handler(_query_item, handler, current_generation, _promptor)
-
-                            _following_query_items = population.get_next_queryitems([_query_item])
+                            _following_query_items = population.get_next_queryitems(
+                                [_query_item]
+                            )
                             if _following_query_items:
                                 _next_query_items.extend(_following_query_items)
                             else:
-                                population.add_individual(_query_item.offspring, generation=current_generation)
+                                population.add_individual(
+                                    _query_item.offspring, generation=current_generation
+                                )
                             self._update_token_log(_token_log, handler)
                 else:
                     for i, param in enumerate(params):
                         kwargs, _query_item = param
                         next_handler = self.evalution_func(**kwargs)
 
-                        self._update_ind_and_handler(_query_item, next_handler, current_generation, _promptor)
-                        _following_query_items = population.get_next_queryitems([_query_item])
+                        self._update_ind_and_handler(
+                            _query_item, next_handler, current_generation, _promptor
+                        )
+                        _following_query_items = population.get_next_queryitems(
+                            [_query_item]
+                        )
                         if _following_query_items:
                             _next_query_items.extend(_following_query_items)
                         else:
-                            population.add_individual(_query_item.offspring, generation=current_generation)
+                            population.add_individual(
+                                _query_item.offspring, generation=current_generation
+                            )
                         self._update_token_log(_token_log, next_handler)
 
                 _query_queue = _next_query_items
                 _round += 1
 
-            logging.info('%s', _token_log[-1])
+            logging.info("%s", _token_log[-1])
 
             population.select_next_generation()
 
             best_ind = population.get_best_individual(maximize=True)
             if best_ind is not None:
-                logging.info("Best of Generation %s : %s(%.4f)\n%s", current_generation, best_ind.name, best_ind.fitness, best_ind.description)
+                logging.info(
+                    "Best of Generation %s : %s(%.4f)\n%s",
+                    current_generation,
+                    best_ind.name,
+                    best_ind.fitness,
+                    best_ind.description,
+                )
             best_of_all = population.get_best_of_all(maximize=True)
             if best_of_all is not None:
-                logging.info("Best of All : %s(%.4f)\n%s", best_of_all.name, best_of_all.fitness, best_of_all.description)
+                logging.info(
+                    "Best of All : %s(%.4f)\n%s",
+                    best_of_all.name,
+                    best_of_all.fitness,
+                    best_of_all.description,
+                )
 
             current_generation = population.get_current_generation()
             current_population = population.get_population_size()
-        
-        logging.info("======Finished with %s Generations and %s Population======", current_generation, current_population)
+
+        logging.info(
+            "======Finished with %s Generations and %s Population======",
+            current_generation,
+            current_population,
+        )

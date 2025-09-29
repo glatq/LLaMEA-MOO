@@ -1,6 +1,7 @@
 import json
 import uuid
 
+
 class Individual:
     """
     Represents a candidate solution (an individual) in the evolutionary algorithm.
@@ -164,4 +165,3 @@ class Individual:
             str: A JSON string representation of the individual.
         """
         return json.dumps(self.to_dict(), default=str, indent=4)
-        

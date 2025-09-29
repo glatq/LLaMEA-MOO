@@ -192,3 +192,7 @@ Experiments/log_eater
 pop_*
 exp_es_search
 Experiments/logs_backup
+
+.DS_Store
+.idea/
+outputs/
