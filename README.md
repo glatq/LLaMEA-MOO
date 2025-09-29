@@ -316,7 +316,6 @@ The Population component (`llamevol/population/`) manages the collection of cand
         - Supports configurable migration parameters (`migration_batch`, `cyclic_migration`).
         - Allows islands to be reset or killed based on performance.
     - `SequencePopulation` (`sequence_population.py`): A simpler (potentially non-generational) population structure (currently basic).
-    - `EnsemblePopulation` (`ensemble_population.py`): Designed to combine multiple populations (currently basic).
 - **Query Items:** Uses `PopulationQueryItem` to represent tasks for the main loop, specifying parent individuals for generating offspring.
 - **Diversity Metrics:** Provides utility functions in `population.py` to assess population diversity:
     - `code_diff_similarity`: Based on line-by-line code differences.
