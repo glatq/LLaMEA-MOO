@@ -188,10 +188,23 @@ def make_basic_result(id_str: str, log_aoc: float) -> EvaluatorBasicResult:
     return r
 
 
-@pytest.mark.xfail(reason="Test is WIP")
+@pytest.mark.xfail(reason="Seems broken")
 def test_evaluation_feedback_prompt(bozero_pg, eval_res):
+    res_1 = EvaluatorBasicResult()
+    res_1.budget = 100
+    res_1.best_y = 1
+    res_1.y_aoc = 0.1
+    res_2 = EvaluatorBasicResult()
+    res_2.budget = 200
+    res_2.best_y = 2
+    res_2.y_aoc = 0.2
+    eval_res.result = [res_1, res_2]
+    eval_res.name = "results"
+
     actual = bozero_pg.evaluation_feedback_prompt(eval_res)
-    expected = f"### Feedback\n- Budget: {eval_res.result[0].budget}\n"
+    expected = f"""### Feedback\n- Budget: 100\n- Optimal Value\n#### results\n- best y: 1.00\n- AOC for all y: 0.10\n- best y: 2.00\n- AOC for all y: 0.20\n#### Note:
+- AOC(Area Over the Convergence Curve): a measure of the convergence speed of the algorithm, ranged between 0.0 and 1.0. A higher value is better.
+- Budget: Maximum number of function evaluations allowed for the algorithm."""
     assert expected == actual
     assert False
 

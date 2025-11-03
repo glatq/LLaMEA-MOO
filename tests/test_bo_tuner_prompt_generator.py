@@ -5,6 +5,7 @@ from llamevol.prompt_generators.bo_tuner_prompt_generator import (
     TunerResponseHandler,
 )
 from llamevol.evaluator.evaluator_result import EvaluatorResult, EvaluatorBasicResult
+from llamevol.population import ESPopulation
 
 
 @pytest.fixture
@@ -107,7 +108,6 @@ def test_get_prompt_raises_without_candidates(tuner_pg):
         )
 
 
-@pytest.mark.xfail(reason="Test is WIP")
 def test_get_prompt_with_candidates_includes_inputs(tuner_pg):
     # Build two candidates
     c1 = TunerResponseHandler()
@@ -137,11 +137,12 @@ The code should contain an `__init__(self, budget, dim)` function and the functi
 As an expert of numpy, scipy, scikit-learn, torch, gpytorch and botorch, you are allowed to use these libraries. Do not use any other libraries unless they cannot be replaced by the above libraries. Name the class based on the characteristics of the algorithm with a template '<characteristics>BOv<version>'.
 """
 
-    pre_solution_prompt = "The provided Bayesian Optimization algorithm is as follows:\n## Algorithm A\n\nWith code:\n```python\n\n```\n\n\n## Algorithm B\n\nWith code:\n```python\n\n```\n\n\n\n"
+    pre_solution_prompt = "The provided Bayesian Optimization algorithm is as follows:\n## Algorithm A\n```python\n\n```\n\n\n\n## Algorithm B\n```python\n\n```\n\n\n\n"
 
     other_solutions_prompt = ""
 
     response_format_prompt = """
+
 Give the response in the format:
 ## Justifications 
 <Analysis of the algorithm and the feedback>
@@ -165,12 +166,11 @@ Give the response in the format:
         task=GenerationTask.FIX_ERRORS,
         problem_desc="24 noiseless functions",
         candidates=[c1, c2],
-        population=None,
+        population=ESPopulation(n_parent=1, n_parent_per_offspring=1, n_offspring=1),
     )
 
     assert expected_role_prompt == actual_role_prompt
     assert expected_final_prompt == actual_final_prompt
-    assert False
 
 
 def test_get_response_handler_type(tuner_pg):

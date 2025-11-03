@@ -2,7 +2,7 @@ import logging
 import getopt
 import sys
 from llamevol.evaluator.ioh_evaluator import IOHEvaluator
-from llamevol.prompt_generators import BaselinePromptGenerator
+from llamevol.prompt_generators import BaselinePromptGenerator, BoZeroPromptGenerator
 from llamevol.population import ESPopulation
 from llamevol.llm import LLMmanager
 from llamevol import LLaMEvol
