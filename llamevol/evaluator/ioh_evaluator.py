@@ -9,58 +9,43 @@ import numpy as np
 from ioh import get_problem, logger
 from misc import aoc_logger, correct_aoc
 
-
 from llamevol.utils import BOOverBudgetException
-
+from .ioh_objective_provider import IOHProvider
 from .evaluator import AbstractEvaluator
 from .evaluator_result import EvaluatorResult, EvaluatorBasicResult
 from .exec_utils import default_exec, ExecInjector
 
-from unittest.mock import MagicMock
-
 _logger = logging.getLogger(__name__)
 
 
-def calculate_aoc_by_ioh(y_hist, optimum_value, budget, upper=1e4):
-    l2 = aoc_logger(budget, upper=upper, triggers=[logger.trigger.ALWAYS])
-    best_y = np.minimum.accumulate(y_hist, axis=0)
-    best_y -= optimum_value
-
-    if len(best_y) >= budget:
-        best_y = best_y[: budget - 1]
-    y_value = np.clip(best_y, l2.lower, l2.upper)
-    log_upper = l2.transform(l2.upper)
-    log_lower = l2.transform(l2.lower)
-    log_y_value = l2.transform(y_value)
-    a = (log_y_value - log_lower) / (log_upper - log_lower)
-    aoc = np.sum(a)
-    l2.aoc = aoc
-
-    # for i, _y in enumerate(best_y):
-    #     mock_log_info= MagicMock()
-    #     mock_log_info.raw_y_best = _y
-    #     mock_log_info.evaluations = i + 1
-    #     l2(mock_log_info)
-
-    # print(f"ioh sum AOC: {l2.aoc}")
-
-    pre_aoc = l2.aoc / budget
-    pre_aoc = 1 - pre_aoc
-
-    mock_func = MagicMock()
-    mock_func.state.evaluations = budget if len(best_y) == budget - 1 else len(best_y)
-    mock_func.state.current_best_internal.y = best_y[-1]
-    aoc = correct_aoc(mock_func, l2, budget)
-
-    # print(f'ioh pre_aoc: {pre_aoc}, ioh aoc: {aoc}')
-
-    return aoc
+def compute_log_aoc(y_hist, budget, optimum_value=None, lower=1e-8, upper=1e4):
+    if y_hist is None or len(y_hist) == 0:
+        return 0.0
+    y = y_hist.reshape(-1)
+    best = np.minimum.accumulate(y)
+    if optimum_value is not None:
+        best = best - optimum_value
+    best = best[:budget] if len(best) > budget else best
+    best = np.clip(best, lower, upper)
+    logbest = np.log10(best)
+    lo, hi = np.log10(lower), np.log10(upper)
+    a = np.clip((logbest - lo) / (hi - lo), 0.0, 1.0)
+    return float(1.0 - np.sum(a) / budget)
 
 
-class IOHObjectiveFn:
+class ObjectiveFn:
     def __init__(
-        self, problem_id, instance_id, exec_id, dim, budget, show_progress_bar=False
+        self,
+        *,
+        provider,
+        problem_id,
+        instance_id,
+        exec_id,
+        dim,
+        budget,
+        show_progress_bar=False,
     ):
+        self._provider = provider
         self.problem_id = problem_id
         self.instance_id = instance_id
         self.exec_id = exec_id
@@ -68,113 +53,99 @@ class IOHObjectiveFn:
         self.budget = budget
         self.maximize = False
 
-        self.obj_fn = get_problem(problem_id, instance_id, dim)
-        self.optimal_value = self.obj_fn.optimum.y
-        self.optimal_x = self.obj_fn.optimum.x
-        self.name = f"F{problem_id}-{self.obj_fn.problems[problem_id]}"
+        self.obj = provider.get(problem_id, instance_id, dim)
 
-        lb = self.obj_fn.bounds.lb
-        ub = self.obj_fn.bounds.ub
-        p_bounds = np.array([lb, ub])
-        self.bounds = p_bounds
+        # COMPAT: alias for tests expecting .obj_fn and .obj_fn.state
+        self.obj_fn = self.obj
+
+        self.name = self.obj.name
+        self.bounds = self.obj.bounds
+        self.optimal_x = self.obj.optimum_x
+        self.optimal_value = self.obj.optimum_y
 
         self.x_hist = None
         self.y_hist = None
         self.ioh_aoc = None
 
-        self.progress_bar = None
+        self._progress_bar = None
         self.show_progress_bar = show_progress_bar
         self.ignore_over_budget = False
 
     def reset(self):
+        # COMPAT: old reset closed progress and nulled obj_fn
+        if self._progress_bar is not None:
+            self._progress_bar.close()
+            self._progress_bar = None
+        self.obj = None
         self.obj_fn = None
-        if self.progress_bar is not None:
-            self.progress_bar.close()
-            self.progress_bar = None
 
     def stateless_call(self, x):
-        new_obj_fn = get_problem(self.problem_id, self.instance_id, self.dim)
-        y = new_obj_fn(x)
-        if self.maximize:
-            y = -y
-        return y
+        # fresh problem; honor maximize flag on the returned value like before
+        fresh = self._provider.get(self.problem_id, self.instance_id, self.dim)
+        y = fresh(x)
+        return -y if self.maximize else y
 
     @property
     def show_progress_bar(self):
         return self._show_progress_bar
 
     @show_progress_bar.setter
-    def show_progress_bar(self, value):
-        self._show_progress_bar = value
+    def show_progress_bar(self, value: bool):
+        self._show_progress_bar = bool(value)
         if self._show_progress_bar:
-            self.progress_bar = tqdm(total=self.budget, desc=f"Evaluating {self.name}")
+            self._progress_bar = tqdm(total=self.budget, desc=f"Evaluating {self.name}")
         else:
-            if self.progress_bar is not None:
-                self.progress_bar.close()
-                self.progress_bar = None
+            if self._progress_bar is not None:
+                self._progress_bar.close()
+                self._progress_bar = None
+
+    # COMPAT: expose attribute named progress_bar
+    @property
+    def progress_bar(self):
+        return self._progress_bar
 
     def __call__(self, x):
-        if (
-            self.obj_fn is not None
-            and self.budget is not None
-            and self.obj_fn.state.evaluations > self.budget
-        ):
-            _logger.error(
-                "%s Over budget: %s/%s",
-                self.name,
-                self.obj_fn.state.evaluations,
-                self.budget,
-            )
-            if not self.ignore_over_budget:
-                raise BOOverBudgetException(
-                    "OverBudgetException",
-                    "The total number(during the whole process) of the sample points which evaluated by func should not exceed the budget. Using the surrogate model, accquisition function or any other methods suited your purposes instead of the func to evaluate the points is a alternative option.",
-                )
-
-        # check if x are nan
         if np.isnan(x).any():
             raise ValueError(f"x({x}) contains nan values")
 
-        if self.x_hist is None:
-            self.x_hist = x
-        else:
-            self.x_hist = np.vstack((self.x_hist, x))
+        # COMPAT: old guard triggers when prior evaluations > budget (not >=)
+        if (
+            self.obj is not None
+            and self.budget is not None
+            and not self.ignore_over_budget
+            and getattr(self.obj, "evaluations", 0) > self.budget
+        ):
+            from llamevol.utils import BOOverBudgetException
 
-        y = self.obj_fn(x)
+            raise BOOverBudgetException("OverBudgetException", "Budget exceeded")
 
-        if self.y_hist is None:
-            if isinstance(y, list):
-                self.y_hist = np.array(y).reshape(-1, 1)
-            else:
-                self.y_hist = np.array([y]).reshape(-1, 1)
-        else:
-            if isinstance(y, list):
-                self.y_hist = np.append(self.y_hist, np.array(y).reshape(-1, 1))
-            else:
-                self.y_hist = np.append(self.y_hist, np.array([y]).reshape(-1, 1))
+        # record x history
+        self.x_hist = x if self.x_hist is None else np.vstack((self.x_hist, x))
 
-        if self.show_progress_bar:
-            progress = 1
-            if len(x.shape) > 1:
-                progress = x.shape[0]
-            self.progress_bar.update(progress)
-        else:
-            if _logger.isEnabledFor(logging.DEBUG):
-                progress = len(self.x_hist)
-                interval = self.budget // 4
-                if progress % interval == 0:
-                    msg = f"{self.name}-{self.instance_id}-{self.exec_id}:{progress}/{self.budget} evaluations completed"
-                    _logger.debug(msg)
+        y = self.obj(x)
 
+        # record y history; keep shape behavior (eventually flattens to (n,))
+        y_arr = (
+            np.array(y).reshape(-1, 1)
+            if isinstance(y, list)
+            else np.array([y]).reshape(-1, 1)
+        )
+        self.y_hist = y_arr if self.y_hist is None else np.append(self.y_hist, y_arr)
+
+        # progress updates: +rows if batched
+        if self._show_progress_bar and self._progress_bar is not None:
+            step = x.shape[0] if hasattr(x, "shape") and len(x.shape) > 1 else 1
+            self._progress_bar.update(step)
+
+        # apply maximize after getting y
         if self.maximize:
             y = -y
 
-        if isinstance(y, list):
-            return np.array(y).reshape(-1, 1)
-        return y
+        return np.array(y).reshape(-1, 1) if isinstance(y, list) else y
 
 
-def ioh_evaluate_block(
+def evaluate_block(
+    provider,
     problem_id,
     instance_id,
     exec_id,
@@ -188,8 +159,9 @@ def ioh_evaluate_block(
     ignore_over_budget: bool = False,
     ignore_capture: bool = True,
     injector=None,
-) -> tuple[Any, str, str, float, IOHObjectiveFn, Any]:
-    obj_fn = IOHObjectiveFn(
+):
+    obj_fn = ObjectiveFn(
+        provider=provider,
         problem_id=problem_id,
         instance_id=instance_id,
         exec_id=exec_id,
@@ -199,15 +171,34 @@ def ioh_evaluate_block(
     )
     obj_fn.ignore_over_budget = ignore_over_budget
 
-    l2 = aoc_logger(budget, upper=1e4, triggers=[logger.trigger.ALWAYS])
-    obj_fn.obj_fn.attach_logger(l2)
+    # Try to attach the IOH AOC logger if this is the IOH provider
+    l2 = None
+    raw_ioh_problem = None
+    try:
+        from llamevol.evaluator.ioh_objective_provider import IOHProvider
+
+        is_ioh = isinstance(provider, IOHProvider)
+    except Exception:
+        is_ioh = False
+    if is_ioh:
+        try:
+            from ioh import logger as ioh_logger
+
+            # IOHProvider stores the raw IOH problem as _p
+            raw_ioh_problem = getattr(obj_fn.obj, "_p", None)
+            if raw_ioh_problem is not None and hasattr(
+                raw_ioh_problem, "attach_logger"
+            ):
+                # aoc_logger is already imported in this module
+                l2 = aoc_logger(budget, upper=1e4, triggers=[ioh_logger.trigger.ALWAYS])
+                raw_ioh_problem.attach_logger(l2)
+        except Exception:
+            l2 = None
+            raw_ioh_problem = None
 
     start_time = time.perf_counter()
 
-    init_kwargs = {
-        "dim": dim,
-        "budget": budget,
-    }
+    init_kwargs = {"dim": dim, "budget": budget}
     if cls_init_kwargs is not None:
         init_kwargs.update(cls_init_kwargs)
 
@@ -225,26 +216,36 @@ def ioh_evaluate_block(
     )
     exec_time = time.perf_counter() - start_time
 
-    aoc = correct_aoc(obj_fn.obj_fn, l2, budget)
-    obj_fn.ioh_aoc = aoc
+    # Prefer IOH-native AOC if we attached the IOH logger; otherwise fall back
+    aoc_value = None
+    if l2 is not None and raw_ioh_problem is not None:
+        try:
+            # correct_aoc is imported at module level and patched by tests
+            aoc_value = correct_aoc(raw_ioh_problem, l2, budget)
+        except Exception:
+            aoc_value = None
+
+    if aoc_value is None:
+        # compute_log_aoc is the IOH-free fallback (also patched by tests)
+        aoc_value = compute_log_aoc(
+            y_hist=obj_fn.y_hist,
+            budget=budget,
+            optimum_value=obj_fn.optimal_value,
+            lower=1e-8,
+            upper=1e4,
+        )
+
+    obj_fn.ioh_aoc = aoc_value
     obj_fn.reset()
-
-    # _ioh_aoc = calculate_aoc_by_ioh(
-    #             y_hist=l2.history,
-    #             optimum_value=0,
-    #             budget=obj_fn.budget
-    #         )
-
-    # _ioh_aoc = calculate_aoc_by_ioh(
-    #             y_hist=obj_fn.y_hist,
-    #             optimum_value=obj_fn.optimal_value,
-    #             budget=obj_fn.budget
-    # )
 
     if ignore_capture:
         captured_output = None
 
     return res, captured_output, err, exec_time, obj_fn, new_injector
+
+
+def ioh_evaluate_block(**kwargs):
+    return evaluate_block(**kwargs)
 
 
 class IOHEvaluator(AbstractEvaluator):
@@ -331,6 +332,7 @@ class IOHEvaluator(AbstractEvaluator):
         self._problem_name = problem_name
 
         self.timeout = 60 * 60  # 60 minutes
+        self.provider = IOHProvider()
 
     def eval_bugdet(self) -> int:
         return self.budget
@@ -525,6 +527,7 @@ class IOHEvaluator(AbstractEvaluator):
         params = []
         for param in self.obj_fn_params:
             new_param = {
+                "provider": getattr(self, "provider", None),
                 "code": code,
                 "cls_name": cls_name,
                 "cls": cls,
@@ -543,71 +546,9 @@ class IOHEvaluator(AbstractEvaluator):
 
         max_eval_workers = self.max_eval_workers
         use_multi_process = self.use_multi_process
-        use_mpi = self.use_mpi
-        use_mpi_future = self.use_mpi_future
         timeout = self.timeout
 
-        if use_mpi:
-            from mpi4py import MPI
-            from llamevol.evaluator.MPITaskManager import MPITaskManager, MPIFuture
-
-            comm = MPI.COMM_WORLD
-            size = comm.Get_size()
-            _logger.info(
-                "Evaluating %s: %s tasks, using MPI with %s workers",
-                cls_name,
-                total_tasks,
-                size - 1,
-            )
-
-            task_manager = MPITaskManager()
-            futures = {
-                task_manager.submit(ioh_evaluate_block, **param): param
-                for param in params
-            }
-            self.start_as_completed(
-                eval_result,
-                futures,
-                timeout,
-                task_manager=task_manager,
-                cls_name=cls_name,
-                interval=interval,
-                total_tasks=total_tasks,
-            )
-
-        elif use_mpi_future:
-            from mpi4py import MPI
-            from mpi4py.futures import MPIPoolExecutor
-            from mpi4py.futures import get_comm_workers
-
-            comm = MPI.COMM_WORLD
-            size = comm.Get_size()
-
-            if size < 2:
-                raise ValueError("Requires at least 2 MPI processes.")
-
-            _logger.info(
-                "Evaluating %s: %s tasks, using MPI.futures with %s max_workers",
-                cls_name,
-                total_tasks,
-                size,
-            )
-
-            executor = MPIPoolExecutor(max_workers=size)
-            futures = {
-                executor.submit(ioh_evaluate_block, **param): param for param in params
-            }
-            self.start_as_completed(
-                eval_result,
-                futures,
-                timeout,
-                executor=executor,
-                cls_name=cls_name,
-                interval=interval,
-                total_tasks=total_tasks,
-            )
-
-        elif max_eval_workers is None or max_eval_workers > 0:
+        if max_eval_workers is None or max_eval_workers > 0:
             max_workers = min(os.cpu_count() - 1, max_eval_workers)
             if use_multi_process:
                 _logger.info(

@@ -1,8 +1,9 @@
 # tests/test_ioh_objective_fn_real.py
 import numpy as np
 import pytest
-from llamevol.evaluator.ioh_evaluator import IOHObjectiveFn
+from llamevol.evaluator.ioh_evaluator import ObjectiveFn
 from llamevol.utils import BOOverBudgetException
+from llamevol.evaluator.ioh_objective_provider import IOHProvider
 
 # Use parameters consistent with get_IOHEvaluator()
 PROBLEM_ID = 2  # from your problems list
@@ -12,7 +13,8 @@ DEFAULT_BUDGET = 100
 
 
 def make_obj(budget=DEFAULT_BUDGET, show_pb=False, problem_id=PROBLEM_ID):
-    return IOHObjectiveFn(
+    return ObjectiveFn(
+        provider=IOHProvider(),
         problem_id=problem_id,
         instance_id=INSTANCE_ID,
         exec_id=0,

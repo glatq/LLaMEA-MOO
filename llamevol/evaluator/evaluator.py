@@ -14,8 +14,6 @@ class AbstractEvaluator(ABC):
         self.max_eval_workers = 0
         self.use_multi_process = False
         self.timeout = None
-        self.use_mpi = False
-        self.use_mpi_future = False
 
     @abstractmethod
     def problem_prompt(self) -> str:
