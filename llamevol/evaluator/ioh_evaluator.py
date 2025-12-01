@@ -6,7 +6,6 @@ import os
 import concurrent.futures
 from tqdm import tqdm
 import numpy as np
-from ioh import get_problem, logger
 from misc import aoc_logger, correct_aoc
 
 from llamevol.utils import BOOverBudgetException
@@ -115,8 +114,6 @@ class ObjectiveFn:
             and not self.ignore_over_budget
             and getattr(self.obj, "evaluations", 0) > self.budget
         ):
-            from llamevol.utils import BOOverBudgetException
-
             raise BOOverBudgetException("OverBudgetException", "Budget exceeded")
 
         # record x history
