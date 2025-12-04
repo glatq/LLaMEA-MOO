@@ -16,3 +16,5 @@ from .bl_prompt_generator import (
     LightBaselinePromptGenerator,
 )
 from .bo_tuner_prompt_generator import TunerPromptGenerator, TunerResponseHandler
+
+from .moo_prompt_generator import MultiObjectivePromptGenerator
