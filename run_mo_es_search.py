@@ -18,15 +18,15 @@ def get_MOOEvaluator():
 
     # Define the suite of 10 multi-objective benchmarks
     problems = [
-        MOOProblemSpec(name="zdt1", dim=30, n_obj=2, ref_point=[1.2, 1.2]),
-        MOOProblemSpec(name="zdt2", dim=30, n_obj=2, ref_point=[1.2, 1.2]),
-        MOOProblemSpec(name="zdt3", dim=30, n_obj=2, ref_point=[1.2, 1.2]),
-        MOOProblemSpec(name="zdt4", dim=10, n_obj=2, ref_point=[1.2, 1.2]),
-        MOOProblemSpec(name="zdt6", dim=10, n_obj=2, ref_point=[1.2, 1.2]),
-        MOOProblemSpec(name="dtlz1", dim=dim, n_obj=3, ref_point=[1.0, 1.0, 1.0]),
-        MOOProblemSpec(name="dtlz2", dim=dim, n_obj=3, ref_point=[1.2, 1.2, 1.2]),
-        MOOProblemSpec(name="dtlz3", dim=dim, n_obj=3, ref_point=[1.2, 1.2, 1.2]),
-        MOOProblemSpec(name="dtlz4", dim=dim, n_obj=3, ref_point=[1.2, 1.2, 1.2]),
+        MOOProblemSpec(name="zdt1", dim=30, n_obj=2, ref_point=[1.1, 6.0]),
+        MOOProblemSpec(name="zdt2", dim=30, n_obj=2, ref_point=[1.1, 7.0]),
+        MOOProblemSpec(name="zdt3", dim=30, n_obj=2, ref_point=[1.1, 6.0]),
+        MOOProblemSpec(name="zdt4", dim=10, n_obj=2, ref_point=[1.1, 160.0]),
+        MOOProblemSpec(name="zdt6", dim=10, n_obj=2, ref_point=[1.1, 10.0]),
+        MOOProblemSpec(name="dtlz1", dim=dim, n_obj=3, ref_point=[10.0, 10.0, 30.0]),
+        MOOProblemSpec(name="dtlz2", dim=dim, n_obj=3, ref_point=[1.5, 1.5, 1.5]),
+        MOOProblemSpec(name="dtlz3", dim=dim, n_obj=3, ref_point=[20.0, 30.0, 100.0]),
+        MOOProblemSpec(name="dtlz4", dim=dim, n_obj=3, ref_point=[2.0, 1.2, 1.2]),
         MOOProblemSpec(name="bnh", dim=2, n_obj=2, ref_point=[140.0, 50.0]),
     ]
 
