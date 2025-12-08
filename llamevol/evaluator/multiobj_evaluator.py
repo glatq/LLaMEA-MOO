@@ -1,101 +1,71 @@
 import time
 from dataclasses import dataclass
-from typing import Optional, Any
+from typing import Any, Optional, Sequence, List
 
 import numpy as np
-from pymoo.factory import get_problem
 from pymoo.indicators.hv import HV
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
-
-from llamevol.utils import BOOverBudgetException
 
 from .evaluator import AbstractEvaluator
 from .evaluator_result import EvaluatorResult, EvaluatorBasicResult
 from .exec_utils import default_exec
+from .PymooMOProvider import PymooMOProvider
 
 
 @dataclass
 class MOOProblemSpec:
-    """Static description of a multi-objective test problem."""
+    """Configuration for a single multi-objective benchmark problem."""
 
-    name: str = "zdt1"  # e.g. "zdt1", "dtlz2"
-    dim: int = 10  # number of decision variables
-    n_obj: int = 2  # number of objectives
-    ref_point: Optional[np.ndarray] = None  # reference point for HV (minimization)
+    name: str
+    dim: int
+    n_obj: int
+    ref_point: Optional[Sequence[float]] = None
 
 
 class MultiObjEvaluator(AbstractEvaluator):
-    """
-    Evaluator for multi-objective algorithms.
+    """Evaluate LLM-generated multi-objective optimizers on one or more problems.
 
-    Contract for LLM-generated optimizer:
+    Optimizer contract for this evaluator:
 
-        class Optimizer:
+        class Algo:
             def __init__(self, budget: int, dim: int):
                 ...
-
             def __call__(self, func):
-                # func(x) -> np.ndarray with shape (n_obj,)
+                # func(x) -> np.ndarray of shape (n_obj,)
                 ...
     """
 
     def __init__(
         self,
         budget: int,
-        problem: MOOProblemSpec,
+        problems: Optional[Sequence[MOOProblemSpec]] = None,
         repeat: int = 1,
         timeout: int = 1800,
     ):
         super().__init__()
 
         self.budget = int(budget)
-        self.problem_spec = problem
         self.repeat = int(repeat)
         self.timeout = int(timeout)
+        self.problem_specs: List[MOOProblemSpec] = list(problems)
+        self._provider = PymooMOProvider()
+        self.problem_spec: Optional[MOOProblemSpec] = None
 
-        # Build pymoo problem (minimization by default)
-        self.problem = get_problem(problem.name, n_var=problem.dim, n_obj=problem.n_obj)
+    # ---------- helpers ----------
 
-        # Reference point for HV; if none is provided, use a simple worst-case point.
-        if problem.ref_point is None:
-            self.ref_point = np.ones(problem.n_obj, dtype=float) * 1.2
-        else:
-            self.ref_point = np.asarray(problem.ref_point, dtype=float).ravel()
-            if self.ref_point.size != problem.n_obj:
-                raise ValueError(
-                    f"ref_point must have length {problem.n_obj}, "
-                    f"got {self.ref_point.size}"
-                )
-
-    def _wrap_func(self):
-        """
-        Wrap the pymoo problem with budget enforcement and logging.
-
-        Returns a tuple (func, x_hist, y_hist) where y_hist stores vector objectives.
-        """
-        x_hist: list[np.ndarray] = []
-        y_hist: list[np.ndarray] = []
+    def _wrap_func(self, wrapper, n_obj: int):
+        """Return (func, x_hist, y_hist) with budget enforcement."""
+        x_hist: List[np.ndarray] = []
+        y_hist: List[np.ndarray] = []
         remaining = {"n": self.budget}
 
-        def func(x: np.ndarray) -> np.ndarray:
+        def func(x):
             if remaining["n"] <= 0:
-                # Use the same exception type as IOHEvaluator so higher-level
-                # logic can choose to ignore over-budget errors if desired.
-                raise BOOverBudgetException("OverBudgetException", "Budget exceeded")
+                raise RuntimeError("Budget exceeded")
 
             xx = np.asarray(x, dtype=float).ravel()
-            if xx.size != self.problem_spec.dim:
-                raise ValueError(
-                    f"Expected x.size == dim == {self.problem_spec.dim}, "
-                    f"got {xx.size}"
-                )
-
-            F = self.problem.evaluate(xx[None, :])
-
-            if isinstance(F, dict):
-                F = F.get("F")
-
-            yy = np.asarray(F, dtype=float).reshape(-1, self.problem_spec.n_obj)[0]
+            F = wrapper(xx)  # wrapper(x) -> (n_obj,)
+            yy = np.asarray(F, dtype=float).reshape(-1, n_obj)[0]
 
             x_hist.append(xx)
             y_hist.append(yy)
@@ -104,84 +74,107 @@ class MultiObjEvaluator(AbstractEvaluator):
 
         return func, x_hist, y_hist
 
-    @staticmethod
-    def _nd_indices(Y: np.ndarray) -> np.ndarray:
-        if len(Y) == 0:
-            return np.empty((0,), dtype=int)
-        nd = NonDominatedSorting().do(Y, only_non_dominated_front=True)
-        return np.asarray(nd, dtype=int)
-
-    def _hypervolume(self, Y: np.ndarray) -> float:
-        if len(Y) == 0:
-            return 0.0
-        Y = np.asarray(Y, dtype=float)
-        Y_nd = Y[self._nd_indices(Y)]
-        hv = HV(ref_point=self.ref_point)
-        return float(hv.do(Y_nd))
-
-    def problem_prompt(self) -> str:
-        return (
-            f"Multi-objective problems from pymoo with name {self.problem_spec.name}, "
-            f"dimension {self.problem_spec.dim}, {self.problem_spec.n_obj} objectives "
-            f"and a budget of {self.budget} evaluations. The metric is Hypervolume."
-        )
+    # ---------- AbstractEvaluator API ----------
 
     def problem_name(self) -> str:
-        return f"MOO-{self.problem_spec.name}"
+        if len(self.problem_specs) == 1:
+            return f"MOO-{self.problem_specs[0].name}"
+        names = ",".join(spec.name for spec in self.problem_specs)
+        return f"MOO-suite({names})"
+
+    def problem_prompt(self) -> str:
+        if len(self.problem_specs) == 1:
+            s = self.problem_specs[0]
+            return (
+                f"You are evaluated on the multi-objective problem '{s.name}' "
+                f"of dimension {s.dim} with {s.n_obj} objectives. "
+                "The goal is to minimize a scalar loss defined as minus the hypervolume "
+                "of the non-dominated front obtained within a fixed evaluation budget."
+            )
+        else:
+            names = ", ".join(sorted({spec.name for spec in self.problem_specs}))
+            return (
+                "You are evaluated on a suite of multi-objective benchmark problems: "
+                f"{names}. Each problem has a limited evaluation budget; for each run "
+                "we compute the hypervolume (HV) of your non-dominated front with "
+                "respect to a fixed reference point. Your scalar fitness is the "
+                "negative mean HV over all problems and repeats (lower is better)."
+            )
 
     def evaluate(
         self,
-        code: str,
-        cls_name: str,
+        code,
+        cls_name,
         cls: Any = None,
         cls_init_kwargs: Optional[dict[str, Any]] = None,
         cls_call_kwargs: Optional[dict[str, Any]] = None,
-        injector: Any = None,
+        injector=None,
     ) -> EvaluatorResult:
-        """
-        Evaluate a candidate multi-objective algorithm.
+        """Evaluate an individual on all configured MOO problems."""
+        eval_res = EvaluatorResult()
+        eval_res.name = cls_name
+        eval_res.error = None
+        eval_res.error_type = None
+        if eval_res.result is None:
+            eval_res.result = []
 
-        The algorithm is instantiated as Algo(budget=self.budget, dim=self.problem_spec.dim)
-        and called with Algo(func) where func(x) returns an n_obj-dimensional vector.
-        """
-        if cls_init_kwargs is None:
-            cls_init_kwargs = {}
-        if cls_call_kwargs is None:
-            cls_call_kwargs = {}
+        if code is None and cls is None:
+            eval_res.error = "No code generated"
+            eval_res.error_type = "NoCodeGenerated"
+            return eval_res
 
+        hv_losses: List[float] = []
         t0 = time.time()
 
-        ev_res = EvaluatorResult()
-        ev_res.name = self.problem_name()
-        ev_res.error = None
-        ev_res.error_type = None
-        ev_res.total_execution_time = 0.0
-        if ev_res.result is None:
-            ev_res.result = []
+        for spec in self.problem_specs:
+            # Build problem via provider
+            wrapper = self._provider.get(
+                problem_id=spec.name,
+                dim=spec.dim,
+                ref_point=spec.ref_point,
+                n_obj=spec.n_obj,
+            )
+            self.problem_spec = spec
+            n_obj = wrapper.n_obj
 
-        hv_runs: list[float] = []
+            # Retrieve bounds from the wrapper (provided by PymooMOProvider)
+            # Shape is (2, dim) -> [[lb...], [ub...]]
+            bounds = wrapper.bounds
 
-        for _ in range(self.repeat):
-            run_t0 = time.time()
-            basic = EvaluatorBasicResult()
-            basic.name = ev_res.name
-            basic.error = None
-            basic.error_type = None
-            basic.execution_time = 0.0
-            basic.x_hist = None
-            basic.y_hist = None  # keep None to avoid SO-specific downstream logic
-            basic.best_y = None  # we will store HV here once computed
+            # Reference point for HV
+            if getattr(wrapper, "ref_point", None) is not None:
+                ref_point = np.asarray(wrapper.ref_point, float).ravel()
+            else:
+                ref_point = np.ones(n_obj, dtype=float) * 1.2
+                # ref_point = np.asarray([140.0,50.0]) #nice ref_point for BNH
 
-            func, x_hist, y_hist = self._wrap_func()
+            hv_indicator = HV(ref_point=ref_point)
 
-            init_kwargs = {"budget": self.budget, "dim": self.problem_spec.dim}
-            init_kwargs.update(cls_init_kwargs)
+            for rep in range(self.repeat):
+                run_t0 = time.time()
 
-            call_kwargs = {"func": func}
-            call_kwargs.update(cls_call_kwargs)
+                basic = EvaluatorBasicResult()
+                basic.name = f"{spec.name}-rep{rep + 1}"
+                basic.bounds = bounds
+                basic.error = None
+                basic.error_type = None
+                basic.execution_time = 0.0
+                basic.x_hist = None
+                basic.y_hist = None
+                basic.best_y = None
+                basic.y_raw = None
 
-            try:
-                res, captured_output, err, _ = default_exec(
+                func, x_hist, y_hist = self._wrap_func(wrapper, n_obj=n_obj)
+
+                init_kwargs = {"budget": self.budget, "dim": spec.dim, "bounds": bounds}
+                if cls_init_kwargs:
+                    init_kwargs.update(cls_init_kwargs)
+
+                call_kwargs = {"func": func}
+                if cls_call_kwargs:
+                    call_kwargs.update(cls_call_kwargs)
+
+                res, captured_output, err, injector = default_exec(
                     code=code,
                     cls_name=cls_name,
                     cls=cls,
@@ -189,49 +182,66 @@ class MultiObjEvaluator(AbstractEvaluator):
                     call_kwargs=call_kwargs,
                     injector=injector,
                 )
-            except BOOverBudgetException:
-                # In case the exception bubbles up instead of being handled
-                # inside default_exec, treat it as a normal termination.
-                res = None
-                captured_output = ""
-                err = None
 
-            basic.execution_time = time.time() - run_t0
+                basic.execution_time = time.time() - run_t0
 
-            if err is not None:
-                basic.error = str(err)
-                basic.error_type = getattr(err, "error_type", "ExecError")
-                basic.x_hist = None
-                basic.y_hist = None
-                basic.best_y = np.nan
-            else:
-                X = (
-                    np.asarray(x_hist, dtype=float)
-                    if x_hist
-                    else np.empty((0, self.problem_spec.dim), dtype=float)
-                )
-                Y = (
-                    np.asarray(y_hist, dtype=float)
-                    if y_hist
-                    else np.empty((0, self.problem_spec.n_obj), dtype=float)
-                )
+                if err is not None:
+                    basic.error = str(err)
+                    basic.error_type = "ExecError"
+                    basic.x_hist = None
+                    basic.y_hist = None
+                    basic.best_y = float("nan")
+                else:
+                    # Convert histories to arrays
+                    X = (
+                        np.asarray(x_hist, dtype=float)
+                        if x_hist
+                        else np.empty((0, spec.dim), dtype=float)
+                    )
+                    Y = (
+                        np.asarray(y_hist, dtype=float)
+                        if y_hist
+                        else np.empty((0, n_obj), dtype=float)
+                    )
 
-                hv = self._hypervolume(Y)
-                hv_runs.append(hv)
+                    # Compute HV trace and scalar loss
+                    if Y.size == 0:
+                        hv_hist = []
+                        hv_raw = 0.0
+                    else:
+                        nds = NonDominatedSorting()
+                        hv_hist: List[float] = []
 
-                basic.x_hist = X
-                basic.y_hist = None  # keep multi-objective trace internal for now
-                basic.best_y = hv  # store HV as the run's scalar quality
+                        # HV after each evaluation (prefix of Y)
+                        for i in range(1, Y.shape[0] + 1):
+                            # Note: This loop can be slow for large budgets
+                            front_idx = nds.do(Y[:i], only_non_dominated_front=True)
+                            Y_nd = Y[:i][front_idx]
+                            hv_hist.append(float(hv_indicator(Y_nd)))
 
-            ev_res.result.append(basic)
+                        hv_raw = hv_hist[-1]
 
-        # Aggregate scalar fitness used by selection.
-        # We convert HV (larger is better) into a minimization score
-        # for compatibility with the single-objective AOC pipeline.
-        if hv_runs:
-            ev_res.score = float(-np.mean(hv_runs))  # minimize -HV
-        else:
-            ev_res.score = float(np.inf)
+                    hv_loss = -hv_raw  # scalar we MINIMIZE
+                    hv_losses.append(hv_loss)
 
-        ev_res.total_execution_time = time.time() - t0
-        return ev_res
+                    # best_x = x at maximum HV
+                    if hv_hist:
+                        best_idx = int(np.argmax(hv_hist))
+                        best_x = X[best_idx]
+                        best_hv = hv_hist[best_idx]
+                    else:
+                        best_x = None
+                        best_hv = 0.0
+
+                    basic.x_hist = X
+                    basic.raw_y_hist = Y
+                    basic.y_hist = np.asarray(hv_hist, dtype=float)
+                    basic.best_y = hv_loss
+                    basic.best_x = best_x
+                    basic.optimal_value = best_hv
+
+            eval_res.result.append(basic)
+
+        eval_res.score = float(np.mean(hv_losses)) if hv_losses else float("nan")
+        eval_res.total_execution_time = time.time() - t0
+        return eval_res

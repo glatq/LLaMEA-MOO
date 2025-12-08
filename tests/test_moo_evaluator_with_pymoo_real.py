@@ -26,10 +26,10 @@ DUMMY_CODE = """
 import numpy as np
 
 class DummyRandomSearchMO:
-    def __init__(self, budget: int, dim: int):
+    def __init__(self, budget: int, dim: int, bounds: np.ndarray | None = None):
         self.budget = int(budget)
         self.dim = int(dim)
-        self.bounds = np.array([[-5.0] * dim, [5.0] * dim], dtype=float)
+        self.bounds = np.array([[0.0] * dim, [1.0] * dim], dtype=float)
 
     def __call__(self, func):
         rng = np.random.default_rng(0)
@@ -42,8 +42,8 @@ class DummyRandomSearchMO:
 
 
 def test_multiobj_evaluator_with_real_pymoo():
-    problem = MOOProblemSpec(name="dtlz2", dim=5, n_obj=2)
-    evaluator = MultiObjEvaluator(budget=20, problem=problem, repeat=1)
+    problem = [MOOProblemSpec(name="dtlz2", dim=5, n_obj=2, ref_point=[1.2, 12.0])]
+    evaluator = MultiObjEvaluator(budget=20, problems=problem, repeat=1)
 
     res = evaluator.evaluate(
         code=DUMMY_CODE,
@@ -70,4 +70,4 @@ def test_multiobj_evaluator_with_real_pymoo():
 
     # Because repeat == 1 and score is defined as -mean(HV), we expect:
     # res.score == -basic.best_y
-    assert pytest.approx(res.score, rel=1e-8) == -basic.best_y
+    assert pytest.approx(res.score, rel=1e-8) == basic.best_y

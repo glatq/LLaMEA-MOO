@@ -55,7 +55,9 @@ def get_es_population(es_options):
         use_elitism=_is_elitist,
     )
 
-    population.preorder_aware_init = True  # pass the code of all solutions in the first generation to the LLM
+    population.preorder_aware_init = (
+        True  # pass the code of all solutions in the first generation to the LLM
+    )
     population.save_per_generation = 1  # save population every generation
     population.debug_save_on_the_fly = True  # save every individual in the population
     population.save_dir = es_options["log_dir"]
