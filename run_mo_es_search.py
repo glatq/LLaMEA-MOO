@@ -1,7 +1,8 @@
 import logging
 import getopt
 import sys
-
+from omegaconf import DictConfig, OmegaConf
+import hydra
 from llamevol.evaluator.multiobj_evaluator import MultiObjEvaluator, MOOProblemSpec
 from llamevol.prompt_generators import MultiObjectivePromptGenerator
 from llamevol.population import ESPopulation
@@ -9,6 +10,7 @@ from llamevol.llm import LLMmanager
 from llamevol import LLaMEvol
 from llamevol.utils import setup_logger
 from Experiments.plot_search_res import plot_search_result
+
 
 
 def get_MOOEvaluator():
@@ -72,23 +74,24 @@ def get_es_population(es_options):
 
     return population
 
-
-def run_exp(n_parent, n_offspring, is_elitist, api_key, n_population=4):
+@hydra.main(config_path="conf", config_name="config", version_base=None)
+def run_exp(cfg: DictConfig):
     evaluator = get_MOOEvaluator()
     evaluator.timeout = (
-        30 * 60
-    )  # set the timeout(seconds) for each evaluation(all tasks)
+        cfg.mo_search.evaluator_timeout
+    )
 
     # create a prompt generator
     prompt_generator = get_mo_prompt_generator()
 
     # create a LLM Manager
-    model_name = "gemini-2.5-flash"
-    base_url = None  # use default
+    model_name = cfg.mo_search.llm.model_name
+    base_url = cfg.mo_search.llm.base_url
 
     # choose the llm client, e.g. openai, google.
     # openai: OpenaiClient; google: google genai client; others: AISuiteClient
-    client = "vertex"
+    client = cfg.mo_search.llm.client
+    api_key = cfg.mo_search.llm.api_key
 
     llm = LLMmanager(
         model_name=model_name,
@@ -98,13 +101,17 @@ def run_exp(n_parent, n_offspring, is_elitist, api_key, n_population=4):
     )
 
     # define ES parameters
-    log_dir = "exp_mo_es_search"
     es_options = {
-        "n_parent": n_parent,  # number of parents
-        "n_offspring": n_offspring,  # number of offspring
-        "is_elitist": is_elitist,  # whether to use elitist selection
-        "log_dir": log_dir,  # directory to save logs
+        "n_parent": cfg.mo_search.n_parent,  # number of parents
+        "n_offspring": cfg.mo_search.n_offspring,  # number of offspring
+        "is_elitist": cfg.mo_search.is_elitist,  # whether to use elitist selection
+        "log_dir": cfg.mo_search.log_dir,  # directory to save logs
     }
+
+    print(
+        f"n_parents: {cfg.mo_search.n_parent}, n_offspring: {cfg.mo_search.n_offspring}, "
+        f"elitist: {cfg.mo_search.is_elitist}, n_population: {cfg.mo_search.n_population}, api_key: {cfg.mo_search.llm.api_key}"
+    )
 
     # create an ES Population
     population = get_es_population(es_options)
@@ -112,8 +119,8 @@ def run_exp(n_parent, n_offspring, is_elitist, api_key, n_population=4):
     # run the evolution
     llamevol = LLaMEvol()
     llm_params = {
-        "temperature": 0.5,
-        "top_k": 60,  # top_k sampling, which might not be supported by all LLMs
+        "temperature": cfg.mo_search.llm.temperature,
+        "top_k": cfg.mo_search.llm.top_k,  # top_k sampling, which might not be supported by all LLMs
         # you can add other LLM parameters here if needed
     }
 
@@ -122,7 +129,7 @@ def run_exp(n_parent, n_offspring, is_elitist, api_key, n_population=4):
         evaluator,
         prompt_generator,
         population,
-        n_population=n_population,
+        n_population=cfg.mo_search.n_population,
         options={"llm_params": llm_params},
     )
 
@@ -132,12 +139,7 @@ def run_exp(n_parent, n_offspring, is_elitist, api_key, n_population=4):
 if __name__ == "__main__":
     setup_logger(level=logging.INFO)
 
-    n_parents = 1
-    n_offspring = 1
-    is_elitist = False
-    n_population = 4
-    api_key = ""
-    is_ploting = False
+    is_plotting = False
 
     opts, args = getopt.getopt(sys.argv[1:], "p:o:k:en:f")
     for opt, arg in opts:
@@ -154,20 +156,11 @@ if __name__ == "__main__":
         elif opt == "-f":
             is_ploting = True
 
-    if is_ploting:
+    if is_plotting:
         # plot the search results: combine all the log files with 'final' suffix
         print("Plotting the MO search results...")
         log_dir = "exp_mo_es_search"
         plot_search_result(log_dir, fig_dir=log_dir)
         sys.exit(0)
 
-    print(
-        f"n_parents: {n_parents}, n_offspring: {n_offspring}, "
-        f"elitist: {is_elitist}, n_population: {n_population}, api_key: {api_key}"
-    )
-
-    if api_key == "":
-        print("Please provide the API key with -k option.")
-        sys.exit(1)
-
-    run_exp(n_parents, n_offspring, is_elitist, api_key, n_population=n_population)
+    run_exp()
