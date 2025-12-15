@@ -393,7 +393,7 @@ class <AlgorithmName>:
         for res in eval_res.result:
             # We stored negative HV as log_y_aoc in the evaluator.
             # Convert back to positive HV for human-readable feedback.
-            hv = -res.log_y_aoc
+            hv = res.best_y
             hvs.append(hv)
 
             # Original ID format in the SO/IOH case was "<int>-<int>-<int>".
@@ -536,7 +536,9 @@ A code structure guide is as follows and keep the comments from the guide when g
             if len(candidates) > 1:
                 crossover_operator = "Combine the selected solutions to create a new solution. Then refine the strategy of the new solution to improve it. If the errors from the previous algorithms are provided, analyze them. The new algorithm should be designed to avoid these errors.\n"
 
-                selected_prompt = "The selected solutions to update are:\n"
+                selected_prompt = (
+                    "The selected solutions to update are the evaluated algorithms:\n"
+                )
 
                 for candidate in candidates:
                     candidate_prompt = self.__get_candidate_prompt(candidate)
@@ -550,12 +552,12 @@ A code structure guide is as follows and keep the comments from the guide when g
                     "Refine the strategy of the selected solution to improve it."
                 )
 
-                selected_prompt = f"""The selected solution to update is:\n{candidate_prompt}\n{mutation_operator}\n"""
+                selected_prompt = f"""The selected solution to update is the evaluated algorithm:\n{candidate_prompt}\n{mutation_operator}\n"""
 
             population_summary = ""
             if population is not None and population.get_population_size() > 0:
                 current_population = population.get_individuals()
-                population_summary = "The current population of algorithms already evaluated(name, score, runtime and description):\n"
+                population_summary = "The current population of algorithms already evaluated(name, score and runtime):\n"
                 for ind in current_population:
                     handler = Population.get_handler_from_individual(ind)
                     if handler.eval_result is None:
@@ -565,7 +567,7 @@ A code structure guide is as follows and keep the comments from the guide when g
                     runtime = handler.eval_result.total_execution_time
                     desc = handler.desc
                     population_summary += (
-                        f"- {name}: {score:.4f}, {runtime:.2f} seconds, {desc}\n"
+                        f"- {name}: {score:.4f}, {runtime:.2f} seconds\n"
                     )
 
             final_prompt = f"""{task_prompt}
