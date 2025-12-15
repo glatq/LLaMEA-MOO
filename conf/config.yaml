@@ -17,3 +17,19 @@ mo_search:
     top_k: 60
   log_dir: "exp_mo_es_search"
   is_ploting: False
+
+so_search:
+  n_parent: 1
+  n_offspring: 1
+  is_elitist: True
+  n_population: 40
+  evaluator_timeout: 1800 # 30 * 60
+  llm:
+    model_name: "gemini-2.5-flash"
+    base_url: null
+    client: "vertex"
+    api_key: null
+    temperature: 0.5
+    top_k: 60
+  log_dir: "exp_es_search"
+  is_plotting: False

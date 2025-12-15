@@ -1,6 +1,8 @@
 import logging
 import getopt
 import sys
+import hydra
+from omegaconf import DictConfig, OmegaConf
 from llamevol.evaluator.ioh_evaluator import IOHEvaluator
 from llamevol.prompt_generators import BaselinePromptGenerator, BoZeroPromptGenerator
 from llamevol.population import ESPopulation
@@ -71,46 +73,50 @@ def get_es_population(es_options):
     return population
 
 
-def run_exp(
-    cfg: DictConfig, n_parent, n_offspring, is_elitist, api_key, n_population=4
-):
+@hydra.main(config_path="conf", config_name="config", version_base=None)
+def run_exp(cfg: DictConfig):
     # create an IOHEvaluator
     evaluator = get_IOHEvaluator()
     evaluator.timeout = (
-        30 * 60
+        cfg.so_search.evaluator_timeout
     )  # set the timeout(seconds) for each evaluation(all tasks)
 
     # create a prompt generator
     prompt_generator = get_bo_prompt_generator(cfg.prompts)
 
     # create a LLM Manager
-    model_name = "gemini-2.5-flash"
-    base_url = None  # use default
+    model_name = cfg.so_search.llm.model_name
+    base_url = cfg.so_search.llm.base_url  # use default
 
     # choose the llm client, e.g. openai, google.
     # openai: OpenaiClient; google: google genai client; others: AISuiteClient
-    client = "vertex"
+    client = cfg.so_search.llm.client
+    api_key = cfg.so_search.llm.api_key
 
     llm = LLMmanager(
         model_name=model_name, api_key=api_key, base_url=base_url, client_str=client
     )
 
     # define ES parameters
-    log_dir = "exp_es_search"
     es_options = {
-        "n_parent": n_parent,  # number of parents
-        "n_offspring": n_offspring,  # number of offspring
-        "is_elitist": is_elitist,  # whether to use elitist selection
-        "log_dir": log_dir,  # directory to save logs
+        "n_parent": cfg.so_search.n_parent,  # number of parents
+        "n_offspring": cfg.so_search.n_offspring,  # number of offspring
+        "is_elitist": cfg.so_search.is_elitist,  # whether to use elitist selection
+        "log_dir": cfg.so_search.log_dir,  # directory to save logs
     }
+
+    print(
+        f"n_parents: {cfg.so_search.n_parent}, n_offspring: {cfg.so_search.n_offspring}, is_elitist: {cfg.so_search.is_elitist}, n_population: {cfg.so_search.n_population}, api_key: {cfg.so_search.llm.api_key}"
+    )
+
     # create a ES Population
     population = get_es_population(es_options)
 
     # run the evolution
     llamevol = LLaMEvol()
     llm_params = {
-        "temperature": 0.5,
-        "top_k": 60,  #!!!! top_k sampling, which might not be supported by all LLMs
+        "temperature": cfg.so_search.llm.temperature,
+        "top_k": cfg.so_search.llm.top_k,  #!!!! top_k sampling, which might not be supported by all LLMs
     }
 
     llamevol.run_evolutions(
@@ -118,7 +124,7 @@ def run_exp(
         evaluator,
         prompt_generator,
         population,
-        n_population=n_population,
+        n_population=cfg.so_search.n_population,
         options={"llm_params": llm_params},
     )
 
@@ -128,11 +134,6 @@ def run_exp(
 if __name__ == "__main__":
     setup_logger(level=logging.INFO)
 
-    n_parents = 1
-    n_offspring = 1
-    is_elitist = False
-    n_population = 4
-    api_key = ""
     is_ploting = False
 
     opts, args = getopt.getopt(
@@ -160,12 +161,4 @@ if __name__ == "__main__":
         plot_search_result(log_dir, fig_dir=log_dir)
         sys.exit(0)
 
-    print(
-        f"n_parents: {n_parents}, n_offspring: {n_offspring}, is_elitist: {is_elitist}, n_population: {n_population}, api_key: {api_key}"
-    )
-
-    if api_key == "":
-        print("Please provide the API key with -k option.")
-        sys.exit(1)
-
-    run_exp(n_parents, n_offspring, is_elitist, api_key, n_population=n_population)
+    run_exp()
