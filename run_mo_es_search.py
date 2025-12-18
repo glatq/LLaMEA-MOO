@@ -12,7 +12,6 @@ from llamevol.utils import setup_logger
 from Experiments.plot_search_res import plot_search_result
 
 
-
 def get_MOOEvaluator():
     # Default budget and dimension for MO experiments
     budget = 100
@@ -74,12 +73,11 @@ def get_es_population(es_options):
 
     return population
 
+
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def run_exp(cfg: DictConfig):
     evaluator = get_MOOEvaluator()
-    evaluator.timeout = (
-        cfg.mo_search.evaluator_timeout
-    )
+    evaluator.timeout = cfg.mo_search.evaluator_timeout
 
     # create a prompt generator
     prompt_generator = get_mo_prompt_generator()
