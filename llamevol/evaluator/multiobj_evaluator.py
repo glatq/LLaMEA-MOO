@@ -1,3 +1,4 @@
+import os
 import time
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence, List
@@ -24,67 +25,39 @@ class MOOProblemSpec:
 
 
 def _run_single_moo_rep(
-    spec,
-    rep,
-    budget,
-    code,
-    cls_name,
-    cls,
-    cls_init_kwargs,
-    cls_call_kwargs,
-    injector,
-    provider_config,
+    spec, rep, budget, code, cls_name, cls, cls_init_kwargs, cls_call_kwargs, injector
 ):
-    """Worker function to run a single repetition of a MOO problem in a separate process."""
-
-    # Re-initialize provider in the child process
     provider = PymooMOProvider()
     wrapper = provider.get(
-        problem_id=spec.name,
-        dim=spec.dim,
-        ref_point=spec.ref_point,
-        n_obj=spec.n_obj,
+        problem_id=spec.name, dim=spec.dim, ref_point=spec.ref_point, n_obj=spec.n_obj
     )
-    n_obj = wrapper.n_obj
-    bounds = wrapper.bounds
-    ref_point = (
-        np.asarray(wrapper.ref_point, float).ravel()
-        if getattr(wrapper, "ref_point", None) is not None
-        else np.ones(n_obj) * 1.2
-    )
-    hv_indicator = HV(ref_point=ref_point)
 
     run_t0 = time.time()
     basic = EvaluatorBasicResult()
     basic.name = f"{spec.name}-rep{rep + 1}"
-    basic.bounds = bounds
 
-    # Budget-enforcement wrapper logic (re-implemented here for the child process)
     x_hist, y_hist = [], []
 
     def func(x):
         if len(x_hist) >= budget:
-            raise RuntimeError("Budget exceeded")
+            return np.zeros(wrapper.n_obj)  # Safety
         yy = np.asarray(
             wrapper(np.asarray(x, dtype=float).ravel()), dtype=float
-        ).reshape(-1, n_obj)[0]
+        ).reshape(-1, wrapper.n_obj)[0]
         x_hist.append(np.asarray(x).ravel())
         y_hist.append(yy)
         return yy
 
-    init_kwargs = {"budget": budget, "dim": spec.dim, "bounds": bounds}
+    init_kwargs = {"budget": budget, "dim": spec.dim, "bounds": wrapper.bounds}
     if cls_init_kwargs:
         init_kwargs.update(cls_init_kwargs)
-    call_kwargs = {"func": func}
-    if cls_call_kwargs:
-        call_kwargs.update(cls_call_kwargs)
 
     res, _, err, _ = default_exec(
         code=code,
         cls_name=cls_name,
         cls=cls,
         init_kwargs=init_kwargs,
-        call_kwargs=call_kwargs,
+        call_kwargs={"func": func},
         injector=injector,
     )
 
@@ -93,9 +66,20 @@ def _run_single_moo_rep(
         basic.error, basic.error_type = str(err), "ExecError"
     else:
         Y = np.asarray(y_hist)
-        # ... (Insert your existing Hypervolume calculation logic from the original file here) ...
-        basic.x_hist, basic.raw_y_hist = np.asarray(x_hist), Y
-        basic.best_y = -float(hv_indicator(Y))  # Example simplified HV loss
+        X = np.asarray(x_hist)
+        if Y.size > 0:
+            ref_point = (
+                np.asarray(wrapper.ref_point)
+                if getattr(wrapper, "ref_point", None) is not None
+                else np.ones(wrapper.n_obj) * 1.2
+            )
+            hv_indicator = HV(ref_point=ref_point)
+            nds = NonDominatedSorting()
+            # Get final HV
+            front_idx = nds.do(Y, only_non_dominated_front=True)
+            hv_raw = float(hv_indicator(Y[front_idx]))
+            basic.best_y = -hv_raw
+            basic.x_hist, basic.raw_y_hist = X, Y
     return basic
 
 
@@ -182,35 +166,26 @@ class MultiObjEvaluator(AbstractEvaluator):
         self,
         code,
         cls_name,
-        cls: Any = None,
-        cls_init_kwargs: Optional[dict[str, Any]] = None,
-        cls_call_kwargs: Optional[dict[str, Any]] = None,
+        cls=None,
+        cls_init_kwargs=None,
+        cls_call_kwargs=None,
         injector=None,
     ) -> EvaluatorResult:
         eval_res = EvaluatorResult()
         eval_res.name = cls_name
-        eval_res.error = None
-        eval_res.error_type = None
         eval_res.result = []
 
-        if code is None and cls is None:
-            eval_res.error, eval_res.error_type = "No code generated", "NoCodeGenerated"
-            return eval_res
-
-        hv_losses = []
         t0 = time.time()
-
-        # Prepare tasks for all problems and repeats
         tasks = []
         for spec in self.problem_specs:
             for rep in range(self.repeat):
                 tasks.append((spec, rep))
 
-        # Run evaluations in a process pool to enforce timeout
-        # Using max_workers=1 if you want them sequential but interruptible
-        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-            for spec, rep in tasks:
-                future = executor.submit(
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=os.cpu_count()
+        ) as executor:
+            future_to_task = {
+                executor.submit(
                     _run_single_moo_rep,
                     spec,
                     rep,
@@ -221,23 +196,32 @@ class MultiObjEvaluator(AbstractEvaluator):
                     cls_init_kwargs,
                     cls_call_kwargs,
                     injector,
-                    None,
-                )
-                try:
-                    # Enforce the timeout for this specific repetition
-                    basic = future.result(timeout=self.timeout)
-                    eval_res.result.append(basic)
-                    if basic.best_y is not None:
-                        hv_losses.append(basic.best_y)
-                except concurrent.futures.TimeoutError:
-                    eval_res.error = f"Timeout after {self.timeout}s"
-                    eval_res.error_type = "TimeoutError"
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    break
-                except Exception as e:
-                    eval_res.error, eval_res.error_type = str(e), "ExecError"
-                    break
+                ): (spec, rep)
+                for spec, rep in tasks
+            }
 
-        eval_res.score = float(np.mean(hv_losses)) if hv_losses else float("nan")
+            try:
+                for future in concurrent.futures.as_completed(
+                    future_to_task, timeout=self.timeout
+                ):
+                    eval_res.result.append(future.result())
+            except concurrent.futures.TimeoutError:
+                eval_res.error, eval_res.error_type = (
+                    f"Global Timeout ({self.timeout}s)",
+                    "TimeoutError",
+                )
+                executor.shutdown(wait=False, cancel_futures=True)
+            except Exception as e:
+                eval_res.error, eval_res.error_type = str(e), "ExecError"
+                executor.shutdown(wait=False, cancel_futures=True)
+
+        # Final Score: Only calculate if we got all results (Batch Success)
+        valid_scores = [r.best_y for r in eval_res.result if r.best_y is not None]
+
+        if not eval_res.error and len(valid_scores) == len(tasks):
+            eval_res.score = float(np.mean(valid_scores))
+        else:
+            eval_res.score = float("nan")
+
         eval_res.total_execution_time = time.time() - t0
         return eval_res

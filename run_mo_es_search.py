@@ -12,10 +12,13 @@ from llamevol.utils import setup_logger
 from Experiments.plot_search_res import plot_search_result
 
 
-def get_MOOEvaluator():
+@hydra.main(config_path="conf", config_name="config", version_base=None)
+def get_MOOEvaluator(cfg: DictConfig):
     # Default budget and dimension for MO experiments
-    budget = 100
-    dim = 5
+    budget = cfg.mo_search.budget
+    dim = cfg.mo_search.dtlz_dimension
+    repeat = cfg.mo_search.repeat
+    timeout = cfg.mo_search.evaluator_timeout
 
     # Define the suite of 10 multi-objective benchmarks
     problems = [
@@ -31,9 +34,9 @@ def get_MOOEvaluator():
         MOOProblemSpec(name="bnh", dim=2, n_obj=2, ref_point=[140.0, 50.0]),
     ]
 
-    repeat = 3  # number of independent runs per problem
-
-    evaluator = MultiObjEvaluator(budget=budget, problems=problems, repeat=repeat)
+    evaluator = MultiObjEvaluator(
+        budget=budget, problems=problems, repeat=repeat, timeout=timeout
+    )
     return evaluator
 
 
