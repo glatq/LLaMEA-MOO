@@ -222,6 +222,5 @@ class MultiObjEvaluator(AbstractEvaluator):
             eval_res.score = float(np.mean(valid_scores))
         else:
             eval_res.score = float("nan")
-
         eval_res.total_execution_time = time.time() - t0
         return eval_res
