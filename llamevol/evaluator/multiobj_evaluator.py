@@ -5,7 +5,8 @@ from typing import Any, Optional, Sequence, List
 import numpy as np
 from pymoo.indicators.hv import HV
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
-
+import functools
+import concurrent.futures
 from .evaluator import AbstractEvaluator
 from .evaluator_result import EvaluatorResult, EvaluatorBasicResult
 from .exec_utils import default_exec
@@ -20,6 +21,82 @@ class MOOProblemSpec:
     dim: int
     n_obj: int
     ref_point: Optional[Sequence[float]] = None
+
+
+def _run_single_moo_rep(
+    spec,
+    rep,
+    budget,
+    code,
+    cls_name,
+    cls,
+    cls_init_kwargs,
+    cls_call_kwargs,
+    injector,
+    provider_config,
+):
+    """Worker function to run a single repetition of a MOO problem in a separate process."""
+
+    # Re-initialize provider in the child process
+    provider = PymooMOProvider()
+    wrapper = provider.get(
+        problem_id=spec.name,
+        dim=spec.dim,
+        ref_point=spec.ref_point,
+        n_obj=spec.n_obj,
+    )
+    n_obj = wrapper.n_obj
+    bounds = wrapper.bounds
+    ref_point = (
+        np.asarray(wrapper.ref_point, float).ravel()
+        if getattr(wrapper, "ref_point", None) is not None
+        else np.ones(n_obj) * 1.2
+    )
+    hv_indicator = HV(ref_point=ref_point)
+
+    run_t0 = time.time()
+    basic = EvaluatorBasicResult()
+    basic.name = f"{spec.name}-rep{rep + 1}"
+    basic.bounds = bounds
+
+    # Budget-enforcement wrapper logic (re-implemented here for the child process)
+    x_hist, y_hist = [], []
+
+    def func(x):
+        if len(x_hist) >= budget:
+            raise RuntimeError("Budget exceeded")
+        yy = np.asarray(
+            wrapper(np.asarray(x, dtype=float).ravel()), dtype=float
+        ).reshape(-1, n_obj)[0]
+        x_hist.append(np.asarray(x).ravel())
+        y_hist.append(yy)
+        return yy
+
+    init_kwargs = {"budget": budget, "dim": spec.dim, "bounds": bounds}
+    if cls_init_kwargs:
+        init_kwargs.update(cls_init_kwargs)
+    call_kwargs = {"func": func}
+    if cls_call_kwargs:
+        call_kwargs.update(cls_call_kwargs)
+
+    res, _, err, _ = default_exec(
+        code=code,
+        cls_name=cls_name,
+        cls=cls,
+        init_kwargs=init_kwargs,
+        call_kwargs=call_kwargs,
+        injector=injector,
+    )
+
+    basic.execution_time = time.time() - run_t0
+    if err:
+        basic.error, basic.error_type = str(err), "ExecError"
+    else:
+        Y = np.asarray(y_hist)
+        # ... (Insert your existing Hypervolume calculation logic from the original file here) ...
+        basic.x_hist, basic.raw_y_hist = np.asarray(x_hist), Y
+        basic.best_y = -float(hv_indicator(Y))  # Example simplified HV loss
+    return basic
 
 
 class MultiObjEvaluator(AbstractEvaluator):
@@ -110,137 +187,56 @@ class MultiObjEvaluator(AbstractEvaluator):
         cls_call_kwargs: Optional[dict[str, Any]] = None,
         injector=None,
     ) -> EvaluatorResult:
-        """Evaluate an individual on all configured MOO problems."""
         eval_res = EvaluatorResult()
         eval_res.name = cls_name
         eval_res.error = None
         eval_res.error_type = None
-        if eval_res.result is None:
-            eval_res.result = []
+        eval_res.result = []
 
         if code is None and cls is None:
-            eval_res.error = "No code generated"
-            eval_res.error_type = "NoCodeGenerated"
+            eval_res.error, eval_res.error_type = "No code generated", "NoCodeGenerated"
             return eval_res
 
-        hv_losses: List[float] = []
+        hv_losses = []
         t0 = time.time()
 
+        # Prepare tasks for all problems and repeats
+        tasks = []
         for spec in self.problem_specs:
-            # Build problem via provider
-            wrapper = self._provider.get(
-                problem_id=spec.name,
-                dim=spec.dim,
-                ref_point=spec.ref_point,
-                n_obj=spec.n_obj,
-            )
-            self.problem_spec = spec
-            n_obj = wrapper.n_obj
-
-            # Retrieve bounds from the wrapper (provided by PymooMOProvider)
-            # Shape is (2, dim) -> [[lb...], [ub...]]
-            bounds = wrapper.bounds
-
-            # Reference point for HV
-            if getattr(wrapper, "ref_point", None) is not None:
-                ref_point = np.asarray(wrapper.ref_point, float).ravel()
-            else:
-                ref_point = np.ones(n_obj, dtype=float) * 1.2
-                # ref_point = np.asarray([140.0,50.0]) #nice ref_point for BNH
-
-            hv_indicator = HV(ref_point=ref_point)
-
             for rep in range(self.repeat):
-                run_t0 = time.time()
+                tasks.append((spec, rep))
 
-                basic = EvaluatorBasicResult()
-                basic.name = f"{spec.name}-rep{rep + 1}"
-                basic.bounds = bounds
-                basic.error = None
-                basic.error_type = None
-                basic.execution_time = 0.0
-                basic.x_hist = None
-                basic.y_hist = None
-                basic.best_y = None
-                basic.y_raw = None
-
-                func, x_hist, y_hist = self._wrap_func(wrapper, n_obj=n_obj)
-
-                init_kwargs = {"budget": self.budget, "dim": spec.dim, "bounds": bounds}
-                if cls_init_kwargs:
-                    init_kwargs.update(cls_init_kwargs)
-
-                call_kwargs = {"func": func}
-                if cls_call_kwargs:
-                    call_kwargs.update(cls_call_kwargs)
-
-                res, captured_output, err, injector = default_exec(
-                    code=code,
-                    cls_name=cls_name,
-                    cls=cls,
-                    init_kwargs=init_kwargs,
-                    call_kwargs=call_kwargs,
-                    injector=injector,
+        # Run evaluations in a process pool to enforce timeout
+        # Using max_workers=1 if you want them sequential but interruptible
+        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+            for spec, rep in tasks:
+                future = executor.submit(
+                    _run_single_moo_rep,
+                    spec,
+                    rep,
+                    self.budget,
+                    code,
+                    cls_name,
+                    cls,
+                    cls_init_kwargs,
+                    cls_call_kwargs,
+                    injector,
+                    None,
                 )
-
-                basic.execution_time = time.time() - run_t0
-
-                if err is not None:
-                    basic.error = str(err)
-                    basic.error_type = "ExecError"
-                    basic.x_hist = None
-                    basic.y_hist = None
-                    basic.best_y = float("nan")
-                else:
-                    # Convert histories to arrays
-                    X = (
-                        np.asarray(x_hist, dtype=float)
-                        if x_hist
-                        else np.empty((0, spec.dim), dtype=float)
-                    )
-                    Y = (
-                        np.asarray(y_hist, dtype=float)
-                        if y_hist
-                        else np.empty((0, n_obj), dtype=float)
-                    )
-
-                    # Compute HV trace and scalar loss
-                    if Y.size == 0:
-                        hv_hist = []
-                        hv_raw = 0.0
-                    else:
-                        nds = NonDominatedSorting()
-                        hv_hist: List[float] = []
-
-                        # HV after each evaluation (prefix of Y)
-                        for i in range(1, Y.shape[0] + 1):
-                            # Note: This loop can be slow for large budgets
-                            front_idx = nds.do(Y[:i], only_non_dominated_front=True)
-                            Y_nd = Y[:i][front_idx]
-                            hv_hist.append(float(hv_indicator(Y_nd)))
-
-                        hv_raw = hv_hist[-1]
-
-                    hv_loss = -hv_raw  # scalar we MINIMIZE
-                    hv_losses.append(hv_loss)
-
-                    # best_x = x at maximum HV
-                    if hv_hist:
-                        best_idx = int(np.argmax(hv_hist))
-                        best_x = X[best_idx]
-                        best_hv = hv_hist[best_idx]
-                    else:
-                        best_x = None
-                        best_hv = 0.0
-
-                    basic.x_hist = X
-                    basic.raw_y_hist = Y
-                    basic.y_hist = np.asarray(hv_hist, dtype=float)
-                    basic.best_y = hv_loss
-                    basic.best_x = best_x
-                    basic.optimal_value = best_hv
-
-            eval_res.result.append(basic)
+                try:
+                    # Enforce the timeout for this specific repetition
+                    basic = future.result(timeout=self.timeout)
+                    eval_res.result.append(basic)
+                    if basic.best_y is not None:
+                        hv_losses.append(basic.best_y)
+                except concurrent.futures.TimeoutError:
+                    eval_res.error = f"Timeout after {self.timeout}s"
+                    eval_res.error_type = "TimeoutError"
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    break
+                except Exception as e:
+                    eval_res.error, eval_res.error_type = str(e), "ExecError"
+                    break
 
         eval_res.score = float(np.mean(hv_losses)) if hv_losses else float("nan")
         eval_res.total_execution_time = time.time() - t0

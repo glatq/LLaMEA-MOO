@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-
+import time
 from llamevol.evaluator.multiobj_evaluator import MultiObjEvaluator, MOOProblemSpec
 
 
@@ -71,3 +71,52 @@ def test_multiobj_evaluator_with_real_pymoo():
     # Because repeat == 1 and score is defined as -mean(HV), we expect:
     # res.score == -basic.best_y
     assert pytest.approx(res.score, rel=1e-8) == basic.best_y
+
+
+# 1. Define a "bad" optimizer that intentionally exceeds a short timeout
+SLEEPY_CODE = """
+import numpy as np
+import time
+
+class SleepyOptimizer:
+    def __init__(self, budget: int, dim: int, bounds: np.ndarray | None = None):
+        self.budget = budget
+
+    def __call__(self, func):
+        # Simulate a process that takes longer than the timeout
+        time.sleep(3) 
+        for _ in range(self.budget):
+            func(np.zeros(1))
+        return None
+"""
+
+
+def test_multiobj_evaluator_timeout_enforcement():
+    """Tests if the evaluator correctly stops an execution that exceeds the timeout."""
+    timeout_limit = 1
+    problem = [MOOProblemSpec(name="zdt1", dim=2, n_obj=2)]
+
+    evaluator = MultiObjEvaluator(
+        budget=5, problems=problem, repeat=1, timeout=timeout_limit
+    )
+
+    start_time = time.time()
+
+    res = evaluator.evaluate(code=SLEEPY_CODE, cls_name="SleepyOptimizer")
+
+    total_duration = time.time() - start_time
+
+    # 1. Verify the process was actually killed near the 1s mark (and didn't run for 3s)
+    assert (
+        total_duration < 2.5
+    ), f"Timeout failed! Code ran for {total_duration:.2f}s despite {timeout_limit}s limit."
+
+    # 2. Verify that the error captured is indeed a Timeout
+    assert (
+        res.error_type == "TimeoutError"
+    ), f"Expected TimeoutError, but got {res.error_type}"
+    assert "Timeout" in str(res.error)
+
+    # 3. Because it timed out, result should be empty (as confirmed by your failed test)
+    assert len(res.result) == 0
+    print(f"\nSuccess! Timeout enforced in {total_duration:.2f}s")

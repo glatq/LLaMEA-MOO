@@ -6,7 +6,7 @@ mo_search:
   n_parent: 1
   n_offspring: 1
   is_elitist: True
-  n_population: 40
+  n_population: 100
   evaluator_timeout: 1800 # 30 * 60
   llm:
     model_name: "gemini-2.5-flash"
