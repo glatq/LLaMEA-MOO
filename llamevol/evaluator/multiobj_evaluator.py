@@ -2,7 +2,8 @@ import os
 import time
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence, List
-
+from threadpoolctl import threadpool_limits
+from tqdm import tqdm
 import numpy as np
 from pymoo.indicators.hv import HV
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
@@ -27,59 +28,69 @@ class MOOProblemSpec:
 def _run_single_moo_rep(
     spec, rep, budget, code, cls_name, cls, cls_init_kwargs, cls_call_kwargs, injector
 ):
-    provider = PymooMOProvider()
-    wrapper = provider.get(
-        problem_id=spec.name, dim=spec.dim, ref_point=spec.ref_point, n_obj=spec.n_obj
-    )
+    with threadpool_limits(limits=1, user_api="blas"):
+        provider = PymooMOProvider()
+        wrapper = provider.get(
+            problem_id=spec.name,
+            dim=spec.dim,
+            ref_point=spec.ref_point,
+            n_obj=spec.n_obj,
+        )
 
-    run_t0 = time.time()
-    basic = EvaluatorBasicResult()
-    basic.name = f"{spec.name}-rep{rep + 1}"
+        run_t0 = time.time()
+        basic = EvaluatorBasicResult()
+        basic.name = f"{spec.name}-rep{rep + 1}"
 
-    x_hist, y_hist = [], []
+        x_hist, y_hist = [], []
 
-    def func(x):
-        if len(x_hist) >= budget:
-            return np.zeros(wrapper.n_obj)  # Safety
-        yy = np.asarray(
-            wrapper(np.asarray(x, dtype=float).ravel()), dtype=float
-        ).reshape(-1, wrapper.n_obj)[0]
-        x_hist.append(np.asarray(x).ravel())
-        y_hist.append(yy)
-        return yy
+        pbar = tqdm(total=budget, desc=f"Run {spec.name}", leave=False)
 
-    init_kwargs = {"budget": budget, "dim": spec.dim, "bounds": wrapper.bounds}
-    if cls_init_kwargs:
-        init_kwargs.update(cls_init_kwargs)
+        def func(x):
+            if len(x_hist) >= budget:
+                return np.zeros(wrapper.n_obj)  # Safety
+            yy = np.asarray(
+                wrapper(np.asarray(x, dtype=float).ravel()), dtype=float
+            ).reshape(-1, wrapper.n_obj)[0]
+            x_hist.append(np.asarray(x).ravel())
+            y_hist.append(yy)
 
-    res, _, err, _ = default_exec(
-        code=code,
-        cls_name=cls_name,
-        cls=cls,
-        init_kwargs=init_kwargs,
-        call_kwargs={"func": func},
-        injector=injector,
-    )
+            pbar.update(1)
+            return yy
 
-    basic.execution_time = time.time() - run_t0
-    if err:
-        basic.error, basic.error_type = str(err), "ExecError"
-    else:
-        Y = np.asarray(y_hist)
-        X = np.asarray(x_hist)
-        if Y.size > 0:
-            ref_point = (
-                np.asarray(wrapper.ref_point)
-                if getattr(wrapper, "ref_point", None) is not None
-                else np.ones(wrapper.n_obj) * 1.2
-            )
-            hv_indicator = HV(ref_point=ref_point)
-            nds = NonDominatedSorting()
-            # Get final HV
-            front_idx = nds.do(Y, only_non_dominated_front=True)
-            hv_raw = float(hv_indicator(Y[front_idx]))
-            basic.best_y = -hv_raw
-            basic.x_hist, basic.raw_y_hist = X, Y
+        init_kwargs = {"budget": budget, "dim": spec.dim, "bounds": wrapper.bounds}
+        if cls_init_kwargs:
+            init_kwargs.update(cls_init_kwargs)
+
+        res, _, err, _ = default_exec(
+            code=code,
+            cls_name=cls_name,
+            cls=cls,
+            init_kwargs=init_kwargs,
+            call_kwargs={"func": func},
+            injector=injector,
+        )
+
+        pbar.close()
+
+        basic.execution_time = time.time() - run_t0
+        if err:
+            basic.error, basic.error_type = str(err), "ExecError"
+        else:
+            Y = np.asarray(y_hist)
+            X = np.asarray(x_hist)
+            if Y.size > 0:
+                ref_point = (
+                    np.asarray(wrapper.ref_point)
+                    if getattr(wrapper, "ref_point", None) is not None
+                    else np.ones(wrapper.n_obj) * 1.2
+                )
+                hv_indicator = HV(ref_point=ref_point)
+                nds = NonDominatedSorting()
+                # Get final HV
+                front_idx = nds.do(Y, only_non_dominated_front=True)
+                hv_raw = float(hv_indicator(Y[front_idx]))
+                basic.best_y = -hv_raw
+                basic.x_hist, basic.raw_y_hist = X, Y
     return basic
 
 

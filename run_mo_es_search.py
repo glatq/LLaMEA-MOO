@@ -11,9 +11,12 @@ from llamevol import LLaMEvol
 from llamevol.utils import setup_logger
 from Experiments.plot_search_res import plot_search_result
 
+from pymoo.config import Config
 
-@hydra.main(config_path="conf", config_name="config", version_base=None)
-def get_MOOEvaluator(cfg: DictConfig):
+Config.warnings["not_compiled"] = False
+
+
+def get_MOOEvaluator(cfg):
     # Default budget and dimension for MO experiments
     budget = cfg.mo_search.budget
     dim = cfg.mo_search.dtlz_dimension
@@ -79,7 +82,7 @@ def get_es_population(es_options):
 
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def run_exp(cfg: DictConfig):
-    evaluator = get_MOOEvaluator()
+    evaluator = get_MOOEvaluator(cfg)
     evaluator.timeout = cfg.mo_search.evaluator_timeout
 
     # create a prompt generator

@@ -449,7 +449,11 @@ class <AlgorithmName>:
             }
             grouped_hvs[group_idx].append(content)
 
-        hv_mean, hv_std = np.mean(hvs), np.std(hvs)
+        valid_hvs = [hv for hv in hvs if hv is not None]
+        if not valid_hvs:
+            hv_mean, hv_std = 0.0, 0.0
+        else:
+            hv_mean, hv_std = np.mean(valid_hvs), np.std(valid_hvs)
 
         separated_hvs = [content["y_hv"] for content in grouped_hvs[0]]
         separated_mean_hvs = np.mean(separated_hvs) if len(separated_hvs) > 0 else 0
@@ -466,7 +470,12 @@ class <AlgorithmName>:
         )
 
         multi_weak_hvs = [content["y_hv"] for content in grouped_hvs[4]]
-        multi_weak_mean_hvs = np.mean(multi_weak_hvs) if len(multi_weak_hvs) > 0 else 0
+
+        valid_weak_hvs = [hv for hv in multi_weak_hvs if hv is not None]
+        if not valid_weak_hvs:
+            multi_weak_mean_hvs = 0.0
+        else:
+            multi_weak_mean_hvs = np.mean(valid_weak_hvs)
 
         execution_time = eval_res.total_execution_time
         time_prompt = f"took {execution_time:0.2f} seconds to run."
