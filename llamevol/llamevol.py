@@ -308,7 +308,7 @@ class LLaMEvol:
 
             population.select_next_generation()
 
-            best_ind = population.get_best_individual(maximize=True)
+            best_ind = population.get_best_individual(maximize=False)
             if best_ind is not None:
                 logging.info(
                     "Best of Generation %s : %s(%.4f)\n%s",
@@ -317,7 +317,7 @@ class LLaMEvol:
                     best_ind.fitness,
                     best_ind.description,
                 )
-            best_of_all = population.get_best_of_all(maximize=True)
+            best_of_all = population.get_best_of_all(maximize=False)
             if best_of_all is not None:
                 logging.info(
                     "Best of All : %s(%.4f)\n%s",

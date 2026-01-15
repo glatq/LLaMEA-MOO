@@ -7,8 +7,8 @@ from tqdm import tqdm
 import numpy as np
 from pymoo.indicators.hv import HV
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
-import functools
 import concurrent.futures
+import multiprocessing
 from .evaluator import AbstractEvaluator
 from .evaluator_result import EvaluatorResult, EvaluatorBasicResult
 from .exec_utils import default_exec
@@ -26,7 +26,16 @@ class MOOProblemSpec:
 
 
 def _run_single_moo_rep(
-    spec, rep, budget, code, cls_name, cls, cls_init_kwargs, cls_call_kwargs, injector
+    spec,
+    rep,
+    budget,
+    code,
+    cls_name,
+    cls,
+    cls_init_kwargs,
+    cls_call_kwargs,
+    injector,
+    stop_event=None,
 ):
     with threadpool_limits(limits=1, user_api="blas"):
         provider = PymooMOProvider()
@@ -46,6 +55,8 @@ def _run_single_moo_rep(
         pbar = tqdm(total=budget, desc=f"Run {spec.name}", leave=False)
 
         def func(x):
+            if stop_event and stop_event.is_set():
+                raise StopIteration("Timeout requested by parent")
             if len(x_hist) >= budget:
                 return np.zeros(wrapper.n_obj)  # Safety
             yy = np.asarray(
@@ -182,6 +193,8 @@ class MultiObjEvaluator(AbstractEvaluator):
         cls_call_kwargs=None,
         injector=None,
     ) -> EvaluatorResult:
+        manager = multiprocessing.Manager()
+        stop_event = manager.Event()
         eval_res = EvaluatorResult()
         eval_res.name = cls_name
         eval_res.result = []
@@ -207,6 +220,7 @@ class MultiObjEvaluator(AbstractEvaluator):
                     cls_init_kwargs,
                     cls_call_kwargs,
                     injector,
+                    stop_event,
                 ): (spec, rep)
                 for spec, rep in tasks
             }
@@ -221,6 +235,7 @@ class MultiObjEvaluator(AbstractEvaluator):
                     f"Global Timeout ({self.timeout}s)",
                     "TimeoutError",
                 )
+                stop_event.set()
                 executor.shutdown(wait=False, cancel_futures=True)
             except Exception as e:
                 eval_res.error, eval_res.error_type = str(e), "ExecError"

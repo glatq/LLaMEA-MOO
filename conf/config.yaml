@@ -5,8 +5,8 @@ defaults:
 mo_search:
   dtlz_dimension: 5
   budget: 100
-  n_parent: 1
-  n_offspring: 1
+  n_parent: 4
+  n_offspring: 16
   is_elitist: True
   n_population: 40
   repeat: 5
