@@ -36,6 +36,7 @@ def _run_single_moo_rep(
     cls_call_kwargs,
     injector,
     stop_event=None,
+    calculate_hv_history=False,  # New Flag
 ):
     with threadpool_limits(limits=1, user_api="blas"):
         provider = PymooMOProvider()
@@ -51,20 +52,20 @@ def _run_single_moo_rep(
         basic.name = f"{spec.name}-rep{rep + 1}"
 
         x_hist, y_hist = [], []
-
         pbar = tqdm(total=budget, desc=f"Run {spec.name}", leave=False)
 
         def func(x):
             if stop_event and stop_event.is_set():
                 raise StopIteration("Timeout requested by parent")
-            if len(x_hist) >= budget:
-                return np.zeros(wrapper.n_obj)  # Safety
+            if len(y_hist) >= budget:
+                return np.zeros(wrapper.n_obj)
+
             yy = np.asarray(
                 wrapper(np.asarray(x, dtype=float).ravel()), dtype=float
             ).reshape(-1, wrapper.n_obj)[0]
+
             x_hist.append(np.asarray(x).ravel())
             y_hist.append(yy)
-
             pbar.update(1)
             return yy
 
@@ -82,13 +83,16 @@ def _run_single_moo_rep(
         )
 
         pbar.close()
-
         basic.execution_time = time.time() - run_t0
+
         if err:
             basic.error, basic.error_type = str(err), "ExecError"
         else:
-            Y = np.asarray(y_hist)
-            X = np.asarray(x_hist)
+            # FIX: Ensure history is saved
+            basic.raw_y_hist = np.asarray(y_hist)
+            basic.x_hist = np.asarray(x_hist)
+
+            Y = basic.raw_y_hist
             if Y.size > 0:
                 ref_point = (
                     np.asarray(wrapper.ref_point)
@@ -97,67 +101,101 @@ def _run_single_moo_rep(
                 )
                 hv_indicator = HV(ref_point=ref_point)
                 nds = NonDominatedSorting()
-                # Get final HV
+
+                # Final performance metric
                 front_idx = nds.do(Y, only_non_dominated_front=True)
-                hv_raw = float(hv_indicator(Y[front_idx]))
-                basic.best_y = -hv_raw
-                basic.x_hist, basic.raw_y_hist = X, Y
+                final_hv = float(hv_indicator(Y[front_idx]))
+                basic.best_y = -final_hv
+
+                # New: Calculate HV progress curve only if requested
+                if calculate_hv_history:
+                    hv_curve = []
+                    for i in range(1, len(Y) + 1):
+                        Y_sub = Y[:i]
+                        f_idx = nds.do(Y_sub, only_non_dominated_front=True)
+                        hv_curve.append(float(hv_indicator(Y_sub[f_idx])))
+                    basic.hv_hist = np.asarray(hv_curve)
+
     return basic
 
 
 class MultiObjEvaluator(AbstractEvaluator):
-    """Evaluate LLM-generated multi-objective optimizers on one or more problems.
-
-    Optimizer contract for this evaluator:
-
-        class Algo:
-            def __init__(self, budget: int, dim: int):
-                ...
-            def __call__(self, func):
-                # func(x) -> np.ndarray of shape (n_obj,)
-                ...
-    """
-
     def __init__(
         self,
         budget: int,
         problems: Optional[Sequence[MOOProblemSpec]] = None,
         repeat: int = 1,
         timeout: int = 1800,
+        calculate_hv_history: bool = False,  # Flag added here
     ):
         super().__init__()
-
         self.budget = int(budget)
         self.repeat = int(repeat)
         self.timeout = int(timeout)
-        self.problem_specs: List[MOOProblemSpec] = list(problems)
-        self._provider = PymooMOProvider()
-        self.problem_spec: Optional[MOOProblemSpec] = None
+        self.problem_specs = list(problems) if problems else []
+        self.calculate_hv_history = calculate_hv_history
 
-    # ---------- helpers ----------
+    def evaluate(
+        self,
+        code,
+        cls_name,
+        cls=None,
+        cls_init_kwargs=None,
+        cls_call_kwargs=None,
+        injector=None,
+    ) -> EvaluatorResult:
+        manager = multiprocessing.Manager()
+        stop_event = manager.Event()
+        eval_res = EvaluatorResult()
+        eval_res.name = cls_name
+        eval_res.result = []
 
-    def _wrap_func(self, wrapper, n_obj: int):
-        """Return (func, x_hist, y_hist) with budget enforcement."""
-        x_hist: List[np.ndarray] = []
-        y_hist: List[np.ndarray] = []
-        remaining = {"n": self.budget}
+        t0 = time.time()
+        tasks = [
+            (spec, rep) for spec in self.problem_specs for rep in range(self.repeat)
+        ]
 
-        def func(x):
-            if remaining["n"] <= 0:
-                raise RuntimeError("Budget exceeded")
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=os.cpu_count()
+        ) as executor:
+            future_to_task = {
+                executor.submit(
+                    _run_single_moo_rep,
+                    spec,
+                    rep,
+                    self.budget,
+                    code,
+                    cls_name,
+                    cls,
+                    cls_init_kwargs,
+                    cls_call_kwargs,
+                    injector,
+                    stop_event,
+                    self.calculate_hv_history,  # Pass flag to worker
+                ): (spec, rep)
+                for spec, rep in tasks
+            }
 
-            xx = np.asarray(x, dtype=float).ravel()
-            F = wrapper(xx)  # wrapper(x) -> (n_obj,)
-            yy = np.asarray(F, dtype=float).reshape(-1, n_obj)[0]
+            try:
+                for future in concurrent.futures.as_completed(
+                    future_to_task, timeout=self.timeout
+                ):
+                    eval_res.result.append(future.result())
+            except concurrent.futures.TimeoutError:
+                stop_event.set()
+                eval_res.error, eval_res.error_type = (
+                    f"Timeout ({self.timeout}s)",
+                    "TimeoutError",
+                )
+                executor.shutdown(wait=False, cancel_futures=True)
+            except Exception as e:
+                eval_res.error, eval_res.error_type = str(e), "ExecError"
+                executor.shutdown(wait=False, cancel_futures=True)
 
-            x_hist.append(xx)
-            y_hist.append(yy)
-            remaining["n"] -= 1
-            return yy
-
-        return func, x_hist, y_hist
-
-    # ---------- AbstractEvaluator API ----------
+        valid_scores = [r.best_y for r in eval_res.result if r.best_y is not None]
+        eval_res.score = float(np.mean(valid_scores)) if valid_scores else float("nan")
+        eval_res.total_execution_time = time.time() - t0
+        return eval_res
 
     def problem_name(self) -> str:
         if len(self.problem_specs) == 1:
@@ -183,70 +221,3 @@ class MultiObjEvaluator(AbstractEvaluator):
                 "respect to a fixed reference point. Your scalar fitness is the "
                 "negative mean HV over all problems and repeats (lower is better)."
             )
-
-    def evaluate(
-        self,
-        code,
-        cls_name,
-        cls=None,
-        cls_init_kwargs=None,
-        cls_call_kwargs=None,
-        injector=None,
-    ) -> EvaluatorResult:
-        manager = multiprocessing.Manager()
-        stop_event = manager.Event()
-        eval_res = EvaluatorResult()
-        eval_res.name = cls_name
-        eval_res.result = []
-
-        t0 = time.time()
-        tasks = []
-        for spec in self.problem_specs:
-            for rep in range(self.repeat):
-                tasks.append((spec, rep))
-
-        with concurrent.futures.ProcessPoolExecutor(
-            max_workers=os.cpu_count()
-        ) as executor:
-            future_to_task = {
-                executor.submit(
-                    _run_single_moo_rep,
-                    spec,
-                    rep,
-                    self.budget,
-                    code,
-                    cls_name,
-                    cls,
-                    cls_init_kwargs,
-                    cls_call_kwargs,
-                    injector,
-                    stop_event,
-                ): (spec, rep)
-                for spec, rep in tasks
-            }
-
-            try:
-                for future in concurrent.futures.as_completed(
-                    future_to_task, timeout=self.timeout
-                ):
-                    eval_res.result.append(future.result())
-            except concurrent.futures.TimeoutError:
-                eval_res.error, eval_res.error_type = (
-                    f"Global Timeout ({self.timeout}s)",
-                    "TimeoutError",
-                )
-                stop_event.set()
-                executor.shutdown(wait=False, cancel_futures=True)
-            except Exception as e:
-                eval_res.error, eval_res.error_type = str(e), "ExecError"
-                executor.shutdown(wait=False, cancel_futures=True)
-
-        # Final Score: Only calculate if we got all results (Batch Success)
-        valid_scores = [r.best_y for r in eval_res.result if r.best_y is not None]
-
-        if not eval_res.error and len(valid_scores) == len(tasks):
-            eval_res.score = float(np.mean(valid_scores))
-        else:
-            eval_res.score = float("nan")
-        eval_res.total_execution_time = time.time() - t0
-        return eval_res

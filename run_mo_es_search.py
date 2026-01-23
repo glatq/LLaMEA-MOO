@@ -38,7 +38,11 @@ def get_MOOEvaluator(cfg):
     ]
 
     evaluator = MultiObjEvaluator(
-        budget=budget, problems=problems, repeat=repeat, timeout=timeout
+        budget=budget,
+        problems=problems,
+        repeat=repeat,
+        timeout=timeout,
+        calculate_hv_history=False,
     )
     return evaluator
 
