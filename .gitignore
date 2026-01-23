@@ -198,5 +198,8 @@ Experiments/logs_backup
 .idea/
 outputs/
 .vscode/
-.exdata/
-.ppdata/
+exdata/
+ppdata/
+smac3_output/
+exp_eval/
+benchmark_results/
