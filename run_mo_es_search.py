@@ -23,6 +23,14 @@ def get_MOOEvaluator(cfg):
     repeat = cfg.mo_search.repeat
     timeout = cfg.mo_search.evaluator_timeout
 
+    # HPO configuration (if enabled in config)
+    use_hpo = cfg.mo_search.get("use_hpo", False)
+    hpo_trials = cfg.mo_search.get("hpo_trials", 500)
+    hpo_min_budget = cfg.mo_search.get("hpo_min_budget", 50)
+    hpo_max_budget = cfg.mo_search.get("hpo_max_budget", 200)
+    hpo_walltime = cfg.mo_search.get("hpo_walltime", 3600)
+    hpo_validation_budget = cfg.mo_search.get("hpo_validation_budget", 20)
+
     # Define the suite of 10 multi-objective benchmarks
     problems = [
         MOOProblemSpec(name="zdt1", dim=30, n_obj=2, ref_point=[1.1, 6.0]),
@@ -43,7 +51,22 @@ def get_MOOEvaluator(cfg):
         repeat=repeat,
         timeout=timeout,
         calculate_hv_history=False,
+        use_hpo=use_hpo,
+        hpo_trials=hpo_trials,
+        hpo_min_budget=hpo_min_budget,
+        hpo_max_budget=hpo_max_budget,
+        hpo_walltime=hpo_walltime,
+        hpo_validation_budget=hpo_validation_budget,
     )
+
+    if use_hpo:
+        logging.info("=" * 60)
+        logging.info("SMAC HPO ENABLED")
+        logging.info(f"  Trials: {hpo_trials}")
+        logging.info(f"  Budget range: {hpo_min_budget}-{hpo_max_budget}")
+        logging.info(f"  Walltime: {hpo_walltime}s")
+        logging.info("=" * 60)
+
     return evaluator
 
 

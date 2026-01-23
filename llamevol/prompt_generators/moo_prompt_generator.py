@@ -11,6 +11,7 @@ class BaselineResponseHandler(ResponseHandler):
         super().__init__()
         self.desc = ""
         self.reason = ""
+        self.config_space = ""
 
     def __to_json__(self):
         return {
@@ -18,6 +19,7 @@ class BaselineResponseHandler(ResponseHandler):
             "code": self.code,
             "code_name": self.code_name,
             "raw_response": self.raw_response,
+            "config_space": self.config_space,
         }
 
     def extract_response(self, response: str, task: GenerationTask):
@@ -25,7 +27,7 @@ class BaselineResponseHandler(ResponseHandler):
             return
 
         self.raw_response = response
-        sections = ["Description", "Justification", "Code"]
+        sections = ["Description", "Justification", "Code", "Space"]
         for section in sections:
             if section == "Code":
                 self.code, err = self.extract_from_response(response, section)
@@ -36,6 +38,8 @@ class BaselineResponseHandler(ResponseHandler):
                 self.desc, _ = self.extract_from_response(response, section)
             elif section == "Justification":
                 self.reason, _ = self.extract_from_response(response, section)
+            elif section == "Space":
+                self.config_space, _ = self.extract_from_response(response, section)
 
     def extract_from_response(
         self, response: str, section: str, pattern=None
@@ -48,9 +52,11 @@ class BaselineResponseHandler(ResponseHandler):
                 pattern = r"```(?:python)?[\s\S]*?class\s+(\w+BO\w*):"
                 ignore_case = False
             elif section == "Code":
-                pattern = r"#\s*Code[\s\S]*```(?:python)?\s([\s\S]*?)```"
+                pattern = r"#\s*Code[\s\S]*?```(?:python)?\s([\s\S]*?)```"
             elif section == "Code2":
                 pattern = r"```(?:python)?\s([\s\S]*?)```"
+            elif section == "Space":
+                pattern = r"#\s*Space[\s\S]*?```(?:python)?\s*([\s\S]*?)```"
             else:
                 pattern = rf"#\s*{section}\s*([\s\S]*?)#\s"
                 # pattern = rf"#\s*{section}\s*:\s*(.*)"
@@ -87,7 +93,25 @@ class MultiObjectivePromptGenerator(PromptGenerator):
         task_prompt = """
 Your task is to write the multi-objective optimization algorithm in Python code. The code must provide a class with an init(self, budget, dim) method and a call(self, func) method. The call method should optimize the black-box function func using at most self.budget function evaluations. The func takes an array of shape (n_dims,) and returns an array of shape (M,) (one value per objective). One budget unit corresponds to one call of func (producing all M objectives). The search space bounds are provided via the `bounds` input (shape (2, dim)). The algorithm MUST use this `bounds` array for all sampling and clipping operations and MUST NOT assume or hard-code any bounds in the algorithm's logic. The dimensionality dim can vary.
 As an expert in numpy, scipy, scikit-learn, torch, and gpytorch, you are allowed to use these libraries. Prefer lightweight models (for example, Gaussian processes or random forests with a sliding window of recent data) and avoid deep neural networks or very heavy models. If you use surrogate models, limit the training set size (for example, using only the most recent 200 points) so that fitting remains cheap. Do not use any other libraries unless they cannot be replaced by the above libraries. Do not remove the comments from the code. Name the class based on the characteristics of the algorithm with a template 'MOBO<Something>'.
-The primary performance metric is Hypervolume (HV) maximization with respect to a fixed reference point. HV and the reference point are handled externally by the evaluator; your algorithm only needs to return a good approximation of the Pareto front (F_pareto, X_pareto). Do not compute the full hypervolume indicator inside the algorithm. 
+The primary performance metric is Hypervolume (HV) maximization with respect to a fixed reference point. HV and the reference point are handled externally by the evaluator; your algorithm only needs to return a good approximation of the Pareto front (F_pareto, X_pareto). Do not compute the full hypervolume indicator inside the algorithm.
+
+HYPERPARAMETER OPTIMIZATION: Any hyperparameters your algorithm uses will be automatically optimized by SMAC (Sequential Model-Based Algorithm Configuration). You must provide a configuration space as a Python dictionary that defines the hyperparameter search space. Do NOT include the parameters budget, dim, or bounds in the configuration space, as these are problem-specific and fixed. Include all other tunable hyperparameters in the __init__ method with default values, and define their search ranges in the configuration space.
+
+Configuration space format:
+{
+    "param_name": (lower_bound, upper_bound),  # For continuous or integer ranges
+    "log_param": (lower, upper, "log"),  # For log-scale continuous parameters
+    "categorical_param": ["option1", "option2", "option3"]  # For categorical choices
+}
+
+Example:
+{
+    "pop_size": (10, 100),
+    "n_init": (5, 50),
+    "learning_rate": (0.001, 0.1, "log"),  # Log-scale for parameters spanning orders of magnitude
+    "mutation_rate": (0.01, 0.5),
+    "acquisition_type": ["ei", "ucb", "poi"]
+}
 
 CRITICAL ROBUSTNESS REQUIREMENT: The algorithm's internal search logic (especially the acquisition function and model fitting) MUST be stable and general across all objective scales.
 Any scalarization method (e.g., Tchebycheff or weighted sum) MUST be applied to objectives that are normalized and scaled.
@@ -104,7 +128,25 @@ Give a robust, computationally efficient multi-objective Bayesian Optimization a
         task_prompt = """
 Your task is to write the multi-objective optimization algorithm in Python code. The code must provide a class with an init(self, budget, dim) method and a call(self, func) method. The call method should optimize the black-box function func using at most self.budget function evaluations. The func takes an array of shape (n_dims,) and returns an array of shape (M,) (one value per objective). One budget unit corresponds to one call of func (producing all M objectives). The search space bounds are provided via the `bounds` input (shape (2, dim)). The algorithm MUST use this `bounds` array for all sampling and clipping operations and MUST NOT assume or hard-code any bounds in the algorithm's logic. The dimensionality dim can vary.
 As an expert in numpy, scipy, scikit-learn, torch, and gpytorch, you are allowed to use these libraries. Prefer lightweight models (for example, Gaussian processes or random forests with a sliding window of recent data) and avoid deep neural networks or very heavy models. If you use surrogate models, limit the training set size (for example, using only the most recent 200 points) so that fitting remains cheap. Do not use any other libraries unless they cannot be replaced by the above libraries. Do not remove the comments from the code. Name the class based on the characteristics of the algorithm with a template 'MOBO<Something>'.
-The primary performance metric is Hypervolume (HV) maximization with respect to a fixed reference point. HV and the reference point are handled externally by the evaluator; your algorithm only needs to return a good approximation of the Pareto front (F_pareto, X_pareto). Do not compute the full hypervolume indicator inside the algorithm. 
+The primary performance metric is Hypervolume (HV) maximization with respect to a fixed reference point. HV and the reference point are handled externally by the evaluator; your algorithm only needs to return a good approximation of the Pareto front (F_pareto, X_pareto). Do not compute the full hypervolume indicator inside the algorithm.
+
+HYPERPARAMETER OPTIMIZATION: Any hyperparameters your algorithm uses will be automatically optimized by SMAC (Sequential Model-Based Algorithm Configuration). You must provide a configuration space as a Python dictionary that defines the hyperparameter search space. Do NOT include the parameters budget, dim, or bounds in the configuration space, as these are problem-specific and fixed. Include all other tunable hyperparameters in the __init__ method with default values, and define their search ranges in the configuration space.
+
+Configuration space format:
+{
+    "param_name": (lower_bound, upper_bound),  # For continuous or integer ranges
+    "log_param": (lower, upper, "log"),  # For log-scale continuous parameters
+    "categorical_param": ["option1", "option2", "option3"]  # For categorical choices
+}
+
+Example:
+{
+    "pop_size": (10, 100),
+    "n_init": (5, 50),
+    "learning_rate": (0.001, 0.1, "log"),  # Log-scale for parameters spanning orders of magnitude
+    "mutation_rate": (0.01, 0.5),
+    "acquisition_type": ["ei", "ucb", "poi"]
+}
 
 CRITICAL ROBUSTNESS REQUIREMENT: The algorithm's internal search logic (especially the acquisition function and model fitting) MUST be stable and general across all objective scales.
 Any scalarization method (e.g., Tchebycheff or weighted sum) MUST be applied to objectives that are normalized and scaled.
@@ -120,7 +162,25 @@ Give a robust, computationally efficient multi-objective Bayesian Optimization a
             task_prompt = """
 Your task is to write the multi-objective optimization algorithm in Python code. The code must provide a class with an init(self, budget, dim) method and a call(self, func) method. The call method should optimize the black-box function func using at most self.budget function evaluations. The func takes an array of shape (n_dims,) and returns an array of shape (M,) (one value per objective). One budget unit corresponds to one call of func (producing all M objectives). The search space bounds are provided via the `bounds` input (shape (2, dim)). The algorithm MUST use this `bounds` array for all sampling and clipping operations and MUST NOT assume or hard-code any bounds in the algorithm's logic. The dimensionality dim can vary.
 As an expert in numpy, scipy, scikit-learn, torch, and gpytorch, you are allowed to use these libraries. Prefer lightweight models (for example, Gaussian processes or random forests with a sliding window of recent data) and avoid deep neural networks or very heavy models. If you use surrogate models, limit the training set size (for example, using only the most recent 200 points) so that fitting remains cheap. Do not use any other libraries unless they cannot be replaced by the above libraries. Do not remove the comments from the code. Name the class based on the characteristics of the algorithm with a template 'MOBO<Something>'.
-The primary performance metric is Hypervolume (HV) maximization with respect to a fixed reference point. HV and the reference point are handled externally by the evaluator; your algorithm only needs to return a good approximation of the Pareto front (F_pareto, X_pareto). Do not compute the full hypervolume indicator inside the algorithm. 
+The primary performance metric is Hypervolume (HV) maximization with respect to a fixed reference point. HV and the reference point are handled externally by the evaluator; your algorithm only needs to return a good approximation of the Pareto front (F_pareto, X_pareto). Do not compute the full hypervolume indicator inside the algorithm.
+
+HYPERPARAMETER OPTIMIZATION: Any hyperparameters your algorithm uses will be automatically optimized by SMAC (Sequential Model-Based Algorithm Configuration). You must provide a configuration space as a Python dictionary that defines the hyperparameter search space. Do NOT include the parameters budget, dim, or bounds in the configuration space, as these are problem-specific and fixed. Include all other tunable hyperparameters in the __init__ method with default values, and define their search ranges in the configuration space.
+
+Configuration space format:
+{
+    "param_name": (lower_bound, upper_bound),  # For continuous or integer ranges
+    "log_param": (lower, upper, "log"),  # For log-scale continuous parameters
+    "categorical_param": ["option1", "option2", "option3"]  # For categorical choices
+}
+
+Example:
+{
+    "pop_size": (10, 100),
+    "n_init": (5, 50),
+    "learning_rate": (0.001, 0.1, "log"),  # Log-scale for parameters spanning orders of magnitude
+    "mutation_rate": (0.01, 0.5),
+    "acquisition_type": ["ei", "ucb", "poi"]
+}
 
 CRITICAL ROBUSTNESS REQUIREMENT: The algorithm's internal search logic (especially the acquisition function and model fitting) MUST be stable and general across all objective scales.
 Any scalarization method (e.g., Tchebycheff or weighted sum) MUST be applied to objectives that are normalized and scaled.
@@ -136,12 +196,16 @@ Give a robust, computationally efficient multi-objective Bayesian Optimization a
     def response_format(self, task: GenerationTask) -> str:
         output_format_prompt = """
 Give the response in the format:
-# Description 
+# Description
 <description>
-# Justification 
+# Justification
 <justification for the key components of the algorithm or the changes made>
-# Code 
+# Code
 <code>
+# Space
+```python
+<configuration_space_dict>
+```
 """
         return output_format_prompt
 
@@ -155,13 +219,18 @@ Give the response in the format:
     def __code_structure(self) -> str:
         return """
 ```python
-import numpy as np 
+import numpy as np
 
 class RandomSearchMO:
-    def __init__(self, budget=10000, dim=10):
+    def __init__(self, budget=10000, dim=10, bounds=None, **hyperparameters):
+        # budget, dim, bounds are fixed problem parameters
         self.budget = int(budget)
         self.dim = int(dim)
         self.bounds = bounds
+
+        # Example hyperparameters (these would be defined in Space)
+        # self.param1 = hyperparameters.get('param1', default_value1)
+        # self.param2 = hyperparameters.get('param2', default_value2)
 
     @staticmethod
     def _dominates(a: np.ndarray, b: np.ndarray) -> bool:
@@ -209,7 +278,9 @@ import numpy as np
 
 
 class <AlgorithmName>:
-    def __init__(self, budget: int, dim: int, bounds: np.ndarray | None = None):
+    def __init__(self, budget: int, dim: int, bounds: np.ndarray | None = None,
+                 param1=default1, param2=default2, ...):
+        # Fixed problem parameters
         self.budget = budget
         self.dim = dim
         # bounds has shape (2, dim), bounds[0]: lower bound, bounds[1]: upper bound
@@ -220,6 +291,11 @@ class <AlgorithmName>:
             self.bounds = np.array([[0.0] * dim, [1.0] * dim], dtype=float)
         else:
             self.bounds = np.asarray(bounds, dtype=float)
+
+        # Hyperparameters (tuned by SMAC, defined in Space)
+        self.param1 = param1
+        self.param2 = param2
+        # ... add more hyperparameters with default values
 
         # The number of objectives (self.n_obj) is unknown a priori.
         # It MUST be inferred on the first call to func inside _evaluate_points.
@@ -234,11 +310,8 @@ class <AlgorithmName>:
         # Use a small, budget-aware design (for example, proportional to dim, but not more than a fraction of the budget).
         self.n_init = <your_strategy>
 
-        # You may define internal batch size or sliding-window sizes here,
-        # but do not add any other arguments without a default value.
+        # You may define internal batch size or sliding-window sizes here.
         # Keep any additional state lightweight and inexpensive to update.
-
-        # Do not add any other arguments without a default value
 
         def _sample_points(self, n_points: int) -> np.ndarray:
         # Sample n_points candidate points efficiently within self.bounds.
@@ -337,19 +410,24 @@ from collections.abc import Callable
 import numpy as np
 
 class <AlgorithmName>:
-    def __init__(self, budget: int, dim: int, bounds: np.ndarray | None = None):
+    def __init__(self, budget: int, dim: int, bounds: np.ndarray | None = None,
+                 param1=default1, param2=default2, ...):
+        # Fixed problem parameters
         self.budget = int(budget)
         self.dim = int(dim)
         # bounds has shape (2, <dimension>), bounds[0]: lower bound, bounds[1]: upper bound
         self.bounds = bounds
+
+        # Hyperparameters (tuned by SMAC, defined in Space)
+        self.param1 = param1
+        self.param2 = param2
+        # ... add more hyperparameters with default values
 
         # X has shape (n_points, n_dims), y has shape (n_points, M)
         self.X: np.ndarray | None = None
         self.y: np.ndarray | None = None
         self.n_evals = 0  # number of function evaluations
         self.n_init = 0   # unused for pure random search; keep for API consistency
-
-        # Do not add any other arguments without a default value
 
     @staticmethod
     def _dominates(a: np.ndarray, b: np.ndarray) -> bool:
@@ -487,7 +565,16 @@ class <AlgorithmName>:
         The mean HV score of the algorithm {algorithm_name} on Separable functions was {separated_mean_hvs:.04f}, on functions with low or moderate conditioning {low_mod_mean_hvs:.04f}, on functions with high conditioning and unimodal {high_uni_mean_hvs:.04f}, on Multi-modal functions with adequate global structure {multi_adequate_mean_hvs:.04f}, and on Multi-modal functions with weak global structure {multi_weak_mean_hvs:.04f}
         """
 
-        final_feedback_prompt = f"{main_hv_prompt}\n{time_prompt}"
+        # Add HPO feedback if incumbent hyperparameters are available
+        hpo_prompt = ""
+        if hasattr(eval_res, "metadata") and eval_res.metadata:
+            if "incumbent" in eval_res.metadata and eval_res.metadata["incumbent"]:
+                incumbent = eval_res.metadata["incumbent"]
+                hpo_prompt = f"\nOptimized hyperparameters: {incumbent}"
+            elif "hpo_error" in eval_res.metadata:
+                hpo_prompt = f"\nNote: {eval_res.metadata['hpo_error']}"
+
+        final_feedback_prompt = f"{main_hv_prompt}\n{time_prompt}{hpo_prompt}"
 
         return final_feedback_prompt
 

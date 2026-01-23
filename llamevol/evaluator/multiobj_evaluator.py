@@ -1,7 +1,8 @@
 import os
 import time
+import logging
 from dataclasses import dataclass
-from typing import Any, Optional, Sequence, List
+from typing import Any, Optional, Sequence, List, Dict
 from threadpoolctl import threadpool_limits
 from tqdm import tqdm
 import numpy as np
@@ -13,6 +14,21 @@ from .evaluator import AbstractEvaluator
 from .evaluator_result import EvaluatorResult, EvaluatorBasicResult
 from .exec_utils import default_exec
 from .PymooMOProvider import PymooMOProvider
+from ..configspace_ext.configspace_utils import extract_configspace_from_response
+
+try:
+    from .smac_hpo_wrapper import (
+        run_smac_hpo_moo,
+        SMACHPOConfig,
+        validate_with_random_config,
+    )
+
+    HPO_AVAILABLE = True
+except ImportError:
+    HPO_AVAILABLE = False
+    logging.warning(
+        "SMAC HPO not available. Install with: pip install smac ConfigSpace"
+    )
 
 
 @dataclass
@@ -126,7 +142,13 @@ class MultiObjEvaluator(AbstractEvaluator):
         problems: Optional[Sequence[MOOProblemSpec]] = None,
         repeat: int = 1,
         timeout: int = 1800,
-        calculate_hv_history: bool = False,  # Flag added here
+        calculate_hv_history: bool = False,
+        use_hpo: bool = False,  # Enable HPO mode
+        hpo_trials: int = 500,  # Number of SMAC trials
+        hpo_min_budget: int = 50,  # Min budget for multi-fidelity
+        hpo_max_budget: int = 200,  # Max budget for multi-fidelity
+        hpo_walltime: int = 3600,  # HPO time limit (1 hour)
+        hpo_validation_budget: int = 100,  # Budget for validation
     ):
         super().__init__()
         self.budget = int(budget)
@@ -134,6 +156,23 @@ class MultiObjEvaluator(AbstractEvaluator):
         self.timeout = int(timeout)
         self.problem_specs = list(problems) if problems else []
         self.calculate_hv_history = calculate_hv_history
+
+        # HPO configuration
+        self.use_hpo = use_hpo and HPO_AVAILABLE
+        self.hpo_config = (
+            SMACHPOConfig(
+                n_trials=hpo_trials,
+                min_budget=hpo_min_budget,
+                max_budget=hpo_max_budget,
+                walltime_limit=hpo_walltime,
+            )
+            if self.use_hpo
+            else None
+        )
+        self.hpo_validation_budget = hpo_validation_budget
+
+        if use_hpo and not HPO_AVAILABLE:
+            logging.warning("HPO requested but not available. Falling back to no HPO.")
 
     def evaluate(
         self,
@@ -143,14 +182,106 @@ class MultiObjEvaluator(AbstractEvaluator):
         cls_init_kwargs=None,
         cls_call_kwargs=None,
         injector=None,
+        llm_response: Optional[
+            str
+        ] = None,  # Full LLM response for ConfigSpace extraction
     ) -> EvaluatorResult:
-        manager = multiprocessing.Manager()
-        stop_event = manager.Event()
+        """
+        Evaluate algorithm code on multi-objective problems.
+
+        If use_hpo=True and a ConfigSpace is found:
+        1. Validate code with random config
+        2. Run SMAC HPO to find best hyperparameters
+        3. Evaluate with incumbent configuration
+
+        Args:
+            code: Algorithm code
+            cls_name: Algorithm class name
+            cls: Pre-compiled class (optional)
+            cls_init_kwargs: Additional init kwargs to merge with incumbent
+            cls_call_kwargs: Call kwargs
+            injector: Code injector
+            llm_response: Full LLM response (for ConfigSpace extraction)
+
+        Returns:
+            EvaluatorResult with incumbent stored in metadata
+        """
+        # Initialize result
         eval_res = EvaluatorResult()
         eval_res.name = cls_name
         eval_res.result = []
+        eval_res.metadata = {}
 
         t0 = time.time()
+
+        # HPO Mode: Extract ConfigSpace and run SMAC
+        incumbent_dict = {}
+        if self.use_hpo and llm_response:
+            logging.info(f"HPO mode enabled for {cls_name}")
+
+            # Extract ConfigSpace from LLM response
+            configspace = extract_configspace_from_response(llm_response)
+
+            if configspace is None or len(configspace) == 0:
+                logging.warning(
+                    "No valid ConfigSpace found. Using default hyperparameters."
+                )
+                eval_res.metadata["hpo_error"] = "ConfigSpace not found or empty"
+            else:
+                logging.info(
+                    f"ConfigSpace found with {len(configspace)} hyperparameters: {list(configspace.keys())}"
+                )
+
+                # Step 1: Quick validation with random config
+                if self.problem_specs:
+                    validation_passed = validate_with_random_config(
+                        code=code,
+                        cls_name=cls_name,
+                        configspace=configspace,
+                        problem_spec=self.problem_specs[0],
+                        budget=self.hpo_validation_budget,
+                        injector=injector,
+                    )
+
+                    if not validation_passed:
+                        logging.error("Validation failed. Skipping HPO.")
+                        eval_res.metadata["hpo_error"] = "Validation failed"
+                    else:
+                        # Step 2: Run SMAC HPO
+                        try:
+                            logging.info("Starting SMAC HPO...")
+                            incumbent_dict, incumbent_hv = run_smac_hpo_moo(
+                                code=code,
+                                cls_name=cls_name,
+                                configspace=configspace,
+                                problem_specs=self.problem_specs,
+                                budget=self.budget,
+                                hpo_config=self.hpo_config,
+                                injector=injector,
+                            )
+
+                            logging.info(
+                                f"SMAC completed. Incumbent: {incumbent_dict}, HV: {incumbent_hv:.4f}"
+                            )
+                            eval_res.metadata["incumbent"] = incumbent_dict
+                            eval_res.metadata["incumbent_hv"] = incumbent_hv
+
+                        except Exception as e:
+                            logging.error(f"HPO failed: {e}")
+                            eval_res.metadata["hpo_error"] = str(e)
+                            incumbent_dict = {}
+
+        # Merge incumbent with any additional init kwargs
+        final_init_kwargs = dict(incumbent_dict) if incumbent_dict else {}
+        if cls_init_kwargs:
+            final_init_kwargs.update(cls_init_kwargs)
+
+        # Step 3: Final evaluation with incumbent (or defaults)
+        logging.info(f"Running final evaluation with config: {final_init_kwargs}")
+
+        manager = multiprocessing.Manager()
+        stop_event = manager.Event()
+
         tasks = [
             (spec, rep) for spec in self.problem_specs for rep in range(self.repeat)
         ]
@@ -167,7 +298,7 @@ class MultiObjEvaluator(AbstractEvaluator):
                     code,
                     cls_name,
                     cls,
-                    cls_init_kwargs,
+                    final_init_kwargs,  # Use incumbent config
                     cls_call_kwargs,
                     injector,
                     stop_event,

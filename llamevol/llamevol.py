@@ -98,7 +98,9 @@ class LLaMEvol:
             return response_handler
 
         res = evaluator.evaluate(
-            code=response_handler.code, cls_name=response_handler.code_name
+            code=response_handler.code,
+            cls_name=response_handler.code_name,
+            llm_response=response_handler.raw_response,  # Pass for HPO ConfigSpace extraction
         )
 
         response_handler.eval_result = res

@@ -5,12 +5,21 @@ defaults:
 mo_search:
   dtlz_dimension: 5
   budget: 100
-  n_parent: 4
-  n_offspring: 16
+  n_parent: 1
+  n_offspring: 1
   is_elitist: True
-  n_population: 40
-  repeat: 5
+  n_population: 100
+  repeat: 3
   evaluator_timeout: 1800 # 30 * 60
+
+  # SMAC HPO configuration
+  use_hpo: true  # Enable SMAC-based hyperparameter optimization
+  hpo_trials: 20  # Number of SMAC trials
+  hpo_min_budget: 50  # Minimum budget for multi-fidelity HPO
+  hpo_max_budget: 100  # Maximum budget for multi-fidelity HPO
+  hpo_walltime: 3600  # HPO time limit in seconds (1 hour)
+  hpo_validation_budget: 50  # Budget for quick validation before HPO (keep small!)
+
   llm:
     model_name: "gemini-2.5-flash"
     base_url: null

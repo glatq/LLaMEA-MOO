@@ -11,8 +11,8 @@ os.makedirs("benchmark_results", exist_ok=True)
 
 
 def benchmark_and_plot():
-    budget = 10
-    repeat = 3
+    budget = 100
+    repeat = 5
 
     problems = [
         MOOProblemSpec(name="bnh", dim=2, n_obj=2, ref_point=[140.0, 50.0]),
@@ -31,9 +31,11 @@ def benchmark_and_plot():
             "MOBO_HybridCandidateEI_EnhancedGPR",
         ),
         (
-            "exp_mo_es_search/ESPopulation_evol_4+16_0115153530/0-4_MOBO_KNN_EHVI_-3015.6484.py",
-            "MOBO_KNN_EHVI",
+            "exp_mo_es_search/ESPopulation_evol_4+16_0121124246/4-56_MOBOForestTchebyUCB_-4917.5413.py",
+            "MOBOForestTchebyUCB",
         ),
+        ("nsga2_wrapper.py", "NSGA2Wrapper"),
+        ("ioc_samo_cobra_wrapper.py", "IOCSAMOCOBRAWrapper"),
         ("MORS_baseline.py", "RandomSearchMO"),
     ]
 
