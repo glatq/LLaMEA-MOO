@@ -1,7 +1,6 @@
 import pytest
 import yaml
 import numpy as np
-import textwrap
 from llamevol import directories
 from llamevol.prompt_generators.moo_prompt_generator import (
     MultiObjectivePromptGenerator,
@@ -9,6 +8,7 @@ from llamevol.prompt_generators.moo_prompt_generator import (
 )
 from llamevol.prompt_generators.abstract_prompt_generator import GenerationTask
 from llamevol.evaluator.evaluator_result import EvaluatorResult, EvaluatorBasicResult
+from tests.utils_for_tests import normalize_prompt
 
 
 @pytest.fixture
@@ -97,18 +97,6 @@ def test_empty_results_feedback_prompt(mopg, eval_res, expected_prompts):
     actual = mopg.evaluation_feedback_prompt(eval_res)
     expected = ""
     assert actual == expected
-
-
-def normalize_prompt(prompt_string):
-    # 1. Remove common leading whitespace/indentation from multiline strings
-    dedented = textwrap.dedent(prompt_string)
-
-    # 2. Unify newline characters (e.g., convert Windows \r\n to Unix \n)
-    normalized_newlines = dedented.replace("\r\n", "\n")
-
-    # 3. Strip any leading/trailing newlines that might exist from the f-string definition
-    # This specifically addresses the leading \n from f"""\n..."""
-    return normalized_newlines.strip()
 
 
 @pytest.mark.xfail(reason="Altered due to SMAC")
