@@ -27,8 +27,8 @@ def benchmark_and_plot():
 
     algorithms = [
         (
-            "exp_mo_es_search/ESPopulation_evol_1+1_0114165323/27-28_MOBO_HybridCandidateEI_EnhancedGPR_-3420.4316.py",
-            "MOBO_HybridCandidateEI_EnhancedGPR",
+            "exp_mo_es_search/ESPopulation_evol_1+1_0122101951/9-10_MOBOParEGO_Robust_-4150.7514.py",
+            "MOBOParEGO_Robust",
         ),
         (
             "exp_mo_es_search/ESPopulation_evol_4+16_0121124246/4-56_MOBOForestTchebyUCB_-4917.5413.py",

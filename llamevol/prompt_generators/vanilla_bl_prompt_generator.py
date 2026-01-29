@@ -1,15 +1,11 @@
 import re
-from typing import Any
 import numpy as np
-import torch
 from .abstract_prompt_generator import (
     PromptGenerator,
     ResponseHandler,
     GenerationTask,
     EvaluatorResult,
 )
-from .bo_zeroplus_prompt_generator import BOPromptGeneratorReturnChecker
-from ..individual import Individual
 from ..population import Population
 
 
@@ -74,6 +70,7 @@ class VanillaBaselinePromptGenerator(PromptGenerator):
         super().__init__()
         self.is_bo = False
         self.use_mini_bo = False
+        self.use_cuda = False
         self.problem_desc = "24 noiseless functions"
 
     def __str__(self):
@@ -190,7 +187,7 @@ class VanillaBaselinePromptGenerator(PromptGenerator):
     def __bo_task_description(self, task):
         # lib_prompt = "As an expert of numpy, scipy, scikit-learn, you are allowed to use these libraries."
         lib_prompt = "As an expert of numpy, scipy, scikit-learn, torch, gpytorch, you are allowed to use these libraries."
-        if torch.cuda.is_available():
+        if self.use_cuda:
             lib_prompt = "As an expert of numpy, scipy, scikit-learn, torch, gpytorch, you are allowed to use these libraries, and using GPU for acceleration is mandatory."
         # problem_desc = "one noiseless functions:f6-Attractive Sector Function"
         task_prompt = f"""

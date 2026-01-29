@@ -69,6 +69,40 @@ class TestTaskDescription:
         assert expected == actual
 
 
+class TestTaskDescriptionGPU:
+    def test_initialize_solution_bo(self, vanilla_bl_bo_with_gpu, bl_task_description):
+        expected = bl_task_description["initialize_solution_bo_with_gpu"]
+        actual = normalize_prompt(
+            vanilla_bl_bo_with_gpu.task_description(GenerationTask.INITIALIZE_SOLUTION)
+        )
+        assert expected == actual
+
+    def test_fix_errors_bo(self, vanilla_bl_bo_with_gpu, bl_task_description):
+        expected = bl_task_description["fix_errors_bo_with_gpu"]
+        actual = normalize_prompt(
+            vanilla_bl_bo_with_gpu.task_description(GenerationTask.FIX_ERRORS)
+        )
+        assert expected == actual
+
+    def test_fix_errors_from_error_bo(
+        self, vanilla_bl_bo_with_gpu, bl_task_description
+    ):
+        expected = bl_task_description["fix_errors_from_error_bo_with_gpu"]
+        actual = normalize_prompt(
+            vanilla_bl_bo_with_gpu.task_description(
+                GenerationTask.FIX_ERRORS_FROM_ERROR
+            )
+        )
+        assert expected == actual
+
+    def test_optimize_performance_bo(self, vanilla_bl_bo_with_gpu, bl_task_description):
+        expected = bl_task_description["optimize_performance_bo_with_gpu"]
+        actual = normalize_prompt(
+            vanilla_bl_bo_with_gpu.task_description(GenerationTask.OPTIMIZE_PERFORMANCE)
+        )
+        assert expected == actual
+
+
 class TestResponseFormat:
     def test_initialize_solution(self, vanilla_bl, bl_response_format):
         expected = bl_response_format["initialize_solution"]

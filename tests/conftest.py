@@ -380,6 +380,14 @@ class RandomSearch:
 
 
 @pytest.fixture
+def vanilla_bl_bo_with_gpu():
+    prompt = VanillaBaselinePromptGenerator()
+    prompt.use_cuda = True
+    prompt.is_bo = True
+    return prompt
+
+
+@pytest.fixture
 def vanilla_bl():
     prompt = VanillaBaselinePromptGenerator()
     return prompt
