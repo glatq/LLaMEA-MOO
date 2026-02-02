@@ -117,8 +117,8 @@ class PymooMOProvider:
             n_obj=n_obj,
             lb=lb,
             ub=ub,
-            ref_point=None
-            if ref_point is None
-            else np.asarray(ref_point, float).ravel(),
+            ref_point=(
+                None if ref_point is None else np.asarray(ref_point, float).ravel()
+            ),
         )
         return _PymooProblemWrapper(prob, spec)

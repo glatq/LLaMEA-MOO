@@ -1,5 +1,6 @@
 import re
 import numpy as np
+from .load_default_prompt_configurations import load_default_bl_prompt_config
 from .abstract_prompt_generator import (
     PromptGenerator,
     ResponseHandler,
@@ -66,12 +67,16 @@ class VanillaBaselineResponseHandler(ResponseHandler):
 
 
 class VanillaBaselinePromptGenerator(PromptGenerator):
-    def __init__(self):
+    def __init__(self, conf=None):
         super().__init__()
-        self.is_bo = False
-        self.use_mini_bo = False
-        self.use_cuda = False
-        self.problem_desc = "24 noiseless functions"
+
+        if conf is None:
+            conf = load_default_bl_prompt_config()
+
+        self.is_bo = conf["is_bo"]
+        self.use_mini_bo = conf["use_mini_bo"]
+        self.use_cuda = conf["use_cuda"]
+        self.problem_desc = conf["problem_desc"]
 
     def __str__(self):
         suffix = ""

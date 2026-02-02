@@ -27,3 +27,10 @@ def tests(filename=None):
 
 def test_data(filename=None):
     return qualifyname(tests("test_data"), filename)
+
+
+def prompt_generator_configs(filename=None):
+    default_prompt_configurations_directory = code(
+        "prompt_generators/default_prompt_configurations"
+    )
+    return qualifyname(default_prompt_configurations_directory, filename)

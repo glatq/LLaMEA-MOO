@@ -2,6 +2,7 @@
 This module integrates OpenAI's language models to generate and evolve
 algorithms to automatically evaluate (for example metaheuristics evaluated on BBOB).
 """
+
 import logging
 import time
 import concurrent.futures

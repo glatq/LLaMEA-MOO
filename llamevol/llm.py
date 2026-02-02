@@ -1,5 +1,5 @@
-"""LLM manager to connect to different types of models.
-"""
+"""LLM manager to connect to different types of models."""
+
 import time
 import os
 from datetime import datetime
