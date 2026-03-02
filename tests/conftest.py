@@ -1,9 +1,9 @@
 import pytest
 import yaml
 from llamevol.evaluator import EvaluatorResult
-from llamevol.prompt_generators.vanilla_bl_prompt_generator import (
-    VanillaBaselinePromptGenerator,
-    VanillaBaselineResponseHandler,
+from llamevol.prompt_generators.bl_prompt_generator import (
+    BaselinePromptGenerator,
+    BaselineResponseHandler,
 )
 from llamevol import directories
 from .utils_for_tests import normalize_prompt
@@ -391,26 +391,26 @@ def vanilla_bl_config_dict():
 def vanilla_bl_bo_with_gpu(vanilla_bl_config_dict):
     vanilla_bl_config_dict["use_cuda"] = True
     vanilla_bl_config_dict["is_bo"] = True
-    prompt = VanillaBaselinePromptGenerator(vanilla_bl_config_dict)
+    prompt = BaselinePromptGenerator(vanilla_bl_config_dict)
     return prompt
 
 
 @pytest.fixture
 def vanilla_bl(vanilla_bl_config_dict):
-    prompt = VanillaBaselinePromptGenerator(vanilla_bl_config_dict)
+    prompt = BaselinePromptGenerator(vanilla_bl_config_dict)
     return prompt
 
 
 @pytest.fixture
 def vanilla_bl_bo(vanilla_bl_config_dict):
     vanilla_bl_config_dict["is_bo"] = True
-    prompt = VanillaBaselinePromptGenerator(vanilla_bl_config_dict)
+    prompt = BaselinePromptGenerator(vanilla_bl_config_dict)
     return prompt
 
 
 @pytest.fixture
 def vanilla_blrh():
-    rh = VanillaBaselineResponseHandler()
+    rh = BaselineResponseHandler()
     return rh
 
 
