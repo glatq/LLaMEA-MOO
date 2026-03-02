@@ -1,11 +1,11 @@
 import pytest
-
+import yaml
 from llamevol.evaluator import EvaluatorResult
 from llamevol.prompt_generators.vanilla_bl_prompt_generator import (
     VanillaBaselinePromptGenerator,
     VanillaBaselineResponseHandler,
 )
-
+from llamevol import directories
 from .utils_for_tests import normalize_prompt
 
 
@@ -380,16 +380,31 @@ class RandomSearch:
 
 
 @pytest.fixture
-def vanilla_bl_bo_with_gpu():
-    prompt = VanillaBaselinePromptGenerator()
-    prompt.use_cuda = True
-    prompt.is_bo = True
+def vanilla_bl_config_dict():
+    with open(
+        directories.test_data(filename="bl_prompt_generator_for_tests.yaml"), "r"
+    ) as file:
+        return yaml.safe_load(file)
+
+
+@pytest.fixture
+def vanilla_bl_bo_with_gpu(vanilla_bl_config_dict):
+    vanilla_bl_config_dict["use_cuda"] = True
+    vanilla_bl_config_dict["is_bo"] = True
+    prompt = VanillaBaselinePromptGenerator(vanilla_bl_config_dict)
     return prompt
 
 
 @pytest.fixture
-def vanilla_bl():
-    prompt = VanillaBaselinePromptGenerator()
+def vanilla_bl(vanilla_bl_config_dict):
+    prompt = VanillaBaselinePromptGenerator(vanilla_bl_config_dict)
+    return prompt
+
+
+@pytest.fixture
+def vanilla_bl_bo(vanilla_bl_config_dict):
+    vanilla_bl_config_dict["is_bo"] = True
+    prompt = VanillaBaselinePromptGenerator(vanilla_bl_config_dict)
     return prompt
 
 
@@ -406,7 +421,8 @@ def eval_res():
 
 
 @pytest.fixture
-def vanilla_bl_bo():
-    prompt = VanillaBaselinePromptGenerator()
-    prompt.is_bo = True
-    return prompt
+def expected_response_handler_prompts():
+    with open(
+        directories.test_data(filename="expected_response_handler_prompts.yaml"), "r"
+    ) as file:
+        return yaml.safe_load(file)

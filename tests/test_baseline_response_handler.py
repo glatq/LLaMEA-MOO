@@ -1,16 +1,6 @@
 import pytest
-import yaml
-from llamevol import directories
 from llamevol.prompt_generators.moo_prompt_generator import BaselineResponseHandler
 from llamevol.prompt_generators.abstract_prompt_generator import GenerationTask
-
-
-@pytest.fixture
-def expected_response_handler_prompts():
-    with open(
-        directories.test_data(filename="expected_response_handler_prompts.yaml"), "r"
-    ) as file:
-        return yaml.safe_load(file)
 
 
 @pytest.fixture
