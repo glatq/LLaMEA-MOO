@@ -8,3 +8,11 @@ def load_default_bl_prompt_config():
         cfg = yaml.safe_load(f)
 
     return cfg
+
+
+def load_default_moo_prompt_config():
+    cfg_path = prompt_generator_configs(filename="moo_prompt_generator.yaml")
+    with open(cfg_path) as f:
+        cfg = yaml.safe_load(f)
+
+    return cfg

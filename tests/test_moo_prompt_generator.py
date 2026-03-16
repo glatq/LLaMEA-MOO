@@ -29,7 +29,6 @@ def eval_res():
     return er
 
 
-@pytest.mark.xfail(reason="Altered due to SMAC")
 def test_task_description(mopg, expected_prompts):
     expected = expected_prompts["task_prompt"]
     actual = mopg.task_description(task=GenerationTask.INITIALIZE_SOLUTION)
@@ -38,14 +37,12 @@ def test_task_description(mopg, expected_prompts):
     )  # Can add more tests when task_description is different when is_bo = True and when use_mini_bo = True
 
 
-@pytest.mark.xfail(reason="Altered due to SMAC")
 def test_response_format(mopg, expected_prompts):
     expected = expected_prompts["response_format"]
     actual = mopg.response_format(task=GenerationTask.INITIALIZE_SOLUTION)
     assert actual == expected
 
 
-@pytest.mark.xfail(reason="Altered due to SMAC")
 def test_code_structure(mopg, expected_prompts):
     expected = expected_prompts["code_structure"]
     actual = mopg.code_structure()
@@ -87,8 +84,7 @@ def test_evaluation_feedback_prompt(mopg, eval_res, expected_prompts):
         make_basic_result("bnh-3-10", 3.0),
     ]
     actual = mopg.evaluation_feedback_prompt(eval_res)
-    expected = f"""The algorithm Test got an average Hypervolume (HV, the larger the better) score of 2.0000 with standard deviation {np.std([-1.0,-2.0,-3.0]):0.4f}.
-        \ntook 12.35 seconds to run."""
+    expected = f"""The algorithm Test got an average Hypervolume (HV, the larger the better) score of 2.0000 with standard deviation {np.std([-1.0,-2.0,-3.0]):0.4f}.\nTook 12.35 seconds to run."""
 
     assert actual == expected
 
@@ -99,7 +95,6 @@ def test_empty_results_feedback_prompt(mopg, eval_res, expected_prompts):
     assert actual == expected
 
 
-@pytest.mark.xfail(reason="Altered due to SMAC")
 def test_get_prompt(mopg, expected_prompts):
     actual_role_prompt, actual_final_prompt = mopg.get_prompt(
         task=GenerationTask.INITIALIZE_SOLUTION,
