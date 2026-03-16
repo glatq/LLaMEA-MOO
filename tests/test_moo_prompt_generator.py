@@ -17,12 +17,6 @@ def expected_prompts():
         return yaml.safe_load(file)
 
 
-@pytest.fixture
-def eval_res():
-    er = EvaluatorResult()
-    return er
-
-
 def test_task_description(mopg, expected_prompts):
     expected = expected_prompts["task_prompt"]
     actual = mopg.task_description(task=GenerationTask.INITIALIZE_SOLUTION)
