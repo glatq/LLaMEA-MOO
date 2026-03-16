@@ -1,0 +1,57 @@
+bo_and_mini_bo: "\n```python\nfrom collections.abc import Callable\nimport numpy as\
+  \ np\nclass <AlgorithmName>:\n    def __init__(self, budget:int, dim:int):\n   \
+  \     self.budget = budget\n        self.dim = dim\n        # bounds has shape (2,<dimension>),\
+  \ bounds[0]: lower bound, bounds[1]: upper bound\n        self.bounds = np.array([[-5.0]*dim,\
+  \ [5.0]*dim])\n        # X has shape (n_points, n_dims), y has shape (n_points,\
+  \ 1)\n        self.X: np.ndarray = None\n        self.y: np.ndarray = None\n   \
+  \     self.n_evals = 0 # the number of function evaluations\n        self.n_init\
+  \ = <your_strategy>\n\n        # Do not add any other arguments without a default\
+  \ value\n\n    def __call__(self, func:Callable[[np.ndarray], np.float64]) -> tuple[np.float64,\
+  \ np.array]:\n        # Main minimize optimization loop\n        # func: takes array\
+  \ of shape (n_dims,) and returns np.float64. \n        # Return a tuple (best_y,\
+  \ best_x)\n\n        while self.n_evals < budget:\n            # Optimization\n\
+  \            pass\n\n        return best_y, best_x\n```\n"
+bo_and_no_mini_bo: "\n```python\nfrom collections.abc import Callable\nfrom scipy.stats\
+  \ import qmc #If you are using QMC sampling, qmc from scipy is encouraged. Remove\
+  \ this line if you have better alternatives.\nfrom scipy.stats import norm\nimport\
+  \ numpy as np\nclass <AlgorithmName>:\n    def __init__(self, budget:int, dim:int):\n\
+  \        self.budget = budget\n        self.dim = dim\n        # bounds has shape\
+  \ (2,<dimension>), bounds[0]: lower bound, bounds[1]: upper bound\n        self.bounds\
+  \ = np.array([[-5.0]*dim, [5.0]*dim])\n        # X has shape (n_points, n_dims),\
+  \ y has shape (n_points, 1)\n        self.X: np.ndarray = None\n        self.y:\
+  \ np.ndarray = None\n        self.n_evals = 0 # the number of function evaluations\n\
+  \        self.n_init = <your_strategy>\n\n        # Do not add any other arguments\
+  \ without a default value\n\n    def _sample_points(self, n_points):\n        #\
+  \ sample points\n        # return array of shape (n_points, n_dims)\n\n    def _fit_model(self,\
+  \ X, y):\n        # Fit and tune surrogate model \n        # return the model\n\
+  \        # Do not change the function signature\n\n    def _acquisition_function(self,\
+  \ X):\n        # Implement acquisition function \n        # calculate the acquisition\
+  \ function value for each point in X\n        # return array of shape (n_points,\
+  \ 1)\n\n    def _select_next_points(self, batch_size):\n        # Select the next\
+  \ points to evaluate\n        # Use a selection strategy to optimize/leverage the\
+  \ acquisition function \n        # The selection strategy can be any heuristic/evolutionary/mathematical/hybrid\
+  \ methods.\n        # Your decision should consider the problem characteristics,\
+  \ acquisition function, and the computational efficiency.\n        # return array\
+  \ of shape (batch_size, n_dims)\n\n    def _evaluate_points(self, func, X):\n  \
+  \      # Evaluate the points in X\n        # func: takes array of shape (n_dims,)\
+  \ and returns np.float64.\n        # return array of shape (n_points, 1)\n\n   \
+  \     self.n_evals += len(X)\n\n    def _update_eval_points(self, new_X, new_y):\n\
+  \        # Update self.X and self.y\n        # Do not change the function signature\n\
+  \n    def __call__(self, func:Callable[[np.ndarray], np.float64]) -> tuple[np.float64,\
+  \ np.array]:\n        # Main minimize optimization loop\n        # func: takes array\
+  \ of shape (n_dims,) and returns np.float64. \n        # !!! Do not call func directly.\
+  \ Use _evaluate_points instead and be aware of the budget when calling it. !!!\n\
+  \        # Return a tuple (best_y, best_x)\n\n        self._evaluate_points()\n\
+  \        self._update_eval_points()\n        while self.n_evals < budget:\n    \
+  \        # Optimization\n\n            # select points by acquisition function\n\
+  \            self._evaluate_points()\n            self._update_eval_points()\n\n\
+  \        return best_y, best_x\n```\n"
+no_bo_no_mini_bo: "\n```python\nimport numpy as np\n\nclass RandomSearch:\n    def\
+  \ __init__(self, budget=10000, dim=10):\n        self.budget = budget\n        self.dim\
+  \ = dim\n        # bounds has (2,<dimension>), bounds[0]: lower bound, bounds[1]:\
+  \ upper bound\n        self.bounds = np.array([[-5.0]*dim, [5.0]*dim])\n       \
+  \ self.f_opt = np.Inf\n        self.x_opt = None\n\n    def __call__(self, func):\n\
+  \        for i in range(self.budget):\n            x = np.random.uniform(self.bounds[0],\
+  \ self.bounds[1])\n\n            f = func(x)\n            if f < self.f_opt:\n \
+  \               self.f_opt = f\n                self.x_opt = x\n\n        return\
+  \ self.f_opt, self.x_opt\n```\n"

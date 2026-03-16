@@ -1,0 +1,226 @@
+initialize_solution_no_bo: 'The optimization algorithm should handle a wide range
+  of tasks, which is evaluated on the BBOB test suite of 24 noiseless functions. Your
+  task is to write the optimization algorithm in Python code. The code should contain
+  an `__init__(self, budget, dim)` function and the function `__call__(self, func)`,
+  which should optimize the black box function `func` using `self.budget` function
+  evaluations.
+
+  The func() can only be called as many times as the budget allows, not more. Each
+  of the optimization functions has a search space between -5.0 (lower bound) and
+  5.0 (upper bound). The dimensionality can be varied.
+
+  Give an excellent, novel and computationally efficient heuristic algorithm to solve
+  this task, give it a concise but comprehensive key-word-style description with the
+  main idea and justify your decision about the algorithm.'
+fix_errors_no_bo: 'The optimization algorithm should handle a wide range of tasks,
+  which is evaluated on the BBOB test suite of 24 noiseless functions. Your task is
+  to write the optimization algorithm in Python code. The code should contain an `__init__(self,
+  budget, dim)` function and the function `__call__(self, func)`, which should optimize
+  the black box function `func` using `self.budget` function evaluations.
+
+  The func() can only be called as many times as the budget allows, not more. Each
+  of the optimization functions has a search space between -5.0 (lower bound) and
+  5.0 (upper bound). The dimensionality can be varied.
+
+  Give an excellent, novel and computationally efficient heuristic algorithm to solve
+  this task, give it a concise but comprehensive key-word-style description with the
+  main idea and justify your decision about the algorithm.'
+fix_errors_from_error_no_bo: 'The optimization algorithm should handle a wide range
+  of tasks, which is evaluated on the BBOB test suite of 24 noiseless functions. Your
+  task is to write the optimization algorithm in Python code. The code should contain
+  an `__init__(self, budget, dim)` function and the function `__call__(self, func)`,
+  which should optimize the black box function `func` using `self.budget` function
+  evaluations.
+
+  The func() can only be called as many times as the budget allows, not more. Each
+  of the optimization functions has a search space between -5.0 (lower bound) and
+  5.0 (upper bound). The dimensionality can be varied.
+
+  Give an excellent, novel and computationally efficient heuristic algorithm to solve
+  this task, give it a concise but comprehensive key-word-style description with the
+  main idea and justify your decision about the algorithm.'
+optimize_performance_no_bo: 'The optimization algorithm should handle a wide range
+  of tasks, which is evaluated on the BBOB test suite of 24 noiseless functions. Your
+  task is to write the optimization algorithm in Python code. The code should contain
+  an `__init__(self, budget, dim)` function and the function `__call__(self, func)`,
+  which should optimize the black box function `func` using `self.budget` function
+  evaluations.
+
+  The func() can only be called as many times as the budget allows, not more. Each
+  of the optimization functions has a search space between -5.0 (lower bound) and
+  5.0 (upper bound). The dimensionality can be varied.
+
+  Give an excellent, novel and computationally efficient heuristic algorithm to solve
+  this task, give it a concise but comprehensive key-word-style description with the
+  main idea and justify your decision about the algorithm.'
+initialize_solution_bo: 'The optimization algorithm should handle a wide range of
+  tasks, which is evaluated on the BBOB test suite of 24 noiseless functions. Your
+  task is to write the optimization algorithm in Python code. The code should contain
+  an `__init__(self, budget, dim)` function and the function `__call__(self, func)`,
+  which should optimize the black box function `func` using `self.budget` function
+  evaluations.
+
+  The func() can only be called as many times as the budget allows, not more. Each
+  of the optimization functions has a search space between -5.0 (lower bound) and
+  5.0 (upper bound). The dimensionality can be varied.
+
+  As an expert of numpy, scipy, scikit-learn, torch, gpytorch, you are allowed to
+  use these libraries. Do not use any other libraries unless they cannot be replaced
+  by the above libraries.  Do not remove the comments from the code.
+
+  Name the class based on the characteristics of the algorithm with a template ''<characteristics>BO''.
+
+
+  Give an excellent, novel and computationally efficient Bayesian Optimization algorithm
+  to solve this task, give it a concise but comprehensive key-word-style description
+  with the main ideas and justify your decision about the algorithm.'
+fix_errors_bo: 'The optimization algorithm should handle a wide range of tasks, which
+  is evaluated on the BBOB test suite of 24 noiseless functions. Your task is to write
+  the optimization algorithm in Python code. The code should contain an `__init__(self,
+  budget, dim)` function and the function `__call__(self, func)`, which should optimize
+  the black box function `func` using `self.budget` function evaluations.
+
+  The func() can only be called as many times as the budget allows, not more. Each
+  of the optimization functions has a search space between -5.0 (lower bound) and
+  5.0 (upper bound). The dimensionality can be varied.
+
+  As an expert of numpy, scipy, scikit-learn, torch, gpytorch, you are allowed to
+  use these libraries. Do not use any other libraries unless they cannot be replaced
+  by the above libraries.  Do not remove the comments from the code.
+
+  Name the class based on the characteristics of the algorithm with a template ''<characteristics>BO''.
+
+
+  Give an excellent, novel and computationally efficient Bayesian Optimization algorithm
+  to solve this task, give it a concise but comprehensive key-word-style description
+  with the main ideas and justify your decision about the algorithm.'
+fix_errors_from_error_bo: 'The optimization algorithm should handle a wide range of
+  tasks, which is evaluated on the BBOB test suite of 24 noiseless functions. Your
+  task is to write the optimization algorithm in Python code. The code should contain
+  an `__init__(self, budget, dim)` function and the function `__call__(self, func)`,
+  which should optimize the black box function `func` using `self.budget` function
+  evaluations.
+
+  The func() can only be called as many times as the budget allows, not more. Each
+  of the optimization functions has a search space between -5.0 (lower bound) and
+  5.0 (upper bound). The dimensionality can be varied.
+
+  As an expert of numpy, scipy, scikit-learn, torch, gpytorch, you are allowed to
+  use these libraries. Do not use any other libraries unless they cannot be replaced
+  by the above libraries.  Do not remove the comments from the code.
+
+  Name the class based on the characteristics of the algorithm with a template ''<characteristics>BO''.
+
+
+  Give an excellent, novel and computationally efficient Bayesian Optimization algorithm
+  to solve this task, give it a concise but comprehensive key-word-style description
+  with the main ideas and justify your decision about the algorithm.'
+optimize_performance_bo: 'The optimization algorithm should handle a wide range of
+  tasks, which is evaluated on the BBOB test suite of 24 noiseless functions. Your
+  task is to write the optimization algorithm in Python code. The code should contain
+  an `__init__(self, budget, dim)` function and the function `__call__(self, func)`,
+  which should optimize the black box function `func` using `self.budget` function
+  evaluations.
+
+  The func() can only be called as many times as the budget allows, not more. Each
+  of the optimization functions has a search space between -5.0 (lower bound) and
+  5.0 (upper bound). The dimensionality can be varied.
+
+  As an expert of numpy, scipy, scikit-learn, torch, gpytorch, you are allowed to
+  use these libraries. Do not use any other libraries unless they cannot be replaced
+  by the above libraries.  Do not remove the comments from the code.
+
+  Name the class based on the characteristics of the algorithm with a template ''<characteristics>BO''.
+
+
+  Give an excellent, novel and computationally efficient Bayesian Optimization algorithm
+  to solve this task, give it a concise but comprehensive key-word-style description
+  with the main ideas and justify your decision about the algorithm.'
+initialize_solution_bo_with_gpu: 'The optimization algorithm should handle a wide
+  range of tasks, which is evaluated on the BBOB test suite of 24 noiseless functions.
+  Your task is to write the optimization algorithm in Python code. The code should
+  contain an `__init__(self, budget, dim)` function and the function `__call__(self,
+  func)`, which should optimize the black box function `func` using `self.budget`
+  function evaluations.
+
+  The func() can only be called as many times as the budget allows, not more. Each
+  of the optimization functions has a search space between -5.0 (lower bound) and
+  5.0 (upper bound). The dimensionality can be varied.
+
+  As an expert of numpy, scipy, scikit-learn, torch, gpytorch, you are allowed to
+  use these libraries, and using GPU for acceleration is mandatory. Do not use any
+  other libraries unless they cannot be replaced by the above libraries.  Do not remove
+  the comments from the code.
+
+  Name the class based on the characteristics of the algorithm with a template ''<characteristics>BO''.
+
+
+  Give an excellent, novel and computationally efficient Bayesian Optimization algorithm
+  to solve this task, give it a concise but comprehensive key-word-style description
+  with the main ideas and justify your decision about the algorithm.'
+fix_errors_bo_with_gpu: 'The optimization algorithm should handle a wide range of
+  tasks, which is evaluated on the BBOB test suite of 24 noiseless functions. Your
+  task is to write the optimization algorithm in Python code. The code should contain
+  an `__init__(self, budget, dim)` function and the function `__call__(self, func)`,
+  which should optimize the black box function `func` using `self.budget` function
+  evaluations.
+
+  The func() can only be called as many times as the budget allows, not more. Each
+  of the optimization functions has a search space between -5.0 (lower bound) and
+  5.0 (upper bound). The dimensionality can be varied.
+
+  As an expert of numpy, scipy, scikit-learn, torch, gpytorch, you are allowed to
+  use these libraries, and using GPU for acceleration is mandatory. Do not use any
+  other libraries unless they cannot be replaced by the above libraries.  Do not remove
+  the comments from the code.
+
+  Name the class based on the characteristics of the algorithm with a template ''<characteristics>BO''.
+
+
+  Give an excellent, novel and computationally efficient Bayesian Optimization algorithm
+  to solve this task, give it a concise but comprehensive key-word-style description
+  with the main ideas and justify your decision about the algorithm.'
+fix_errors_from_error_bo_with_gpu: 'The optimization algorithm should handle a wide
+  range of tasks, which is evaluated on the BBOB test suite of 24 noiseless functions.
+  Your task is to write the optimization algorithm in Python code. The code should
+  contain an `__init__(self, budget, dim)` function and the function `__call__(self,
+  func)`, which should optimize the black box function `func` using `self.budget`
+  function evaluations.
+
+  The func() can only be called as many times as the budget allows, not more. Each
+  of the optimization functions has a search space between -5.0 (lower bound) and
+  5.0 (upper bound). The dimensionality can be varied.
+
+  As an expert of numpy, scipy, scikit-learn, torch, gpytorch, you are allowed to
+  use these libraries, and using GPU for acceleration is mandatory. Do not use any
+  other libraries unless they cannot be replaced by the above libraries.  Do not remove
+  the comments from the code.
+
+  Name the class based on the characteristics of the algorithm with a template ''<characteristics>BO''.
+
+
+  Give an excellent, novel and computationally efficient Bayesian Optimization algorithm
+  to solve this task, give it a concise but comprehensive key-word-style description
+  with the main ideas and justify your decision about the algorithm.'
+optimize_performance_bo_with_gpu: 'The optimization algorithm should handle a wide
+  range of tasks, which is evaluated on the BBOB test suite of 24 noiseless functions.
+  Your task is to write the optimization algorithm in Python code. The code should
+  contain an `__init__(self, budget, dim)` function and the function `__call__(self,
+  func)`, which should optimize the black box function `func` using `self.budget`
+  function evaluations.
+
+  The func() can only be called as many times as the budget allows, not more. Each
+  of the optimization functions has a search space between -5.0 (lower bound) and
+  5.0 (upper bound). The dimensionality can be varied.
+
+  As an expert of numpy, scipy, scikit-learn, torch, gpytorch, you are allowed to
+  use these libraries, and using GPU for acceleration is mandatory. Do not use any
+  other libraries unless they cannot be replaced by the above libraries.  Do not remove
+  the comments from the code.
+
+  Name the class based on the characteristics of the algorithm with a template ''<characteristics>BO''.
+
+
+  Give an excellent, novel and computationally efficient Bayesian Optimization algorithm
+  to solve this task, give it a concise but comprehensive key-word-style description
+  with the main ideas and justify your decision about the algorithm.'
