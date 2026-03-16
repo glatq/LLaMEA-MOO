@@ -1,6 +1,7 @@
 import pytest
 import yaml
 from llamevol.evaluator import EvaluatorResult
+from llamevol.prompt_generators import MultiObjectivePromptGenerator
 from llamevol.prompt_generators.bl_prompt_generator import (
     BaselinePromptGenerator,
     BaselineResponseHandler,
@@ -426,3 +427,17 @@ def expected_response_handler_prompts():
         directories.test_data(filename="expected_response_handler_prompts.yaml"), "r"
     ) as file:
         return yaml.safe_load(file)
+
+
+@pytest.fixture
+def moo_config_dict():
+    with open(
+        directories.test_data(filename="moo_prompt_generator_for_tests.yaml"), "r"
+    ) as file:
+        return yaml.safe_load(file)
+
+
+@pytest.fixture
+def mopg(moo_config_dict):
+    pg = MultiObjectivePromptGenerator(moo_config_dict)
+    return pg

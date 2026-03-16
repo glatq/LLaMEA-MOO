@@ -3,11 +3,11 @@ import yaml
 import numpy as np
 from llamevol import directories
 from llamevol.prompt_generators.moo_prompt_generator import (
-    MultiObjectivePromptGenerator,
     BaselineResponseHandler,
 )
 from llamevol.prompt_generators.abstract_prompt_generator import GenerationTask
 from llamevol.evaluator.evaluator_result import EvaluatorResult, EvaluatorBasicResult
+from tests.conftest import mopg
 from tests.utils_for_tests import normalize_prompt
 
 
@@ -15,12 +15,6 @@ from tests.utils_for_tests import normalize_prompt
 def expected_prompts():
     with open(directories.test_data(filename="expected_prompts.yaml"), "r") as file:
         return yaml.safe_load(file)
-
-
-@pytest.fixture
-def mopg():
-    pg = MultiObjectivePromptGenerator()
-    return pg
 
 
 @pytest.fixture
