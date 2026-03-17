@@ -31,6 +31,22 @@ mo_search:
   is_ploting: False
 
 so_search:
+  budget: 100
+  dim: 5
+  problems : [
+        2,
+        4,
+        6,
+        8,
+        12,
+        14,
+        18,
+        15,
+        21,
+        23,
+    ]
+  instances: [[1], [1], [1], [1], [1], [1], [1], [1], [1], [1]]
+  repeat: 3
   n_parent: 1
   n_offspring: 1
   is_elitist: True

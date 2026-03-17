@@ -1,7 +1,7 @@
 import logging
 import getopt
 import sys
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 import hydra
 from llamevol.evaluator.multiobj_evaluator import MultiObjEvaluator, MOOProblemSpec
 from llamevol.prompt_generators import MultiObjectivePromptGenerator

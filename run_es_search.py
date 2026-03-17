@@ -1,6 +1,7 @@
 import logging
 import getopt
 import sys
+from omegaconf import DictConfig
 import hydra
 from llamevol.evaluator.ioh_evaluator import IOHEvaluator
 from llamevol.prompt_generators import BaselinePromptGenerator
@@ -9,28 +10,15 @@ from llamevol.llm import LLMmanager
 from llamevol import LLaMEvol
 from llamevol.utils import setup_logger
 from Experiments.plot_search_res import plot_search_result
-from omegaconf import DictConfig
 
 
-def get_IOHEvaluator():
-    budget = 100
-    dim = 5
-    problems = [
-        2,
-        4,
-        6,
-        8,
-        12,
-        14,
-        18,
-        15,
-        21,
-        23,
-    ]
-    instances = [[1]] * len(problems)
-    repeat = 3
+def get_IOHEvaluator(cfg):
     evaluator = IOHEvaluator(
-        budget=budget, dim=dim, problems=problems, instances=instances, repeat=repeat
+        budget=cfg.so_search.budget,
+        dim=cfg.so_search.dim,
+        problems=cfg.so_search.problems,
+        instances=cfg.so_search.instances,
+        repeat=cfg.so_search.repeat,
     )
     return evaluator
 
@@ -75,7 +63,7 @@ def get_es_population(es_options):
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def run_exp(cfg: DictConfig):
     # create an IOHEvaluator
-    evaluator = get_IOHEvaluator()
+    evaluator = get_IOHEvaluator(cfg)
     evaluator.timeout = (
         cfg.so_search.evaluator_timeout
     )  # set the timeout(seconds) for each evaluation(all tasks)
