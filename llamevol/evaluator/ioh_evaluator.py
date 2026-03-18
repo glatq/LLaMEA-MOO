@@ -1,6 +1,6 @@
 import random
 import logging
-from typing import Any
+from typing import Any, Optional
 import time
 import os
 import concurrent.futures
@@ -13,6 +13,21 @@ from .ioh_objective_provider import IOHProvider
 from .evaluator import AbstractEvaluator
 from .evaluator_result import EvaluatorResult, EvaluatorBasicResult
 from .exec_utils import default_exec, ExecInjector
+from ..configspace_ext.configspace_utils import extract_configspace_from_response
+
+try:
+    from .smac_hpo_wrapper_so import (
+        run_smac_hpo_so,
+        SMACHPOConfig,
+        validate_with_random_config,
+    )
+
+    HPO_AVAILABLE = True
+except ImportError:
+    HPO_AVAILABLE = False
+    logging.warning(
+        "SMAC HPO not available. Install with: pip install smac ConfigSpace"
+    )
 
 _logger = logging.getLogger(__name__)
 
@@ -256,6 +271,12 @@ class IOHEvaluator(AbstractEvaluator):
         problems: list[int] = None,
         instances: list[list[int]] = None,
         repeat: int = 1,
+        use_hpo: bool = False,  # Enable HPO mode
+        hpo_trials: int = 500,  # Number of SMAC trials
+        hpo_min_budget: int = 50,  # Min budget for multi-fidelity
+        hpo_max_budget: int = 200,  # Max budget for multi-fidelity
+        hpo_walltime: int = 3600,  # HPO time limit (1 hour)
+        hpo_validation_budget: int = 100,  # Budget for validation
     ):
         super().__init__()
         if (
@@ -310,6 +331,23 @@ class IOHEvaluator(AbstractEvaluator):
         self.dim = dim
         self.budget = budget
 
+        # HPO configuration
+        self.use_hpo = use_hpo and HPO_AVAILABLE
+        self.hpo_config = (
+            SMACHPOConfig(
+                n_trials=hpo_trials,
+                min_budget=hpo_min_budget,
+                max_budget=hpo_max_budget,
+                walltime_limit=hpo_walltime,
+            )
+            if self.use_hpo
+            else None
+        )
+        self.hpo_validation_budget = hpo_validation_budget
+
+        if use_hpo and not HPO_AVAILABLE:
+            _logger.warning("HPO requested but not available. Falling back to no HPO.")
+
         obj_fn_params = []
         for problem, instances in zip(self.problems, self.instances):
             for instance in instances:
@@ -330,6 +368,14 @@ class IOHEvaluator(AbstractEvaluator):
 
         self.timeout = 60 * 60  # 60 minutes
         self.provider = IOHProvider()
+
+        if self.use_hpo:
+            _logger.info("=" * 60)
+            _logger.info("SMAC HPO ENABLED")
+            _logger.info(f"  Trials: {hpo_trials}")
+            _logger.info(f"  Budget range: {hpo_min_budget}-{hpo_max_budget}")
+            _logger.info(f"  Walltime: {hpo_walltime}s")
+            _logger.info("=" * 60)
 
     def eval_bugdet(self) -> int:
         return self.budget
@@ -358,7 +404,9 @@ class IOHEvaluator(AbstractEvaluator):
 
         if err is not None:
             eval_basic_result.error = str(err)
-            eval_basic_result.error_type = err.error_type
+            eval_basic_result.error_type = getattr(
+                err, "error_type", err.__class__.__name__
+            )
 
         if eval_basic_result.error is None and self.return_checker is not None:
             # check the return value
@@ -509,14 +557,114 @@ class IOHEvaluator(AbstractEvaluator):
         cls_init_kwargs: dict[str, Any] = None,
         cls_call_kwargs: dict[str, Any] = None,
         injector=None,
+        llm_response: Optional[
+            str
+        ] = None,  # Full LLM response for ConfigSpace extraction
     ) -> EvaluatorResult:
-        """Evaluate an individual."""
+        """Evaluate an individual.
+
+        If use_hpo=True and a ConfigSpace is found:
+        1. Validate code with random config
+        2. Run SMAC HPO to find best hyperparameters
+        3. Evaluate with incumbent configuration
+
+        Args:
+            code: Algorithm code
+            cls_name: Algorithm class name
+            cls: Pre-compiled class (optional)
+            cls_init_kwargs: Additional init kwargs to merge with incumbent
+            cls_call_kwargs: Call kwargs
+            injector: Code injector
+            llm_response: Full LLM response (for ConfigSpace extraction)
+
+        Returns:
+            EvaluatorResult with incumbent stored in metadata
+        """
         eval_result = EvaluatorResult()
         eval_result.name = cls_name
         if code is None and cls is None:
             eval_result.error = "No code generated"
             eval_result.error_type = "NoCodeGenerated"
             return eval_result
+
+        # HPO Mode: Extract ConfigSpace and run SMAC
+        incumbent_dict = {}
+        if self.use_hpo and llm_response:
+            _logger.info(f"HPO mode enabled for {cls_name}")
+
+            # Extract ConfigSpace from LLM response
+            configspace = extract_configspace_from_response(llm_response)
+
+            if configspace is None or len(configspace) == 0:
+                _logger.warning(
+                    "No valid ConfigSpace found. Using default hyperparameters."
+                )
+                if not hasattr(eval_result, "metadata"):
+                    eval_result.metadata = {}
+                eval_result.metadata["hpo_error"] = "ConfigSpace not found or empty"
+            else:
+                _logger.info(
+                    f"ConfigSpace found with {len(configspace)} hyperparameters: {list(configspace.keys())}"
+                )
+
+                # Step 1: Quick validation with random config
+                validation_passed = validate_with_random_config(
+                    code=code,
+                    cls_name=cls_name,
+                    configspace=configspace,
+                    problem_id=self.problems[0],
+                    instance_id=self.instances[0][0],
+                    dim=self.dim,
+                    budget=self.hpo_validation_budget,
+                    injector=injector,
+                )
+
+                if not validation_passed:
+                    _logger.error("Validation failed. Skipping HPO.")
+                    if not hasattr(eval_result, "metadata"):
+                        eval_result.metadata = {}
+                    eval_result.metadata["hpo_error"] = "Validation failed"
+                else:
+                    # Step 2: Run SMAC HPO
+                    try:
+                        _logger.info("Starting SMAC HPO...")
+                        incumbent_dict, incumbent_aoc = run_smac_hpo_so(
+                            code=code,
+                            cls_name=cls_name,
+                            configspace=configspace,
+                            problem_ids=self.problems,
+                            instance_ids=self.instances,
+                            dim=self.dim,
+                            budget=self.budget,
+                            hpo_config=self.hpo_config,
+                            injector=injector,
+                        )
+
+                        _logger.info(
+                            f"SMAC completed. Incumbent: {incumbent_dict}, AOC: {incumbent_aoc:.4f}"
+                        )
+                        if not hasattr(eval_result, "metadata"):
+                            eval_result.metadata = {}
+                        eval_result.metadata["incumbent"] = incumbent_dict
+                        eval_result.metadata["incumbent_aoc"] = incumbent_aoc
+
+                    except Exception as e:
+                        _logger.error(f"HPO failed: {e}")
+                        if not hasattr(eval_result, "metadata"):
+                            eval_result.metadata = {}
+                        eval_result.metadata["hpo_error"] = str(e)
+                        incumbent_dict = {}
+
+        # Merge incumbent with any additional init kwargs
+        final_init_kwargs = dict(incumbent_dict) if incumbent_dict else {}
+        if cls_init_kwargs:
+            final_init_kwargs.update(cls_init_kwargs)
+
+        # Step 3: Final evaluation with incumbent (or defaults)
+        _logger.info(f"Running final evaluation with config: {final_init_kwargs}")
+
+        # Continue with regular evaluation using final_init_kwargs
+        cls_init_kwargs = final_init_kwargs if final_init_kwargs else cls_init_kwargs
 
         if self.gpu_name is not None and code is not None:
             code = ExecInjector.inject_code_with_device(code, self.gpu_name)

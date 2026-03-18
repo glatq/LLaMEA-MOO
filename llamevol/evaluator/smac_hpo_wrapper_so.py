@@ -1,4 +1,4 @@
-"""SMAC-based hyperparameter optimization wrapper for multi-objective algorithms."""
+"""SMAC-based hyperparameter optimization wrapper for single-objective algorithms."""
 
 import logging
 import time
@@ -6,8 +6,7 @@ import numpy as np
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 
-from pymoo.indicators.hv import HV
-from .PymooMOProvider import PymooMOProvider
+from .ioh_objective_provider import IOHProvider
 from .exec_utils import default_exec
 
 try:
@@ -36,30 +35,59 @@ class SMACHPOConfig:
     deterministic: bool = False
 
 
-def run_smac_hpo_moo(
+def compute_aoc_score(y_hist, budget, optimal_value, lower=1e-8, upper=1e4):
+    """
+    Compute Area-Over-Curve (AOC) score for single-objective optimization.
+
+    This is the same metric used in IOHEvaluator.
+    Higher AOC is better (closer to 1.0 means better performance).
+    """
+    if y_hist is None or len(y_hist) == 0:
+        return 0.0
+
+    y = np.array(y_hist).reshape(-1)
+    best = np.minimum.accumulate(y)
+
+    if optimal_value is not None:
+        best = best - optimal_value
+
+    best = best[:budget] if len(best) > budget else best
+    best = np.clip(best, lower, upper)
+    logbest = np.log10(best)
+    lo, hi = np.log10(lower), np.log10(upper)
+    a = np.clip((logbest - lo) / (hi - lo), 0.0, 1.0)
+
+    return float(1.0 - np.sum(a) / budget)
+
+
+def run_smac_hpo_so(
     code: str,
     cls_name: str,
     configspace: ConfigurationSpace,
-    problem_specs: List[Any],
+    problem_ids: List[int],
+    instance_ids: List[List[int]],
+    dim: int,
     budget: int,
     hpo_config: Optional[SMACHPOConfig] = None,
     injector: Any = None,
 ) -> Tuple[Dict[str, Any], float]:
-    """Run SMAC HPO for multi-objective optimization algorithm.
+    """Run SMAC HPO for single-objective optimization algorithm.
 
     Args:
         code: Python code containing the algorithm class
         cls_name: Name of the algorithm class
         configspace: ConfigurationSpace defining hyperparameter search space
-        problem_specs: List of MOOProblemSpec objects to optimize on
+        problem_ids: List of IOH problem IDs to optimize on
+        instance_ids: List of instance IDs for each problem
+        dim: Problem dimension
         budget: Evaluation budget per problem instance
         hpo_config: SMAC configuration (uses defaults if None)
         injector: Optional code injector for modifying algorithm behavior
 
     Returns:
-        Tuple of (incumbent_dict, incumbent_hv):
+        Tuple of (incumbent_dict, incumbent_aoc):
             - incumbent_dict: Best hyperparameter configuration found
-            - incumbent_hv: Best average hypervolume achieved
+            - incumbent_aoc: Best average AOC score achieved
 
     Raises:
         RuntimeError: If SMAC is not available
@@ -72,47 +100,49 @@ def run_smac_hpo_moo(
     if hpo_config is None:
         hpo_config = SMACHPOConfig()
 
+    # Create flat list of (problem_id, instance_id) pairs
+    problem_instances = []
+    for prob_id, inst_list in zip(problem_ids, instance_ids):
+        for inst_id in inst_list:
+            problem_instances.append((prob_id, inst_id))
+
     logging.info(f"Starting SMAC HPO for {cls_name}")
     logging.info(f"  ConfigSpace: {len(configspace)} hyperparameters")
-    logging.info(f"  Problems: {len(problem_specs)}")
-    logging.info(f"  Budget per problem: {budget}")
+    logging.info(f"  Problem-Instance pairs: {len(problem_instances)}")
+    logging.info(f"  Budget per instance: {budget}")
     logging.info(f"  SMAC trials: {hpo_config.n_trials}")
+
+    provider = IOHProvider()
 
     def objective_function(
         config: Configuration, instance: str, seed: int = 0
     ) -> float:
         """
-        SMAC objective function: minimize (1 - average_hypervolume).
+        SMAC objective function: minimize (1 - AOC).
 
         Args:
             config: Hyperparameter configuration to evaluate
-            instance: Problem instance identifier (index into problem_specs)
+            instance: Problem instance identifier (index into problem_instances)
             seed: Random seed for reproducibility
 
         Returns:
-            Score to minimize (1 - hypervolume, so lower is better)
+            Score to minimize (1 - AOC, so lower is better)
         """
-        # Parse instance string to get problem index
+        # Parse instance string to get problem-instance pair index
         try:
-            prob_idx = int(instance)
+            pair_idx = int(instance)
         except ValueError:
             logging.error(f"Invalid instance format: {instance}")
             return 1.0  # Worst possible score
 
-        if prob_idx < 0 or prob_idx >= len(problem_specs):
-            logging.error(f"Instance index out of range: {prob_idx}")
+        if pair_idx < 0 or pair_idx >= len(problem_instances):
+            logging.error(f"Instance index out of range: {pair_idx}")
             return 1.0
 
-        problem_spec = problem_specs[prob_idx]
+        problem_id, instance_id = problem_instances[pair_idx]
 
-        # Get problem from provider
-        provider = PymooMOProvider()
-        wrapper = provider.get(
-            problem_id=problem_spec.name,
-            dim=problem_spec.dim,
-            ref_point=problem_spec.ref_point,
-            n_obj=problem_spec.n_obj,
-        )
+        # Get IOH problem
+        problem = provider.get(problem_id, instance_id, dim)
 
         # Track evaluations
         y_hist = []
@@ -120,10 +150,11 @@ def run_smac_hpo_moo(
         def func(x):
             """Evaluation function that tracks history."""
             if len(y_hist) >= budget:
-                return np.zeros(wrapper.n_obj)
+                # Return dummy value if budget exceeded
+                return 0.0
 
-            y = wrapper(np.asarray(x).ravel())
-            y_hist.append(y)
+            y = problem(x)
+            y_hist.append(float(y))
             return y
 
         # Set random seed
@@ -131,9 +162,8 @@ def run_smac_hpo_moo(
 
         # Prepare init_kwargs with fixed parameters + hyperparameters from config
         init_kwargs = {
+            "dim": dim,
             "budget": budget,
-            "dim": problem_spec.dim,
-            "bounds": wrapper.bounds,
             **dict(config),  # Unpack hyperparameters from SMAC config
         }
 
@@ -149,49 +179,49 @@ def run_smac_hpo_moo(
             )
 
             if err:
-                logging.debug(f"Algorithm failed on {problem_spec.name}: {err}")
+                logging.debug(
+                    f"Algorithm failed on problem {problem_id} instance {instance_id}: {err}"
+                )
                 return 1.0  # Worst score for failed runs
 
         except Exception as e:
-            logging.debug(f"Execution error on {problem_spec.name}: {e}")
+            logging.debug(
+                f"Execution error on problem {problem_id} instance {instance_id}: {e}"
+            )
             return 1.0
 
-        # Calculate hypervolume
+        # Calculate AOC score
         if len(y_hist) == 0:
-            logging.warning(f"No evaluations recorded for {problem_spec.name}")
+            logging.warning(
+                f"No evaluations recorded for problem {problem_id} instance {instance_id}"
+            )
             return 1.0
 
         try:
-            Y = np.array(y_hist)
-            ref_point = (
-                np.array(problem_spec.ref_point)
-                if problem_spec.ref_point
-                else np.ones(wrapper.n_obj) * 1.2
-            )
+            optimal_value = problem.optimum_y
+            aoc = compute_aoc_score(y_hist, budget, optimal_value)
 
-            hv_indicator = HV(ref_point=ref_point)
-            hv = hv_indicator(Y)
-
-            # SMAC minimizes, so return negative HV (or 1 - normalized_hv)
-            # Using 1 - hv to keep scores in [0, 1] range
-            score = 1.0 - hv if hv > 0 else 1.0
+            # SMAC minimizes, so return 1 - AOC
+            score = 1.0 - aoc
 
             logging.debug(
-                f"  {problem_spec.name}: HV={hv:.4f}, score={score:.4f}, "
+                f"  Problem {problem_id} Instance {instance_id}: AOC={aoc:.4f}, score={score:.4f}, "
                 f"evals={len(y_hist)}, config={dict(config)}"
             )
 
             return float(score)
 
         except Exception as e:
-            logging.error(f"HV calculation error on {problem_spec.name}: {e}")
+            logging.error(
+                f"AOC calculation error on problem {problem_id} instance {instance_id}: {e}"
+            )
             return 1.0
 
-    # Create instance strings (one per problem)
-    instances = [str(i) for i in range(len(problem_specs))]
+    # Create instance strings (one per problem-instance pair)
+    instances = [str(i) for i in range(len(problem_instances))]
 
     # Create instance features (problem characteristics)
-    # Using problem index as a simple feature
+    # Using pair index as a simple feature
     instance_features = {inst: [float(i)] for i, inst in enumerate(instances)}
 
     # Setup SMAC scenario with unique name to avoid conflicts
@@ -256,28 +286,30 @@ def run_smac_hpo_moo(
     # Convert incumbent to dictionary
     incumbent_dict = dict(incumbent)
 
-    # Calculate incumbent's average HV across all problems
-    logging.info("Evaluating incumbent on all problems...")
-    hvs = []
-    for i, problem_spec in enumerate(problem_specs):
+    # Calculate incumbent's average AOC across all problem-instance pairs
+    logging.info("Evaluating incumbent on all problem-instance pairs...")
+    aocs = []
+    for i in range(len(problem_instances)):
         score = objective_function(incumbent, str(i), seed=0)
-        hv = 1.0 - score  # Convert back to hypervolume
-        hvs.append(hv)
+        aoc = 1.0 - score  # Convert back to AOC
+        aocs.append(aoc)
 
-    incumbent_hv = float(np.mean(hvs))
+    incumbent_aoc = float(np.mean(aocs))
 
     logging.info(f"Incumbent configuration: {incumbent_dict}")
-    logging.info(f"Incumbent average HV: {incumbent_hv:.4f}")
-    logging.info(f"  HV per problem: {[f'{hv:.4f}' for hv in hvs]}")
+    logging.info(f"Incumbent average AOC: {incumbent_aoc:.4f}")
+    logging.info(f"  AOC per problem-instance: {[f'{aoc:.4f}' for aoc in aocs]}")
 
-    return incumbent_dict, incumbent_hv
+    return incumbent_dict, incumbent_aoc
 
 
 def validate_with_random_config(
     code: str,
     cls_name: str,
     configspace: ConfigurationSpace,
-    problem_spec: Any,
+    problem_id: int,
+    instance_id: int,
+    dim: int,
     budget: int = 100,
     injector: Any = None,
 ) -> bool:
@@ -290,7 +322,9 @@ def validate_with_random_config(
         code: Algorithm code
         cls_name: Algorithm class name
         configspace: Configuration space
-        problem_spec: Single problem to test on
+        problem_id: IOH problem ID to test on
+        instance_id: IOH instance ID to test on
+        dim: Problem dimension
         budget: Small budget for validation
         injector: Optional code injector
 
@@ -308,14 +342,9 @@ def validate_with_random_config(
         config = configspace.sample_configuration()
         logging.info(f"  Test config: {dict(config)}")
 
-        # Get problem
-        provider = PymooMOProvider()
-        wrapper = provider.get(
-            problem_id=problem_spec.name,
-            dim=problem_spec.dim,
-            ref_point=problem_spec.ref_point,
-            n_obj=problem_spec.n_obj,
-        )
+        # Get IOH problem
+        provider = IOHProvider()
+        problem = provider.get(problem_id, instance_id, dim)
 
         # Simple eval function
         eval_count = [0]
@@ -323,14 +352,13 @@ def validate_with_random_config(
         def func(x):
             eval_count[0] += 1
             if eval_count[0] > budget:
-                return np.zeros(wrapper.n_obj)
-            return wrapper(np.asarray(x).ravel())
+                return 0.0
+            return problem(x)
 
         # Try to execute
         init_kwargs = {
+            "dim": dim,
             "budget": budget,
-            "dim": problem_spec.dim,
-            "bounds": wrapper.bounds,
             **dict(config),
         }
 

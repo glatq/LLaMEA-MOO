@@ -13,13 +13,36 @@ from Experiments.plot_search_res import plot_search_result
 
 
 def get_IOHEvaluator(cfg):
+    # HPO configuration (if enabled in config)
+    use_hpo = cfg.so_search.get("use_hpo", False)
+    hpo_trials = cfg.so_search.get("hpo_trials", 500)
+    hpo_min_budget = cfg.so_search.get("hpo_min_budget", 50)
+    hpo_max_budget = cfg.so_search.get("hpo_max_budget", 200)
+    hpo_walltime = cfg.so_search.get("hpo_walltime", 3600)
+    hpo_validation_budget = cfg.so_search.get("hpo_validation_budget", 20)
+
     evaluator = IOHEvaluator(
         budget=cfg.so_search.budget,
         dim=cfg.so_search.dim,
         problems=cfg.so_search.problems,
         instances=cfg.so_search.instances,
         repeat=cfg.so_search.repeat,
+        use_hpo=use_hpo,
+        hpo_trials=hpo_trials,
+        hpo_min_budget=hpo_min_budget,
+        hpo_max_budget=hpo_max_budget,
+        hpo_walltime=hpo_walltime,
+        hpo_validation_budget=hpo_validation_budget,
     )
+
+    if use_hpo:
+        logging.info("=" * 60)
+        logging.info("SMAC HPO ENABLED")
+        logging.info(f"  Trials: {hpo_trials}")
+        logging.info(f"  Budget range: {hpo_min_budget}-{hpo_max_budget}")
+        logging.info(f"  Walltime: {hpo_walltime}s")
+        logging.info("=" * 60)
+
     return evaluator
 
 
