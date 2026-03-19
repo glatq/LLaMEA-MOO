@@ -9,7 +9,6 @@ from llamevol.population import ESPopulation
 from llamevol.llm import LLMmanager
 from llamevol import LLaMEvol
 from llamevol.utils import setup_logger
-from Experiments.plot_search_res import plot_search_result
 
 
 def get_IOHEvaluator(cfg):
@@ -144,12 +143,11 @@ def run_exp(cfg: DictConfig):
 if __name__ == "__main__":
     setup_logger(level=logging.INFO)
 
-    is_ploting = False
-
     opts, args = getopt.getopt(
         sys.argv[1:],
-        "p:o:k:en:f",
+        "p:o:k:en:",
     )
+
     for opt, arg in opts:
         if opt == "-p":
             n_parents = int(arg)
@@ -161,14 +159,5 @@ if __name__ == "__main__":
             is_elitist = True
         elif opt == "-n":
             n_population = int(arg)
-        elif opt == "-f":
-            is_ploting = True
-
-    if is_ploting:
-        # plot the search results: combine all the log files with 'final' suffix
-        print("Plotting the search results...")
-        log_dir = "exp_es_search"
-        plot_search_result(log_dir, fig_dir=log_dir)
-        sys.exit(0)
 
     run_exp()
