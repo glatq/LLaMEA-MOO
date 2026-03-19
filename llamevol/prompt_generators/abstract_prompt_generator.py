@@ -1,70 +1,8 @@
 from abc import ABC, abstractmethod
-from enum import Enum
-from typing import Any
 from llamevol.evaluator import EvaluatorResult
-from llamevol.population import (
-    Population,
-)  # FIXME: prompt generators should not be coupled with the individual and population classes
-
-
-class GenerationTask(Enum):
-    """Enum class for generation tasks."""
-
-    INITIALIZE_SOLUTION = 0
-    FIX_ERRORS = 1
-    FIX_ERRORS_FROM_ERROR = 2
-    OPTIMIZE_PERFORMANCE = 3
-
-
-class ResponseHandler(ABC):
-    """Abstract base class for response handler."""
-
-    def __init__(self):
-        self.sys_prompt = ""
-        self.prompt = ""
-        self.raw_response = ""
-        self.llm_model = ""
-
-        self.code = ""
-        self.code_name = ""
-
-        self.feedback = ""
-        self.error = None
-        self.error_type = None
-
-        self._eval_result: EvaluatorResult = None
-
-        self.parent_ids = []
-
-        self.query_time = 0
-        self.prompt_token_count = 0
-        self.response_token_count = 0
-
-    @property
-    def eval_result(self) -> EvaluatorResult:
-        return self._eval_result
-
-    @eval_result.setter
-    def eval_result(self, value: EvaluatorResult):
-        if value is not None and value.error is not None:
-            self.error = value.error
-            self.error_type = value.error_type
-        self._eval_result = value
-
-    @abstractmethod
-    def extract_response(self, response: str, task: GenerationTask) -> None:
-        pass
-
-    def __to_json__(self) -> dict:
-        d = {
-            "code": self.code,
-            "code_name": self.code_name,
-            "raw_response": self.raw_response,
-            "error": self.error,
-            "error_type": self.error_type,
-            "eval_result": self.eval_result.__to_json__(),
-        }
-        return d
+from .types import GenerationTask
+from .prompt_strings import PromptStrings
+from .response_handler import BaselineResponseHandler
 
 
 class ResponseImpReturnChecker(ABC):
@@ -78,17 +16,91 @@ class ResponseImpReturnChecker(ABC):
 class PromptGenerator(ABC):
     """Abstract base class for prompt generators."""
 
+    def __init__(self, conf=None):
+        if conf is not None:
+            self.prompt_strings = PromptStrings(**conf["prompts"])
+            self.is_bo = conf["is_bo"]
+            self.use_mini_bo = conf["use_mini_bo"]
+            self.use_cuda = conf["use_cuda"]
+            self.problem_desc = conf["problem_desc"]
+
+    def __str__(self):
+        suffix = ""
+        if hasattr(self, "is_bo") and self.is_bo:
+            if hasattr(self, "use_mini_bo") and self.use_mini_bo:
+                suffix = "MiniBO"
+            else:
+                suffix = "BO"
+        return f"{suffix}{self.__class__.__name__}"
+
     def task_description(self, task: GenerationTask) -> str:
-        pass
+        if self.is_bo:
+            return self._bo_task_description(task)
+        return self._task_description(task)
+
+    def _bo_task_description(self, task):
+        if self.use_cuda:
+            lib_prompt = self.prompt_strings.bo_lib_prompt_gpu
+        else:
+            lib_prompt = self.prompt_strings.bo_lib_prompt_cpu
+
+        return self.prompt_strings.bo_task_prompt_template.format(
+            problem_desc=self.problem_desc, lib_prompt=lib_prompt
+        )
+
+    def _task_description(self, task: GenerationTask) -> str:
+        return self.prompt_strings.general_task_prompt.format(
+            problem_desc=self.problem_desc
+        )
 
     def task_instruction(self, task: GenerationTask) -> str:
         """explicit COT of the task accomplishment"""
+        pass
 
     def code_structure(self) -> str:
-        pass
+        if self.is_bo:
+            if self.use_mini_bo:
+                return self._mini_bo_code_structure()
+            return self._bo_code_structure()
+        return self._code_structure()
+
+    def _code_structure(self) -> str:
+        return self.prompt_strings.code_structure_template
+
+    def _mini_bo_code_structure(self) -> str:
+        return self.prompt_strings.mini_bo_code_structure_template
+
+    def _bo_code_structure(self) -> str:
+        return self.prompt_strings.bo_code_structure_template
 
     def response_format(self, task: GenerationTask) -> str:
-        pass
+        return self.prompt_strings.output_format_prompt
+
+    def _get_candidate_prompt(self, candidate) -> str:
+        description = candidate.desc
+        solution = self.prompt_strings.candidate_code_wrapper.format(
+            code=candidate.code
+        )
+
+        if candidate.error:
+            if candidate.error_type == "NoCodeException":
+                feedback = self.prompt_strings.no_code_exception_msg
+            else:
+                feedback = self.prompt_strings.general_error_msg.format(
+                    error=candidate.error
+                )
+        else:
+            feedback = self.evaluation_feedback_prompt(candidate.eval_result)
+
+        return self.prompt_strings.candidate_prompt_template.format(
+            description=description, solution=solution, feedback=feedback
+        )
+
+    def get_response_handler(self):
+        return BaselineResponseHandler()
+
+    def get_return_checker(self):
+        return None
 
     @abstractmethod
     def evaluation_feedback_prompt(
@@ -101,15 +113,8 @@ class PromptGenerator(ABC):
         self,
         task: GenerationTask,
         problem_desc: str,
-        candidates: list[ResponseHandler] = None,
-        population: Population = None,
+        candidates=None,
+        population=None,
         options: dict = None,
     ) -> tuple[str, str]:
         pass
-
-    @abstractmethod
-    def get_response_handler(self) -> ResponseHandler:
-        pass
-
-    def get_return_checker(self) -> ResponseImpReturnChecker:
-        return None

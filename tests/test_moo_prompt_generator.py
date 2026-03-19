@@ -3,10 +3,10 @@ import yaml
 import numpy as np
 from llamevol import directories
 from llamevol.prompt_generators.moo_prompt_generator import (
-    BaselineResponseHandler,
+    MooResponseHandler,
 )
-from llamevol.prompt_generators.abstract_prompt_generator import GenerationTask
-from llamevol.evaluator.evaluator_result import EvaluatorResult, EvaluatorBasicResult
+from llamevol.prompt_generators.types import GenerationTask
+from llamevol.evaluator.evaluator_result import EvaluatorBasicResult
 from tests.conftest import mopg
 from tests.utils_for_tests import normalize_prompt
 
@@ -50,7 +50,7 @@ def test_code_structure(mopg, expected_prompts):
 
 def test_response_handler(mopg, expected_prompts):
     rh = mopg.get_response_handler()
-    assert type(rh) is BaselineResponseHandler
+    assert type(rh) is MooResponseHandler
 
 
 def make_basic_result(id_str: str, hv: float) -> EvaluatorBasicResult:

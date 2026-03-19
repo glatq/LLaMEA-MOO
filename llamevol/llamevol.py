@@ -7,15 +7,13 @@ import logging
 import time
 import concurrent.futures
 import numpy as np
-import torch
-from tqdm import tqdm
-
 from .population.population import Population, PopulationQueryItem
-from .individual import Individual
 from .llm import LLMmanager
-from .prompt_generators import PromptGenerator, GenerationTask, ResponseHandler
-from .utils import IndividualLogger, NoCodeException
-from .evaluator import EvaluatorResult, AbstractEvaluator
+from .prompt_generators.abstract_prompt_generator import PromptGenerator
+from .prompt_generators.types import GenerationTask
+from .prompt_generators.response_handler import ResponseHandler
+from .utils import NoCodeException
+from .evaluator import AbstractEvaluator
 
 
 class LLaMEvolTokenLogItem:

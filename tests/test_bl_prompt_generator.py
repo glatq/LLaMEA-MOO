@@ -1,7 +1,5 @@
-from llamevol.prompt_generators.abstract_prompt_generator import GenerationTask
-from llamevol.prompt_generators.bl_prompt_generator import (
-    BaselineResponseHandler,
-)
+from llamevol.prompt_generators.response_handler import BaselineResponseHandler
+from llamevol.prompt_generators.types import GenerationTask
 from .conftest import bl_get_prompt
 
 from .utils_for_tests import normalize_prompt, make_basic_result

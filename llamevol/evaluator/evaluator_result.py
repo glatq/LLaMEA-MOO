@@ -3,7 +3,7 @@ import re
 import math
 import numpy as np
 from sklearn.cluster import DBSCAN
-from scipy.spatial import distance, ConvexHull
+from scipy.spatial import distance
 from scipy.special import gamma
 
 

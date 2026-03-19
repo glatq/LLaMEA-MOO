@@ -1,11 +1,11 @@
 import pytest
-from llamevol.prompt_generators.moo_prompt_generator import BaselineResponseHandler
-from llamevol.prompt_generators.abstract_prompt_generator import GenerationTask
+from llamevol.prompt_generators.moo_prompt_generator import MooResponseHandler
+from llamevol.prompt_generators.types import GenerationTask
 
 
 @pytest.fixture
 def baseline_rh():
-    rh = BaselineResponseHandler()
+    rh = MooResponseHandler()
     return rh
 
 

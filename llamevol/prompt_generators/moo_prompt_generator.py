@@ -1,13 +1,14 @@
-from .abstract_prompt_generator import PromptGenerator, ResponseHandler, GenerationTask
+from .abstract_prompt_generator import PromptGenerator
+from .response_handler import ResponseHandler
+from .types import GenerationTask
 import re
 import numpy as np
 from .load_default_prompt_configurations import load_default_moo_prompt_config
 from ..evaluator import EvaluatorResult
 from ..population import Population
-from .prompt_strings import PromptStrings
 
 
-class BaselineResponseHandler(ResponseHandler):
+class MooResponseHandler(ResponseHandler):
     def __init__(self):
         super().__init__()
         self.desc = ""
@@ -71,64 +72,9 @@ class BaselineResponseHandler(ResponseHandler):
 
 class MultiObjectivePromptGenerator(PromptGenerator):
     def __init__(self, conf=None):
-        super().__init__()
-
         if conf is None:
             conf = load_default_moo_prompt_config()
-
-        self.prompt_strings = PromptStrings(**conf["prompts"])
-        self.is_bo = conf["is_bo"]
-        self.use_mini_bo = conf["use_mini_bo"]
-        self.use_cuda = conf["use_cuda"]
-        self.problem_desc = conf["problem_desc"]
-
-    def __str__(self):
-        suffix = ""
-        if self.is_bo:
-            if self.use_mini_bo:
-                suffix = "MiniBO"
-            else:
-                suffix = "BO"
-        return f"{suffix}MultiObjectivePromptGenerator"
-
-    def task_description(self, task: GenerationTask) -> str:
-        if self.is_bo:
-            return self.__bo_task_description(task)
-        return self.__task_description(task)
-
-    def __bo_task_description(self, task):
-        if self.use_cuda:
-            lib_prompt = self.prompt_strings.bo_lib_prompt_gpu
-        else:
-            lib_prompt = self.prompt_strings.bo_lib_prompt_cpu
-
-        return self.prompt_strings.bo_task_prompt_template.format(
-            problem_desc=self.problem_desc, lib_prompt=lib_prompt
-        )
-
-    def __task_description(self, task: GenerationTask) -> str:
-        return self.prompt_strings.general_task_prompt.format(
-            problem_desc=self.problem_desc
-        )
-
-    def response_format(self, task: GenerationTask) -> str:
-        return self.prompt_strings.output_format_prompt
-
-    def code_structure(self):
-        if self.is_bo:
-            if self.use_mini_bo:
-                return self.__mini_bo_code_structure()
-            return self.__bo_code_structure()
-        return self.__code_structure()
-
-    def __code_structure(self) -> str:
-        return self.prompt_strings.code_structure_template
-
-    def __bo_code_structure(self) -> str:
-        return self.prompt_strings.bo_code_structure_template
-
-    def __mini_bo_code_structure(self) -> str:
-        return self.prompt_strings.mini_bo_code_structure_template
+        super().__init__(conf)
 
     def evaluation_feedback_prompt(
         self, eval_res: EvaluatorResult, options=None
@@ -142,13 +88,9 @@ class MultiObjectivePromptGenerator(PromptGenerator):
         for _ in range(5):
             grouped_hvs.append([])
         for res in eval_res.result:
-            # We stored negative HV as log_y_aoc in the evaluator.
-            # Convert back to positive HV for human-readable feedback.
             hv = res.best_y
             hvs.append(hv)
 
-            # Original ID format in the SO/IOH case was "<int>-<int>-<int>".
-            # In the new MO/Pymoo case it is something like "zdt1-1-1" or "dtlz2-1-3".
             res_id = res.id or ""
             parts = res_id.split("-")
 
@@ -156,8 +98,6 @@ class MultiObjectivePromptGenerator(PromptGenerator):
             raw_instance = parts[1] if len(parts) > 1 else ""
             raw_repeat = parts[2] if len(parts) > 2 else ""
 
-            # Try to interpret the problem id as an integer (IOH-style).
-            # If that fails, we keep it as a string (Pymoo-style).
             try:
                 problem_num = int(raw_problem)
             except ValueError:
@@ -173,8 +113,6 @@ class MultiObjectivePromptGenerator(PromptGenerator):
             except ValueError:
                 repeat_id = None
 
-            # Grouping logic is meaningful only for the original IOH numeric ids.
-            # For non-numeric ids (Pymoo problems), just assign them to the last group.
             if problem_num is not None:
                 if problem_num <= 5:
                     group_idx = 0
@@ -188,7 +126,6 @@ class MultiObjectivePromptGenerator(PromptGenerator):
                     group_idx = 4
                 problem_id_for_content = problem_num
             else:
-                # Pymoo named problems, e.g. "zdt1", "dtlz2", etc.
                 group_idx = 4
                 problem_id_for_content = raw_problem
 
@@ -237,7 +174,6 @@ class MultiObjectivePromptGenerator(PromptGenerator):
             algorithm_name=algorithm_name, hv_mean=hv_mean, hv_std=hv_std
         )
 
-        # Add HPO feedback if incumbent hyperparameters are available
         hpo_prompt = ""
         if hasattr(eval_res, "metadata") and eval_res.metadata:
             if "incumbent" in eval_res.metadata and eval_res.metadata["incumbent"]:
@@ -250,48 +186,27 @@ class MultiObjectivePromptGenerator(PromptGenerator):
 
         return final_feedback_prompt
 
-    def __get_candidate_prompt(self, candidate: BaselineResponseHandler) -> str:
-        description = candidate.desc
-        solution = self.prompt_strings.candidate_code_wrapper.format(
-            code=candidate.code
-        )
-        if candidate.error:
-            if candidate.error_type == "NoCodeException":
-                feedback = self.prompt_strings.no_code_exception_msg
-            else:
-                feedback = self.prompt_strings.general_error_msg.format(
-                    error=candidate.error
-                )
-        else:
-            feedback = self.evaluation_feedback_prompt(candidate.eval_result)
-
-        return self.prompt_strings.candidate_prompt_template.format(
-            description=description, solution=solution, feedback=feedback
-        )
-
     def get_prompt(
         self,
         task: GenerationTask,
         problem_desc: str,
-        candidates: list[BaselineResponseHandler] = None,
+        candidates: list[MooResponseHandler] = None,
         population: Population = None,
         options: dict = None,
     ) -> tuple[str, str]:
         role_prompt = self.prompt_strings.role_prompt
-
         task_prompt = self.task_description(task)
-
         response_format_prompt = self.response_format(task=task)
 
         if task == GenerationTask.INITIALIZE_SOLUTION:
             pre_solution_prompt = ""
-            if len(candidates) > 0:
+            if candidates and len(candidates) > 0:
                 n_solution = len(candidates)
                 pre_solution_prompt = (
                     f"{n_solution} {self.prompt_strings.pre_solution_prompt_template}"
                 )
                 for i, candidate in enumerate(candidates):
-                    candidate_prompt = self.__get_candidate_prompt(candidate)
+                    candidate_prompt = self._get_candidate_prompt(candidate)
                     pre_solution_prompt += (
                         f"## {candidate.code_name}\n{candidate_prompt}\n"
                     )
@@ -304,17 +219,16 @@ class MultiObjectivePromptGenerator(PromptGenerator):
         else:
             if len(candidates) > 1:
                 crossover_operator = self.prompt_strings.crossover_operator
-
                 selected_prompt = self.prompt_strings.selected_solutions_intro
 
                 for candidate in candidates:
-                    candidate_prompt = self.__get_candidate_prompt(candidate)
+                    candidate_prompt = self._get_candidate_prompt(candidate)
                     selected_prompt += f"## {candidate.code_name}\n{candidate_prompt}\n"
 
                 selected_prompt += f"{crossover_operator}\n"
             else:
                 candidate = candidates[0]
-                candidate_prompt = self.__get_candidate_prompt(candidate)
+                candidate_prompt = self._get_candidate_prompt(candidate)
                 mutation_operator = self.prompt_strings.mutation_operator
 
                 selected_prompt = f"""{self.prompt_strings.selected_solution_intro}{candidate_prompt}\n{mutation_operator}\n"""
@@ -330,7 +244,6 @@ class MultiObjectivePromptGenerator(PromptGenerator):
                     name = handler.code_name
                     score = handler.eval_result.score
                     runtime = handler.eval_result.total_execution_time
-                    desc = handler.desc
                     population_summary += (
                         f"- {name}: {score:.4f}, {runtime:.2f} seconds\n"
                     )
@@ -345,4 +258,4 @@ class MultiObjectivePromptGenerator(PromptGenerator):
         return role_prompt, final_prompt
 
     def get_response_handler(self):
-        return BaselineResponseHandler()
+        return MooResponseHandler()

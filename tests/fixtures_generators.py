@@ -1,9 +1,8 @@
 from llamevol.prompt_generators.abstract_prompt_generator import (
     PromptGenerator,
-    ResponseHandler,
-    GenerationTask,
     EvaluatorResult,
 )
+from llamevol.prompt_generators import ResponseHandler, GenerationTask
 
 
 class DummyGenerator(PromptGenerator):
