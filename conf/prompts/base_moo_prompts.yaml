@@ -19,6 +19,8 @@ Example:
     "acquisition_type": ["ei", "ucb", "poi"]
 }
 
+CONFIGURATION SPACE GUIDELINES: Keep the configuration space compact with 3-7 hyperparameters. Avoid extremely large ranges for candidate counts (keep under 500) and model training iterations (keep under 100). Use log-scale ranges for parameters that span orders of magnitude (e.g., learning rates, regularization). Ensure n_init never exceeds the evaluation budget; use a budget-aware default such as min(2*dim+1, budget//4).
+
 CRITICAL ROBUSTNESS REQUIREMENT: The algorithm's internal search logic (especially the acquisition function and model fitting) MUST be stable and general across all objective scales.
 Any scalarization method (e.g., Tchebycheff or weighted sum) MUST be applied to objectives that are normalized and scaled.
 The normalization MUST be calculated dynamically based on the current observed objective ranges: using the minimum observed value (Ideal Point) and the maximum observed value (Nadir Point) from the archive (`self.y_all`) to scale all objectives to the $[0, 1]$ range.
@@ -50,6 +52,8 @@ Example:
     "acquisition_type": ["ei", "ucb", "poi"]
 }
 
+CONFIGURATION SPACE GUIDELINES: Keep the configuration space compact with 3-7 hyperparameters. Avoid extremely large ranges for candidate counts (keep under 500) and model training iterations (keep under 100). Use log-scale ranges for parameters that span orders of magnitude (e.g., learning rates, regularization). Ensure n_init never exceeds the evaluation budget; use a budget-aware default such as min(2*dim+1, budget//4).
+
 CRITICAL ROBUSTNESS REQUIREMENT: The algorithm's internal search logic (especially the acquisition function and model fitting) MUST be stable and general across all objective scales.
 Any scalarization method (e.g., Tchebycheff or weighted sum) MUST be applied to objectives that are normalized and scaled.
 The normalization MUST be calculated dynamically based on the current observed objective ranges: using the minimum observed value (Ideal Point) and the maximum observed value (Nadir Point) from the archive (`self.y_all`) to scale all objectives to the $[0, 1]$ range.
@@ -80,6 +84,8 @@ Example:
     "mutation_rate": (0.01, 0.5),
     "acquisition_type": ["ei", "ucb", "poi"]
 }
+
+CONFIGURATION SPACE GUIDELINES: Keep the configuration space compact with 3-7 hyperparameters. Avoid extremely large ranges for candidate counts (keep under 500) and model training iterations (keep under 100). Use log-scale ranges for parameters that span orders of magnitude (e.g., learning rates, regularization). Ensure n_init never exceeds the evaluation budget; use a budget-aware default such as min(2*dim+1, budget//4).
 
 CRITICAL ROBUSTNESS REQUIREMENT: The algorithm's internal search logic (especially the acquisition function and model fitting) MUST be stable and general across all objective scales.
 Any scalarization method (e.g., Tchebycheff or weighted sum) MUST be applied to objectives that are normalized and scaled.
