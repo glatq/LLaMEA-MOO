@@ -4,16 +4,17 @@ from .abstract_prompt_generator import (
     PromptGenerator,
     EvaluatorResult,
 )
-from .response_handler import BaselineResponseHandler
+from .bl_response_handler import BaselineResponseHandler
 from .types import GenerationTask
 from ..population import Population
+from .abstract_prompt_generator import merge_prompt_configs
 
 
 class BaselinePromptGenerator(PromptGenerator):
     def __init__(self, conf=None):
-        if conf is None:
-            conf = load_default_bl_prompt_config()
-        super().__init__(conf)
+        default_conf = load_default_bl_prompt_config()
+        merged_conf = merge_prompt_configs(default_conf, conf)
+        super().__init__(merged_conf)
 
     def evaluation_feedback_prompt(
         self, eval_res: EvaluatorResult, options: dict = None
@@ -40,7 +41,15 @@ class BaselinePromptGenerator(PromptGenerator):
             algorithm_name=algorithm_name, auc_mean=auc_mean, auc_std=auc_std
         )
 
-        final_feedback_prompt = f"{main_aoc_prompt}\n{time_prompt}"
+        hpo_prompt = ""
+        if hasattr(eval_res, "metadata") and eval_res.metadata:
+            if "incumbent" in eval_res.metadata and eval_res.metadata["incumbent"]:
+                incumbent = eval_res.metadata["incumbent"]
+                hpo_prompt = f"\nOptimized hyperparameters: {incumbent}"
+            elif "hpo_error" in eval_res.metadata:
+                hpo_prompt = f"\nNote: {eval_res.metadata['hpo_error']}"
+
+        final_feedback_prompt = f"{main_aoc_prompt}\n{time_prompt}{hpo_prompt}"
         return final_feedback_prompt
 
     def get_prompt(

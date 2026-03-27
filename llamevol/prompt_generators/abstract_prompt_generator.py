@@ -2,7 +2,29 @@ from abc import ABC, abstractmethod
 from llamevol.evaluator import EvaluatorResult
 from .types import GenerationTask
 from .prompt_strings import PromptStrings
-from .response_handler import BaselineResponseHandler
+from .bl_response_handler import BaselineResponseHandler
+
+
+def merge_prompt_configs(default_conf, override_conf):
+    if override_conf is None:
+        return default_conf
+
+    # Safely handle Hydra DictConfig without strictly requiring omegaconf import globally
+    if type(override_conf).__name__ == "DictConfig":
+        from omegaconf import OmegaConf
+
+        override_conf = OmegaConf.to_container(override_conf, resolve=True)
+
+    merged = dict(default_conf)
+    for k, v in override_conf.items():
+        if k == "prompts" and isinstance(v, dict):
+            merged["prompts"].update(v)
+        elif "prompts" in merged and k in merged["prompts"]:
+            # Handle flattened Hydra configs mapping directly to prompt strings
+            merged["prompts"][k] = v
+        else:
+            merged[k] = v
+    return merged
 
 
 class ResponseImpReturnChecker(ABC):
@@ -16,13 +38,12 @@ class ResponseImpReturnChecker(ABC):
 class PromptGenerator(ABC):
     """Abstract base class for prompt generators."""
 
-    def __init__(self, conf=None):
-        if conf is not None:
-            self.prompt_strings = PromptStrings(**conf["prompts"])
-            self.is_bo = conf["is_bo"]
-            self.use_mini_bo = conf["use_mini_bo"]
-            self.use_cuda = conf["use_cuda"]
-            self.problem_desc = conf["problem_desc"]
+    def __init__(self, conf):
+        self.prompt_strings = PromptStrings(**conf["prompts"])
+        self.is_bo = conf.get("is_bo", False)
+        self.use_mini_bo = conf.get("use_mini_bo", False)
+        self.use_cuda = conf.get("use_cuda", False)
+        self.problem_desc = conf.get("problem_desc", "")
 
     def __str__(self):
         suffix = ""

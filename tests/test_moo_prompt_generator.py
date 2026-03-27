@@ -2,9 +2,7 @@ import pytest
 import yaml
 import numpy as np
 from llamevol import directories
-from llamevol.prompt_generators.moo_prompt_generator import (
-    MooResponseHandler,
-)
+from llamevol.prompt_generators.moo_response_handler import MooResponseHandler
 from llamevol.prompt_generators.types import GenerationTask
 from llamevol.evaluator.evaluator_result import EvaluatorBasicResult
 from tests.conftest import mopg

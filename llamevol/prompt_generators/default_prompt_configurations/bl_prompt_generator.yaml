@@ -23,12 +23,31 @@ prompts:
     The func() can only be called as many times as the budget allows, not more. Each of the optimization functions has a search space between -5.0 (lower bound) and 5.0 (upper bound). The dimensionality can be varied.
     {lib_prompt} Do not use any other libraries unless they cannot be replaced by the above libraries.  Do not remove the comments from the code.
     Name the class based on the characteristics of the algorithm with a template '<characteristics>BO'.
-
+    
+    HYPERPARAMETER OPTIMIZATION: Any hyperparameters your algorithm uses will be automatically optimized by SMAC (Sequential Model-Based Algorithm Configuration). You must provide a configuration space as a Python dictionary that defines the hyperparameter search space. Do NOT include the parameters budget, dim, or bounds in the configuration space, as these are problem-specific and fixed. Include all other tunable hyperparameters in the __init__ method with default values, and define their search ranges in the configuration space.
+    
+    Configuration space format:
+    {{
+        "param_name": (lower_bound, upper_bound),  # For continuous or integer ranges
+        "log_param": (lower, upper, "log"),  # For log-scale continuous parameters
+        "categorical_param": ["option1", "option2", "option3"]  # For categorical choices
+    }}
+    
     Give an excellent, novel and computationally efficient Bayesian Optimization algorithm to solve this task, give it a concise but comprehensive key-word-style description with the main ideas and justify your decision about the algorithm.
   general_task_prompt: |
     
     The optimization algorithm should handle a wide range of tasks, which is evaluated on the BBOB test suite of {problem_desc}. Your task is to write the optimization algorithm in Python code. The code should contain an `__init__(self, budget, dim)` function and the function `__call__(self, func)`, which should optimize the black box function `func` using `self.budget` function evaluations.
     The func() can only be called as many times as the budget allows, not more. Each of the optimization functions has a search space between -5.0 (lower bound) and 5.0 (upper bound). The dimensionality can be varied.
+    
+    HYPERPARAMETER OPTIMIZATION: Any hyperparameters your algorithm uses will be automatically optimized by SMAC (Sequential Model-Based Algorithm Configuration). You must provide a configuration space as a Python dictionary that defines the hyperparameter search space. Do NOT include the parameters budget, dim, or bounds in the configuration space, as these are problem-specific and fixed. Include all other tunable hyperparameters in the __init__ method with default values, and define their search ranges in the configuration space.
+    
+    Configuration space format:
+    {{
+        "param_name": (lower_bound, upper_bound),  # For continuous or integer ranges
+        "log_param": (lower, upper, "log"),  # For log-scale continuous parameters
+        "categorical_param": ["option1", "option2", "option3"]  # For categorical choices
+    }}
+    
     Give an excellent, novel and computationally efficient heuristic algorithm to solve this task, give it a concise but comprehensive key-word-style description with the main idea and justify your decision about the algorithm.
   output_format_prompt: |
     
@@ -39,6 +58,10 @@ prompts:
     <justification for the key components of the algorithm or the changes made>
     # Code 
     <code>
+    # Space
+    ```python
+    <configuration_space_dict>
+    ```
     
   code_structure_template: |
   
@@ -46,11 +69,16 @@ prompts:
     import numpy as np
   
     class RandomSearch:
-        def __init__(self, budget=10000, dim=10):
+        def __init__(self, budget=10000, dim=10, param1=default1, param2=default2):
             self.budget = budget
             self.dim = dim
             # bounds has (2,<dimension>), bounds[0]: lower bound, bounds[1]: upper bound
             self.bounds = np.array([[-5.0]*dim, [5.0]*dim])
+    
+            # Hyperparameters (tuned by SMAC, defined in Space)
+            self.param1 = param1
+            self.param2 = param2
+    
             self.f_opt = np.Inf
             self.x_opt = None
   
@@ -71,11 +99,14 @@ prompts:
     from collections.abc import Callable
     import numpy as np
     class <AlgorithmName>:
-        def __init__(self, budget:int, dim:int):
+        def __init__(self, budget:int, dim:int, param1=default1, param2=default2):
             self.budget = budget
             self.dim = dim
             # bounds has shape (2,<dimension>), bounds[0]: lower bound, bounds[1]: upper bound
             self.bounds = np.array([[-5.0]*dim, [5.0]*dim])
+            # Hyperparameters (tuned by SMAC, defined in Space)
+            self.param1 = param1
+            self.param2 = param2
             # X has shape (n_points, n_dims), y has shape (n_points, 1)
             self.X: np.ndarray = None
             self.y: np.ndarray = None
@@ -103,11 +134,14 @@ prompts:
     from scipy.stats import norm
     import numpy as np
     class <AlgorithmName>:
-        def __init__(self, budget:int, dim:int):
+        def __init__(self, budget:int, dim:int, param1=default1, param2=default2):
             self.budget = budget
             self.dim = dim
             # bounds has shape (2,<dimension>), bounds[0]: lower bound, bounds[1]: upper bound
             self.bounds = np.array([[-5.0]*dim, [5.0]*dim])
+            # Hyperparameters (tuned by SMAC, defined in Space)
+            self.param1 = param1
+            self.param2 = param2
             # X has shape (n_points, n_dims), y has shape (n_points, 1)
             self.X: np.ndarray = None
             self.y: np.ndarray = None

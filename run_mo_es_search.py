@@ -4,7 +4,9 @@ import sys
 from omegaconf import DictConfig
 import hydra
 from llamevol.evaluator.multiobj_evaluator import MultiObjEvaluator, MOOProblemSpec
-from llamevol.prompt_generators import MultiObjectivePromptGenerator
+from llamevol.prompt_generators.moo_prompt_generator import (
+    MultiObjectivePromptGenerator,
+)
 from llamevol.population import ESPopulation
 from llamevol.llm import LLMmanager
 from llamevol import LLaMEvol

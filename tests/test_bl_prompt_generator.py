@@ -1,4 +1,4 @@
-from llamevol.prompt_generators.response_handler import BaselineResponseHandler
+from llamevol.prompt_generators.bl_response_handler import BaselineResponseHandler
 from llamevol.prompt_generators.types import GenerationTask
 from .conftest import bl_get_prompt
 

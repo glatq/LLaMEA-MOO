@@ -54,7 +54,7 @@ so_search:
   evaluator_timeout: 1800 # 30 * 60
 
   # SMAC HPO configuration
-  use_hpo: false  # Enable SMAC-based hyperparameter optimization
+  use_hpo: true  # Enable SMAC-based hyperparameter optimization
   hpo_trials: 20  # Number of SMAC trials
   hpo_min_budget: 50  # Minimum budget for multi-fidelity HPO
   hpo_max_budget: 100  # Maximum budget for multi-fidelity HPO

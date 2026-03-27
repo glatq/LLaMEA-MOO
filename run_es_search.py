@@ -4,7 +4,7 @@ import sys
 from omegaconf import DictConfig
 import hydra
 from llamevol.evaluator.ioh_evaluator import IOHEvaluator
-from llamevol.prompt_generators import BaselinePromptGenerator
+from llamevol.prompt_generators.bl_prompt_generator import BaselinePromptGenerator
 from llamevol.population import ESPopulation
 from llamevol.llm import LLMmanager
 from llamevol import LLaMEvol
