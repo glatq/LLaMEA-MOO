@@ -1,6 +1,9 @@
 # conf/config.yaml
 defaults:
   - prompts: baseline
+  - _self_
+
+mode: "so"  # "so" for single-objective, "mo" for multi-objective
 
 mo_search:
   dtlz_dimension: 5
@@ -19,6 +22,31 @@ mo_search:
   hpo_max_budget: 100  # Maximum budget for multi-fidelity HPO
   hpo_walltime: 3600  # HPO time limit in seconds (1 hour)
   hpo_validation_budget: 50  # Budget for quick validation before HPO (keep small!)
+  hpo_n_problems: 3  # Number of problems for HPO (null = all). Evenly spaced subset.
+
+  problems:
+    - { name: "zdt1", dim: 30, n_obj: 2, ref_point: [ 1.1, 6.0 ] }
+    - { name: "zdt2", dim: 30, n_obj: 2, ref_point: [ 1.1, 7.0 ] }
+    - { name: "zdt3", dim: 30, n_obj: 2, ref_point: [ 1.1, 6.0 ] }
+    - { name: "zdt4", dim: 10, n_obj: 2, ref_point: [ 1.1, 160.0 ] }
+    - { name: "zdt6", dim: 10, n_obj: 2, ref_point: [ 1.1, 10.0 ] }
+    - name: "dtlz1"
+      dim: ${mo_search.dtlz_dimension}
+      n_obj: 3
+      ref_point: [ 10.0, 10.0, 30.0 ]
+    - name: "dtlz2"
+      dim: ${mo_search.dtlz_dimension}
+      n_obj: 3
+      ref_point: [ 1.5, 1.5, 1.5 ]
+    - name: "dtlz3"
+      dim: ${mo_search.dtlz_dimension}
+      n_obj: 3
+      ref_point: [ 20.0, 30.0, 100.0 ]
+    - name: "dtlz4"
+      dim: ${mo_search.dtlz_dimension}
+      n_obj: 3
+      ref_point: [ 2.0, 1.2, 1.2 ]
+    - { name: "bnh", dim: 2, n_obj: 2, ref_point: [ 140.0, 50.0 ] }
 
   llm:
     model_name: "gemini-2.5-flash"
@@ -60,6 +88,7 @@ so_search:
   hpo_max_budget: 100  # Maximum budget for multi-fidelity HPO
   hpo_walltime: 3600  # HPO time limit in seconds (1 hour)
   hpo_validation_budget: 20  # Budget for quick validation before HPO (keep small!)
+  hpo_n_problems: 3  # Number of problems for HPO (null = all). Evenly spaced subset.
 
   llm:
     model_name: "gemini-2.5-flash"

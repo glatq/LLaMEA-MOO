@@ -277,6 +277,7 @@ class IOHEvaluator(AbstractEvaluator):
         hpo_max_budget: int = 200,  # Max budget for multi-fidelity
         hpo_walltime: int = 3600,  # HPO time limit (1 hour)
         hpo_validation_budget: int = 100,  # Budget for validation
+        hpo_n_problems: int = None,  # Number of problems for HPO (None = all)
     ):
         super().__init__()
         if (
@@ -344,6 +345,7 @@ class IOHEvaluator(AbstractEvaluator):
             else None
         )
         self.hpo_validation_budget = hpo_validation_budget
+        self.hpo_n_problems = hpo_n_problems
 
         if use_hpo and not HPO_AVAILABLE:
             _logger.warning("HPO requested but not available. Falling back to no HPO.")
@@ -627,13 +629,31 @@ class IOHEvaluator(AbstractEvaluator):
                 else:
                     # Step 2: Run SMAC HPO
                     try:
+                        # Select subset of problems for HPO if configured
+                        hpo_problems = self.problems
+                        hpo_instances = self.instances
+                        if self.hpo_n_problems and self.hpo_n_problems < len(
+                            self.problems
+                        ):
+                            indices = [
+                                int(i)
+                                for i in np.linspace(
+                                    0, len(self.problems) - 1, self.hpo_n_problems
+                                )
+                            ]
+                            hpo_problems = [self.problems[i] for i in indices]
+                            hpo_instances = [self.instances[i] for i in indices]
+                            _logger.info(
+                                f"HPO using {self.hpo_n_problems}/{len(self.problems)} problems: {hpo_problems}"
+                            )
+
                         _logger.info("Starting SMAC HPO...")
                         incumbent_dict, incumbent_aoc = run_smac_hpo_so(
                             code=code,
                             cls_name=cls_name,
                             configspace=configspace,
-                            problem_ids=self.problems,
-                            instance_ids=self.instances,
+                            problem_ids=hpo_problems,
+                            instance_ids=hpo_instances,
                             dim=self.dim,
                             budget=self.budget,
                             hpo_config=self.hpo_config,
@@ -685,7 +705,7 @@ class IOHEvaluator(AbstractEvaluator):
             params.append(new_param)
 
         total_tasks = len(params)
-        interval = min(max(1, total_tasks // 4), 20)
+        interval = min(max(1, total_tasks // 6), 20)
 
         _all_eval_time_start = time.perf_counter()
 

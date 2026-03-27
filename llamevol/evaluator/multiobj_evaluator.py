@@ -149,6 +149,7 @@ class MultiObjEvaluator(AbstractEvaluator):
         hpo_max_budget: int = 200,  # Max budget for multi-fidelity
         hpo_walltime: int = 3600,  # HPO time limit (1 hour)
         hpo_validation_budget: int = 100,  # Budget for validation
+        hpo_n_problems: int = None,  # Number of problems for HPO (None = all)
     ):
         super().__init__()
         self.budget = int(budget)
@@ -170,6 +171,7 @@ class MultiObjEvaluator(AbstractEvaluator):
             else None
         )
         self.hpo_validation_budget = hpo_validation_budget
+        self.hpo_n_problems = hpo_n_problems
 
         if use_hpo and not HPO_AVAILABLE:
             logging.warning("HPO requested but not available. Falling back to no HPO.")
@@ -249,17 +251,37 @@ class MultiObjEvaluator(AbstractEvaluator):
                     else:
                         # Step 2: Run SMAC HPO
                         try:
+                            # Select subset of problems for HPO if configured
+                            hpo_specs = self.problem_specs
+                            if self.hpo_n_problems and self.hpo_n_problems < len(
+                                self.problem_specs
+                            ):
+                                indices = [
+                                    int(i)
+                                    for i in np.linspace(
+                                        0,
+                                        len(self.problem_specs) - 1,
+                                        self.hpo_n_problems,
+                                    )
+                                ]
+                                hpo_specs = [self.problem_specs[i] for i in indices]
+                                logging.info(
+                                    f"HPO using {self.hpo_n_problems}/{len(self.problem_specs)} problems: {[s.name for s in hpo_specs]}"
+                                )
+
                             logging.info("Starting SMAC HPO...")
                             incumbent_dict, incumbent_hv = run_smac_hpo_moo(
                                 code=code,
                                 cls_name=cls_name,
                                 configspace=configspace,
-                                problem_specs=self.problem_specs,
+                                problem_specs=hpo_specs,
                                 budget=self.budget,
                                 hpo_config=self.hpo_config,
                                 injector=injector,
                             )
 
+                            # Restore root logger after SMAC
+                            logging.getLogger().setLevel(logging.INFO)
                             logging.info(
                                 f"SMAC completed. Incumbent: {incumbent_dict}, HV: {incumbent_hv:.4f}"
                             )
@@ -267,6 +289,7 @@ class MultiObjEvaluator(AbstractEvaluator):
                             eval_res.metadata["incumbent_hv"] = incumbent_hv
 
                         except Exception as e:
+                            logging.getLogger().setLevel(logging.INFO)
                             logging.error(f"HPO failed: {e}")
                             eval_res.metadata["hpo_error"] = str(e)
                             incumbent_dict = {}

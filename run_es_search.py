@@ -4,11 +4,18 @@ import sys
 from omegaconf import DictConfig
 import hydra
 from llamevol.evaluator.ioh_evaluator import IOHEvaluator
+from llamevol.evaluator.multiobj_evaluator import MultiObjEvaluator, MOOProblemSpec
 from llamevol.prompt_generators.bl_prompt_generator import BaselinePromptGenerator
+from llamevol.prompt_generators.moo_prompt_generator import (
+    MultiObjectivePromptGenerator,
+)
 from llamevol.population import ESPopulation
 from llamevol.llm import LLMmanager
 from llamevol import LLaMEvol
 from llamevol.utils import setup_logger
+from pymoo.config import Config
+
+Config.warnings["not_compiled"] = False
 
 
 def get_IOHEvaluator(cfg):
@@ -19,6 +26,7 @@ def get_IOHEvaluator(cfg):
     hpo_max_budget = cfg.so_search.get("hpo_max_budget", 200)
     hpo_walltime = cfg.so_search.get("hpo_walltime", 3600)
     hpo_validation_budget = cfg.so_search.get("hpo_validation_budget", 20)
+    hpo_n_problems = cfg.so_search.get("hpo_n_problems", None)
 
     evaluator = IOHEvaluator(
         budget=cfg.so_search.budget,
@@ -32,22 +40,63 @@ def get_IOHEvaluator(cfg):
         hpo_max_budget=hpo_max_budget,
         hpo_walltime=hpo_walltime,
         hpo_validation_budget=hpo_validation_budget,
+        hpo_n_problems=hpo_n_problems,
     )
-
-    if use_hpo:
-        logging.info("=" * 60)
-        logging.info("SMAC HPO ENABLED")
-        logging.info(f"  Trials: {hpo_trials}")
-        logging.info(f"  Budget range: {hpo_min_budget}-{hpo_max_budget}")
-        logging.info(f"  Walltime: {hpo_walltime}s")
-        logging.info("=" * 60)
 
     return evaluator
 
 
-# create an prompt generator
+def get_MOOEvaluator(cfg):
+    budget = cfg.mo_search.budget
+    repeat = cfg.mo_search.repeat
+    timeout = cfg.mo_search.evaluator_timeout
+
+    # HPO configuration (if enabled in config)
+    use_hpo = cfg.mo_search.get("use_hpo", False)
+    hpo_trials = cfg.mo_search.get("hpo_trials", 500)
+    hpo_min_budget = cfg.mo_search.get("hpo_min_budget", 50)
+    hpo_max_budget = cfg.mo_search.get("hpo_max_budget", 200)
+    hpo_walltime = cfg.mo_search.get("hpo_walltime", 3600)
+    hpo_validation_budget = cfg.mo_search.get("hpo_validation_budget", 20)
+    hpo_n_problems = cfg.mo_search.get("hpo_n_problems", None)
+
+    # Build MOOProblemSpec list from config
+    problems = [
+        MOOProblemSpec(
+            name=p.name,
+            dim=p.dim,
+            n_obj=p.n_obj,
+            ref_point=list(p.ref_point),
+        )
+        for p in cfg.mo_search.problems
+    ]
+
+    evaluator = MultiObjEvaluator(
+        budget=budget,
+        problems=problems,
+        repeat=repeat,
+        timeout=timeout,
+        calculate_hv_history=False,
+        use_hpo=use_hpo,
+        hpo_trials=hpo_trials,
+        hpo_min_budget=hpo_min_budget,
+        hpo_max_budget=hpo_max_budget,
+        hpo_walltime=hpo_walltime,
+        hpo_validation_budget=hpo_validation_budget,
+        hpo_n_problems=hpo_n_problems,
+    )
+
+    return evaluator
+
+
 def get_bo_prompt_generator(prompts_cfg: DictConfig) -> BaselinePromptGenerator:
     prompt_generator = BaselinePromptGenerator(prompts_cfg)
+    prompt_generator.is_bo = True
+    return prompt_generator
+
+
+def get_mo_prompt_generator():
+    prompt_generator = MultiObjectivePromptGenerator()
     prompt_generator.is_bo = True
     return prompt_generator
 
@@ -84,38 +133,56 @@ def get_es_population(es_options):
 
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def run_exp(cfg: DictConfig):
-    # create an IOHEvaluator
-    evaluator = get_IOHEvaluator(cfg)
-    evaluator.timeout = (
-        cfg.so_search.evaluator_timeout
-    )  # set the timeout(seconds) for each evaluation(all tasks)
+    mode = cfg.get("mode", "so")
 
-    # create a prompt generator
-    prompt_generator = get_bo_prompt_generator(cfg.prompts)
+    if mode == "mo":
+        from pymoo.config import Config as PymooConfig
+
+        PymooConfig.warnings["not_compiled"] = False
+
+        search_cfg = cfg.mo_search
+        evaluator = get_MOOEvaluator(cfg)
+        prompt_generator = get_mo_prompt_generator()
+    elif mode == "so":
+        search_cfg = cfg.so_search
+        evaluator = get_IOHEvaluator(cfg)
+        prompt_generator = get_bo_prompt_generator(cfg.prompts)
+    else:
+        raise ValueError(f"Unknown mode: {mode}. Use 'so' or 'mo'.")
+
+    evaluator.timeout = search_cfg.evaluator_timeout
+
+    # Log HPO status for MO (SO evaluator logs this internally)
+    if mode == "mo" and search_cfg.get("use_hpo", False):
+        logging.info("=" * 60)
+        logging.info("SMAC HPO ENABLED")
+        logging.info(f"  Trials: {search_cfg.hpo_trials}")
+        logging.info(
+            f"  Budget range: {search_cfg.hpo_min_budget}-{search_cfg.hpo_max_budget}"
+        )
+        logging.info(f"  Walltime: {search_cfg.hpo_walltime}s")
+        logging.info("=" * 60)
 
     # create a LLM Manager
-    model_name = cfg.so_search.llm.model_name
-    base_url = cfg.so_search.llm.base_url  # use default
-
-    # choose the llm client, e.g. openai, google.
-    # openai: OpenaiClient; google: google genai client; others: AISuiteClient
-    client = cfg.so_search.llm.client
-    api_key = cfg.so_search.llm.api_key
-
     llm = LLMmanager(
-        model_name=model_name, api_key=api_key, base_url=base_url, client_str=client
+        model_name=search_cfg.llm.model_name,
+        api_key=search_cfg.llm.api_key,
+        base_url=search_cfg.llm.base_url,
+        client_str=search_cfg.llm.client,
     )
 
     # define ES parameters
     es_options = {
-        "n_parent": cfg.so_search.n_parent,  # number of parents
-        "n_offspring": cfg.so_search.n_offspring,  # number of offspring
-        "is_elitist": cfg.so_search.is_elitist,  # whether to use elitist selection
-        "log_dir": cfg.so_search.log_dir,  # directory to save logs
+        "n_parent": search_cfg.n_parent,
+        "n_offspring": search_cfg.n_offspring,
+        "is_elitist": search_cfg.is_elitist,
+        "log_dir": search_cfg.log_dir,
     }
 
     print(
-        f"n_parents: {cfg.so_search.n_parent}, n_offspring: {cfg.so_search.n_offspring}, is_elitist: {cfg.so_search.is_elitist}, n_population: {cfg.so_search.n_population}, api_key: {cfg.so_search.llm.api_key}"
+        f"Mode: {mode}, n_parents: {search_cfg.n_parent}, n_offspring: {search_cfg.n_offspring}, "
+        f"is_elitist: {search_cfg.is_elitist}, n_population: {search_cfg.n_population}, "
+        f"api_key: {search_cfg.llm.api_key}"
     )
 
     # create a ES Population
@@ -124,8 +191,8 @@ def run_exp(cfg: DictConfig):
     # run the evolution
     llamevol = LLaMEvol()
     llm_params = {
-        "temperature": cfg.so_search.llm.temperature,
-        "top_k": cfg.so_search.llm.top_k,  #!!!! top_k sampling, which might not be supported by all LLMs
+        "temperature": search_cfg.llm.temperature,
+        "top_k": search_cfg.llm.top_k,
     }
 
     llamevol.run_evolutions(
@@ -133,7 +200,7 @@ def run_exp(cfg: DictConfig):
         evaluator,
         prompt_generator,
         population,
-        n_population=cfg.so_search.n_population,
+        n_population=search_cfg.n_population,
         options={"llm_params": llm_params},
     )
 

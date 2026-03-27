@@ -64,6 +64,11 @@ def extract_configspace(
         # Clean up the string (remove potential markdown artifacts)
         cleaned_str = config_space_str.strip()
 
+        # Strip variable assignment if present (e.g., "configuration_space = {...}")
+        assignment_match = re.match(r"^\w+\s*=\s*", cleaned_str)
+        if assignment_match:
+            cleaned_str = cleaned_str[assignment_match.end() :]
+
         # Try to evaluate the string as a Python dictionary
         config_dict = eval(cleaned_str)
 

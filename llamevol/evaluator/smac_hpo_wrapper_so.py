@@ -1,6 +1,15 @@
 """SMAC-based hyperparameter optimization wrapper for single-objective algorithms."""
 
 import logging
+
+_logger = logging.getLogger(__name__)
+_logger.setLevel(logging.INFO)
+_logger.propagate = False
+_handler = logging.StreamHandler()
+_handler.setFormatter(
+    logging.Formatter("[%(asctime)s][%(name)s][%(levelname)s] - %(message)s")
+)
+_logger.addHandler(_handler)
 import time
 import numpy as np
 from typing import Dict, Any, List, Optional, Tuple
@@ -20,7 +29,7 @@ except ImportError:
     AlgorithmConfigurationFacade = None
     Scenario = None
     SMAC_AVAILABLE = False
-    logging.warning("SMAC or ConfigSpace not installed. HPO will not be available.")
+    _logger.warning("SMAC or ConfigSpace not installed. HPO will not be available.")
 
 
 @dataclass
@@ -106,11 +115,11 @@ def run_smac_hpo_so(
         for inst_id in inst_list:
             problem_instances.append((prob_id, inst_id))
 
-    logging.info(f"Starting SMAC HPO for {cls_name}")
-    logging.info(f"  ConfigSpace: {len(configspace)} hyperparameters")
-    logging.info(f"  Problem-Instance pairs: {len(problem_instances)}")
-    logging.info(f"  Budget per instance: {budget}")
-    logging.info(f"  SMAC trials: {hpo_config.n_trials}")
+    _logger.info(f"Starting SMAC HPO for {cls_name}")
+    _logger.info(f"  ConfigSpace: {len(configspace)} hyperparameters")
+    _logger.info(f"  Problem-Instance pairs: {len(problem_instances)}")
+    _logger.info(f"  Budget per instance: {budget}")
+    _logger.info(f"  SMAC trials: {hpo_config.n_trials}")
 
     provider = IOHProvider()
 
@@ -132,11 +141,11 @@ def run_smac_hpo_so(
         try:
             pair_idx = int(instance)
         except ValueError:
-            logging.error(f"Invalid instance format: {instance}")
+            _logger.error(f"Invalid instance format: {instance}")
             return 1.0  # Worst possible score
 
         if pair_idx < 0 or pair_idx >= len(problem_instances):
-            logging.error(f"Instance index out of range: {pair_idx}")
+            _logger.error(f"Instance index out of range: {pair_idx}")
             return 1.0
 
         problem_id, instance_id = problem_instances[pair_idx]
@@ -192,7 +201,7 @@ def run_smac_hpo_so(
 
         # Calculate AOC score
         if len(y_hist) == 0:
-            logging.warning(
+            _logger.warning(
                 f"No evaluations recorded for problem {problem_id} instance {instance_id}"
             )
             return 1.0
@@ -212,7 +221,7 @@ def run_smac_hpo_so(
             return float(score)
 
         except Exception as e:
-            logging.error(
+            _logger.error(
                 f"AOC calculation error on problem {problem_id} instance {instance_id}: {e}"
             )
             return 1.0
@@ -240,46 +249,60 @@ def run_smac_hpo_so(
         n_workers=hpo_config.n_workers,
     )
 
-    logging.info("Running SMAC optimization...")
+    _logger.info("Running SMAC optimization...")
     start_time = time.time()
 
     # Progress tracking
-    trial_count = [0]
-    last_log_time = [time.time()]
+    eval_count = [0]
+    n_instances = len(problem_instances)
 
     def wrapped_objective(config, instance, seed):
-        trial_count[0] += 1
-        current_time = time.time()
-
-        # Log progress every 10 seconds or every 10 trials (whichever comes first)
-        if (current_time - last_log_time[0] > 10) or (trial_count[0] % 10 == 0):
-            elapsed = current_time - start_time
-            rate = trial_count[0] / elapsed if elapsed > 0 else 0
-            eta = (hpo_config.n_trials - trial_count[0]) / rate if rate > 0 else 0
-            logging.info(
-                f"  HPO progress: {trial_count[0]}/{hpo_config.n_trials} trials, {elapsed:.1f}s elapsed, ETA: {eta:.1f}s"
-            )
-            last_log_time[0] = current_time
-
-        return objective_function(config, instance, seed)
+        eval_count[0] += 1
+        trial_num = (eval_count[0] - 1) // n_instances + 1
+        instance_num = (eval_count[0] - 1) % n_instances + 1
+        _logger.info(
+            f"  SMAC trial {trial_num}/{hpo_config.n_trials}, "
+            f"instance {instance_num}/{n_instances} starting..."
+        )
+        trial_start = time.time()
+        result = objective_function(config, instance, seed)
+        trial_elapsed = time.time() - trial_start
+        total_elapsed = time.time() - start_time
+        _logger.info(
+            f"  SMAC trial {trial_num}/{hpo_config.n_trials}, "
+            f"instance {instance_num}/{n_instances} done: "
+            f"cost={result:.4f} ({trial_elapsed:.1f}s, total {total_elapsed:.1f}s)"
+        )
+        return result
 
     try:
+        # Save root logger state before SMAC clobbers it
+        root_logger = logging.getLogger()
+        _saved_handlers = root_logger.handlers[:]
+        _saved_level = root_logger.level
+
         # Create and run SMAC
         smac = AlgorithmConfigurationFacade(
             scenario=scenario,
             target_function=wrapped_objective,
             logging_level=logging.WARNING,  # Reduce SMAC verbosity
         )
-
         incumbent = smac.optimize()
 
+        # Restore root logger state
+        root_logger.handlers = _saved_handlers
+        root_logger.setLevel(_saved_level)
+
         elapsed_time = time.time() - start_time
-        logging.info(
-            f"✅ SMAC optimization completed in {elapsed_time:.2f}s ({trial_count[0]} trials)"
+        _logger.info(
+            f"  ✅ SMAC optimization completed in {elapsed_time:.2f}s ({eval_count[0]} evaluations)"
         )
 
     except Exception as e:
-        logging.error(f"SMAC optimization failed: {e}")
+        # Restore root logger even on failure
+        root_logger.handlers = _saved_handlers
+        root_logger.setLevel(_saved_level)
+        _logger.error(f"  ❌ SMAC optimization failed: {e}")
         # Return empty dict as fallback
         return {}, 0.0
 
@@ -287,7 +310,7 @@ def run_smac_hpo_so(
     incumbent_dict = dict(incumbent)
 
     # Calculate incumbent's average AOC across all problem-instance pairs
-    logging.info("Evaluating incumbent on all problem-instance pairs...")
+    _logger.info("  Evaluating incumbent on all problem-instance pairs...")
     aocs = []
     for i in range(len(problem_instances)):
         score = objective_function(incumbent, str(i), seed=0)
@@ -296,9 +319,12 @@ def run_smac_hpo_so(
 
     incumbent_aoc = float(np.mean(aocs))
 
-    logging.info(f"Incumbent configuration: {incumbent_dict}")
-    logging.info(f"Incumbent average AOC: {incumbent_aoc:.4f}")
-    logging.info(f"  AOC per problem-instance: {[f'{aoc:.4f}' for aoc in aocs]}")
+    # Final restore of root logger before returning
+    root_logger.handlers = _saved_handlers
+    root_logger.setLevel(_saved_level)
+    _logger.info(f"Incumbent configuration: {incumbent_dict}")
+    _logger.info(f"Incumbent average AOC: {incumbent_aoc:.4f}")
+    _logger.info(f"  AOC per problem-instance: {[f'{aoc:.4f}' for aoc in aocs]}")
 
     return incumbent_dict, incumbent_aoc
 
@@ -332,15 +358,15 @@ def validate_with_random_config(
         True if validation passes, False otherwise
     """
     if not SMAC_AVAILABLE:
-        logging.warning("Cannot validate: SMAC not available")
+        _logger.warning("Cannot validate: SMAC not available")
         return False
 
-    logging.info(f"Validating {cls_name} with random configuration...")
+    _logger.info(f"Validating {cls_name} with random configuration...")
 
     try:
         # Sample a random configuration
         config = configspace.sample_configuration()
-        logging.info(f"  Test config: {dict(config)}")
+        _logger.info(f"  Test config: {dict(config)}")
 
         # Get IOH problem
         provider = IOHProvider()
@@ -372,12 +398,12 @@ def validate_with_random_config(
         )
 
         if err:
-            logging.error(f"  Validation failed: {err}")
+            _logger.error(f"  Validation failed: {err}")
             return False
 
-        logging.info(f"  ✅ Validation passed ({eval_count[0]} evaluations)")
+        _logger.info(f"  ✅ Validation passed ({eval_count[0]} evaluations)")
         return True
 
     except Exception as e:
-        logging.error(f"  Validation error: {e}")
+        _logger.error(f"  Validation error: {e}")
         return False
