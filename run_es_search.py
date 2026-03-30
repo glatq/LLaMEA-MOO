@@ -27,6 +27,7 @@ def get_IOHEvaluator(cfg):
     hpo_walltime = cfg.so_search.get("hpo_walltime", 3600)
     hpo_validation_budget = cfg.so_search.get("hpo_validation_budget", 20)
     hpo_n_problems = cfg.so_search.get("hpo_n_problems", None)
+    hpo_n_workers = cfg.so_search.get("hpo_n_workers", 1)
 
     evaluator = IOHEvaluator(
         budget=cfg.so_search.budget,
@@ -41,6 +42,7 @@ def get_IOHEvaluator(cfg):
         hpo_walltime=hpo_walltime,
         hpo_validation_budget=hpo_validation_budget,
         hpo_n_problems=hpo_n_problems,
+        hpo_n_workers=hpo_n_workers,
     )
 
     return evaluator
@@ -59,6 +61,7 @@ def get_MOOEvaluator(cfg):
     hpo_walltime = cfg.mo_search.get("hpo_walltime", 3600)
     hpo_validation_budget = cfg.mo_search.get("hpo_validation_budget", 20)
     hpo_n_problems = cfg.mo_search.get("hpo_n_problems", None)
+    hpo_n_workers = cfg.mo_search.get("hpo_n_workers", 1)
 
     # Build MOOProblemSpec list from config
     problems = [
@@ -84,6 +87,7 @@ def get_MOOEvaluator(cfg):
         hpo_walltime=hpo_walltime,
         hpo_validation_budget=hpo_validation_budget,
         hpo_n_problems=hpo_n_problems,
+        hpo_n_workers=hpo_n_workers,
     )
 
     return evaluator
@@ -161,6 +165,7 @@ def run_exp(cfg: DictConfig):
             f"  Budget range: {search_cfg.hpo_min_budget}-{search_cfg.hpo_max_budget}"
         )
         logging.info(f"  Walltime: {search_cfg.hpo_walltime}s")
+        logging.info(f"  Workers: {search_cfg.get('hpo_n_workers', 1)}")
         logging.info("=" * 60)
 
     # create a LLM Manager

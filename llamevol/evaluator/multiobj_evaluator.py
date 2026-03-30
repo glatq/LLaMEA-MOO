@@ -154,6 +154,7 @@ class MultiObjEvaluator(AbstractEvaluator):
         hpo_walltime: int = 3600,  # HPO time limit (1 hour)
         hpo_validation_budget: int = 100,  # Budget for validation
         hpo_n_problems: int = None,  # Number of problems for HPO (None = all)
+        hpo_n_workers: int = 1,  # Parallel SMAC workers
     ):
         super().__init__()
         self.budget = int(budget)
@@ -170,6 +171,7 @@ class MultiObjEvaluator(AbstractEvaluator):
                 min_budget=hpo_min_budget,
                 max_budget=hpo_max_budget,
                 walltime_limit=hpo_walltime,
+                n_workers=hpo_n_workers,
             )
             if self.use_hpo
             else None

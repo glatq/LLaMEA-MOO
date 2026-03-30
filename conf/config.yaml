@@ -23,6 +23,7 @@ mo_search:
   hpo_walltime: 3600  # HPO time limit in seconds (1 hour)
   hpo_validation_budget: 50  # Budget for quick validation before HPO (keep small!)
   hpo_n_problems: 3  # Number of problems for HPO (null = all). Evenly spaced subset.
+  hpo_n_workers: 3  # Parallel SMAC workers (set to hpo_n_problems for max parallelism)
 
   problems:
     - { name: "zdt1", dim: 30, n_obj: 2, ref_point: [ 1.1, 6.0 ] }
@@ -89,6 +90,7 @@ so_search:
   hpo_walltime: 3600  # HPO time limit in seconds (1 hour)
   hpo_validation_budget: 20  # Budget for quick validation before HPO (keep small!)
   hpo_n_problems: 3  # Number of problems for HPO (null = all). Evenly spaced subset.
+  hpo_n_workers: 3  # Parallel SMAC workers (set to hpo_n_problems for max parallelism)
 
   llm:
     model_name: "gemini-2.5-flash"
