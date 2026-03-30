@@ -7,13 +7,14 @@ import logging
 import time
 import concurrent.futures
 import numpy as np
-from .population.population import Population, PopulationQueryItem
+from .population.population import Population, PopulationQueryItem, code_compare
 from .llm import LLMmanager
 from .prompt_generators.abstract_prompt_generator import PromptGenerator
 from .prompt_generators.types import GenerationTask
 from .prompt_generators.response_handler import ResponseHandler
 from .utils import NoCodeException
 from .evaluator import AbstractEvaluator
+from .evaluator.evaluator_result import EvaluatorResult
 
 
 class LLaMEvolTokenLogItem:
@@ -54,6 +55,8 @@ class LLaMEvol:
         evaluator: AbstractEvaluator,
         retry: int = 3,
         options=None,
+        existing_individuals: list = None,
+        duplicate_threshold: float = 0.99,
     ) -> ResponseHandler:
         if session_messages is None:
             return response_handler
@@ -95,6 +98,54 @@ class LLaMEvol:
 
         if response_handler.error:
             return response_handler
+
+        # Check for near-duplicate code before expensive evaluation
+        if existing_individuals and response_handler.code:
+
+            def _strip_comments(code):
+                """Remove comments and blank lines for structural comparison."""
+                lines = []
+                for line in code.splitlines():
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith("#"):
+                        lines.append(line)
+                return "\n".join(lines)
+
+            new_code_stripped = _strip_comments(response_handler.code)
+            best_match = None
+            best_sim = 0.0
+            for ind in existing_individuals:
+                if not ind.solution:
+                    continue
+                sim = code_compare(new_code_stripped, _strip_comments(ind.solution))
+                if sim > best_sim:
+                    best_sim = sim
+                    best_match = ind
+
+            if (
+                best_sim >= duplicate_threshold
+                and best_match is not None
+                and best_match.fitness is not None
+                and not (
+                    isinstance(best_match.fitness, float)
+                    and np.isnan(best_match.fitness)
+                )
+            ):
+                logging.info(
+                    "Duplicate detected: %.1f%% similar to %s (%.4f). Skipping evaluation.",
+                    best_sim * 100,
+                    best_match.name,
+                    best_match.fitness,
+                )
+                res = EvaluatorResult()
+                res.name = response_handler.code_name
+                res.score = best_match.fitness
+                res.metadata = {
+                    "duplicate_of": best_match.id,
+                    "duplicate_similarity": best_sim,
+                }
+                response_handler.eval_result = res
+                return response_handler
 
         res = evaluator.evaluate(
             code=response_handler.code,
@@ -251,6 +302,7 @@ class LLaMEvol:
                         "evaluator": _evaluator,
                         "retry": n_retry,
                         "options": options,
+                        "existing_individuals": list(population.all_individuals()),
                     }
                     params.append((kwargs, query_item))
 
