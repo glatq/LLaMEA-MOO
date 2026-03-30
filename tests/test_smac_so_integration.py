@@ -390,13 +390,5 @@ class TestErrorHandling:
         ), "Missing class should produce an error or zero score"
 
 
-# Pytest markers and configuration
-def pytest_configure(config):
-    """Configure custom pytest markers."""
-    config.addinivalue_line(
-        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
-    )
-
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-m", "not slow"])

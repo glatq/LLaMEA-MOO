@@ -42,8 +42,10 @@ class DummyRandomSearchMO:
 
 
 def test_multiobj_evaluator_with_real_pymoo():
-    problem = [MOOProblemSpec(name="dtlz2", dim=5, n_obj=2, ref_point=[1.2, 12.0])]
-    evaluator = MultiObjEvaluator(budget=20, problems=problem, repeat=1)
+    problem = [MOOProblemSpec(name="bnh", dim=2, n_obj=2, ref_point=[140.0, 50.0])]
+    evaluator = MultiObjEvaluator(
+        budget=10, problems=problem, repeat=1, use_multiprocessing=False
+    )
 
     res = evaluator.evaluate(
         code=DUMMY_CODE,

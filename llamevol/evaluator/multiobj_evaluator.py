@@ -155,11 +155,13 @@ class MultiObjEvaluator(AbstractEvaluator):
         hpo_validation_budget: int = 100,  # Budget for validation
         hpo_n_problems: int = None,  # Number of problems for HPO (None = all)
         hpo_n_workers: int = 1,  # Parallel SMAC workers
+        use_multiprocessing: bool = True,  # Use ProcessPoolExecutor (False for fast tests)
     ):
         super().__init__()
         self.budget = int(budget)
         self.repeat = int(repeat)
         self.timeout = int(timeout)
+        self.use_multiprocessing = use_multiprocessing
         self.problem_specs = list(problems) if problems else []
         self.calculate_hv_history = calculate_hv_history
 
@@ -312,49 +314,71 @@ class MultiObjEvaluator(AbstractEvaluator):
         # Step 3: Final evaluation with incumbent (or defaults)
         logging.info(f"Running final evaluation with config: {final_init_kwargs}")
 
-        manager = multiprocessing.Manager()
-        stop_event = manager.Event()
-
         tasks = [
             (spec, rep) for spec in self.problem_specs for rep in range(self.repeat)
         ]
 
-        with concurrent.futures.ProcessPoolExecutor(
-            max_workers=os.cpu_count()
-        ) as executor:
-            future_to_task = {
-                executor.submit(
-                    _run_single_moo_rep,
-                    spec,
-                    rep,
-                    self.budget,
-                    code,
-                    cls_name,
-                    cls,
-                    final_init_kwargs,  # Use incumbent config
-                    cls_call_kwargs,
-                    injector,
-                    stop_event,
-                    self.calculate_hv_history,  # Pass flag to worker
-                ): (spec, rep)
-                for spec, rep in tasks
-            }
+        if self.use_multiprocessing:
+            manager = multiprocessing.Manager()
+            stop_event = manager.Event()
 
-            try:
-                for future in concurrent.futures.as_completed(
-                    future_to_task, timeout=self.timeout
-                ):
-                    eval_res.result.append(future.result())
-            except concurrent.futures.TimeoutError:
-                stop_event.set()
-                eval_res.error, eval_res.error_type = (
-                    f"Timeout ({self.timeout}s)",
-                    "TimeoutError",
-                )
-                executor.shutdown(wait=False, cancel_futures=True)
-            except Exception as e:
-                eval_res.error, eval_res.error_type = str(e), "ExecError"
-                executor.shutdown(wait=False, cancel_futures=True)
+            with concurrent.futures.ProcessPoolExecutor(
+                max_workers=os.cpu_count()
+            ) as executor:
+                future_to_task = {
+                    executor.submit(
+                        _run_single_moo_rep,
+                        spec,
+                        rep,
+                        self.budget,
+                        code,
+                        cls_name,
+                        cls,
+                        final_init_kwargs,
+                        cls_call_kwargs,
+                        injector,
+                        stop_event,
+                        self.calculate_hv_history,
+                    ): (spec, rep)
+                    for spec, rep in tasks
+                }
+
+                try:
+                    for future in concurrent.futures.as_completed(
+                        future_to_task, timeout=self.timeout
+                    ):
+                        eval_res.result.append(future.result())
+                except concurrent.futures.TimeoutError:
+                    stop_event.set()
+                    eval_res.error, eval_res.error_type = (
+                        f"Timeout ({self.timeout}s)",
+                        "TimeoutError",
+                    )
+                    executor.shutdown(wait=False, cancel_futures=True)
+                except Exception as e:
+                    eval_res.error, eval_res.error_type = str(e), "ExecError"
+                    executor.shutdown(wait=False, cancel_futures=True)
+        else:
+            # Sequential mode (fast, no process overhead — for testing)
+            for spec, rep in tasks:
+                try:
+                    basic = _run_single_moo_rep(
+                        spec,
+                        rep,
+                        self.budget,
+                        code,
+                        cls_name,
+                        cls,
+                        final_init_kwargs,
+                        cls_call_kwargs,
+                        injector,
+                        None,
+                        self.calculate_hv_history,
+                    )
+                    eval_res.result.append(basic)
+                except Exception as e:
+                    eval_res.error, eval_res.error_type = str(e), "ExecError"
+                    break
 
         valid_scores = [r.best_y for r in eval_res.result if r.best_y is not None]
         eval_res.score = float(np.mean(valid_scores)) if valid_scores else float("nan")

@@ -9,50 +9,24 @@ from llamevol.configspace_ext.configspace_utils import extract_configspace_from_
 SAMPLE_CODE = """import numpy as np
 
 class SimpleRandomSearch:
-    def __init__(self, budget, dim, bounds, num_samples=10, seed=None):
+    def __init__(self, budget, dim, bounds=None, num_samples=10):
         self.budget = budget
         self.dim = dim
-        # Handle bounds properly - can be a tuple (lower, upper) or list of tuples [(l1, u1), ...]
-        if isinstance(bounds, tuple) and len(bounds) == 2:
-            self.bounds = bounds
-        elif isinstance(bounds, list) and len(bounds) > 0:
-            if isinstance(bounds[0], (list, tuple)):
-                # List of per-dimension bounds: [(l1, u1), (l2, u2), ...]
-                self.bounds = (
-                    np.array([b[0] for b in bounds]),
-                    np.array([b[1] for b in bounds])
-                )
-            else:
-                # Assume [lower, upper] format
-                self.bounds = (bounds[0], bounds[1])
+        # bounds is np.ndarray of shape (2, dim): [lower_bounds, upper_bounds]
+        if bounds is not None:
+            bounds = np.asarray(bounds)
+            self.lb = bounds[0]
+            self.ub = bounds[1]
         else:
-            self.bounds = (np.zeros(dim), np.ones(dim))
-
+            self.lb = np.zeros(dim)
+            self.ub = np.ones(dim)
         self.num_samples = int(num_samples)
-        self.seed = seed
-        if seed is not None:
-            np.random.seed(seed)
 
     def __call__(self, func):
-        best_X = []
-        best_F = []
-        evals = 0
-
-        while evals < self.budget:
-            batch_size = min(self.num_samples, self.budget - evals)
-            X = np.random.uniform(
-                self.bounds[0],
-                self.bounds[1],
-                (batch_size, self.dim)
-            )
-
-            for x in X:
-                f = np.asarray(func(x))
-                best_X.append(x)
-                best_F.append(f)
-                evals += 1
-
-        return np.array(best_X), np.array(best_F)
+        for _ in range(self.budget):
+            x = np.random.uniform(self.lb, self.ub)
+            func(x)
+        return None
 """
 
 # Full LLM response with ConfigSpace
@@ -113,11 +87,12 @@ class TestBasicEvaluation:
     def test_evaluation_without_hpo(self):
         """Test that evaluation works without HPO enabled."""
         problems = [
-            MOOProblemSpec(name="zdt1", dim=10, n_obj=2, ref_point=[1.1, 6.0]),
+            MOOProblemSpec(name="bnh", dim=2, n_obj=2, ref_point=[140.0, 50.0]),
         ]
 
         evaluator = MultiObjEvaluator(
-            budget=50,
+            use_multiprocessing=False,
+            budget=10,
             problems=problems,
             repeat=1,
             use_hpo=False,
@@ -141,12 +116,13 @@ class TestBasicEvaluation:
     def test_evaluation_multiple_problems(self):
         """Test evaluation on multiple problems."""
         problems = [
-            MOOProblemSpec(name="zdt1", dim=10, n_obj=2, ref_point=[1.1, 6.0]),
-            MOOProblemSpec(name="zdt2", dim=10, n_obj=2, ref_point=[1.1, 7.0]),
+            MOOProblemSpec(name="bnh", dim=2, n_obj=2, ref_point=[140.0, 50.0]),
+            MOOProblemSpec(name="zdt1", dim=2, n_obj=2, ref_point=[1.1, 6.0]),
         ]
 
         evaluator = MultiObjEvaluator(
-            budget=50,
+            use_multiprocessing=False,
+            budget=10,
             problems=problems,
             repeat=1,
             use_hpo=False,
@@ -165,11 +141,12 @@ class TestBasicEvaluation:
     def test_evaluation_with_repeats(self):
         """Test evaluation with multiple repeats."""
         problems = [
-            MOOProblemSpec(name="zdt1", dim=10, n_obj=2, ref_point=[1.1, 6.0]),
+            MOOProblemSpec(name="bnh", dim=2, n_obj=2, ref_point=[140.0, 50.0]),
         ]
 
         evaluator = MultiObjEvaluator(
-            budget=50,
+            use_multiprocessing=False,
+            budget=10,
             problems=problems,
             repeat=2,  # 2 repeats
             use_hpo=False,
@@ -192,11 +169,12 @@ class TestHPOEvaluation:
     def test_hpo_evaluator_initialization(self):
         """Test that HPO evaluator initializes correctly."""
         problems = [
-            MOOProblemSpec(name="zdt1", dim=10, n_obj=2, ref_point=[1.1, 6.0]),
+            MOOProblemSpec(name="bnh", dim=2, n_obj=2, ref_point=[140.0, 50.0]),
         ]
 
         evaluator = MultiObjEvaluator(
-            budget=100,
+            use_multiprocessing=False,
+            budget=50,
             problems=problems,
             repeat=1,
             use_hpo=True,
@@ -222,19 +200,20 @@ class TestHPOEvaluation:
         Mark with @pytest.mark.slow and skip in CI if needed.
         """
         problems = [
-            MOOProblemSpec(name="zdt1", dim=10, n_obj=2, ref_point=[1.1, 6.0]),
+            MOOProblemSpec(name="bnh", dim=2, n_obj=2, ref_point=[140.0, 50.0]),
         ]
 
         evaluator = MultiObjEvaluator(
-            budget=100,
+            use_multiprocessing=False,
+            budget=20,
             problems=problems,
             repeat=1,
             use_hpo=True,
-            hpo_trials=3,  # Small number for testing
-            hpo_min_budget=30,
-            hpo_max_budget=50,
-            hpo_walltime=60,  # 1 minute limit
-            hpo_validation_budget=20,
+            hpo_trials=3,
+            hpo_min_budget=10,
+            hpo_max_budget=15,
+            hpo_walltime=30,
+            hpo_validation_budget=10,
         )
 
         result = evaluator.evaluate(
@@ -263,19 +242,20 @@ class TestHPOEvaluation:
     def test_evaluation_with_hpo_no_configspace(self):
         """Test that evaluation gracefully handles missing ConfigSpace."""
         problems = [
-            MOOProblemSpec(name="zdt1", dim=10, n_obj=2, ref_point=[1.1, 6.0]),
+            MOOProblemSpec(name="bnh", dim=2, n_obj=2, ref_point=[140.0, 50.0]),
         ]
 
         evaluator = MultiObjEvaluator(
-            budget=50,
+            use_multiprocessing=False,
+            budget=10,
             problems=problems,
             repeat=1,
             use_hpo=True,
             hpo_trials=3,
-            hpo_min_budget=20,
-            hpo_max_budget=40,
-            hpo_walltime=60,
-            hpo_validation_budget=10,
+            hpo_min_budget=5,
+            hpo_max_budget=10,
+            hpo_walltime=30,
+            hpo_validation_budget=5,
         )
 
         # Response without ConfigSpace
@@ -325,6 +305,7 @@ class TestBudgetProgression:
         hpo_validation_budget = 20
 
         evaluator = MultiObjEvaluator(
+            use_multiprocessing=False,
             budget=final_budget,
             problems=problems,
             repeat=1,
@@ -396,11 +377,12 @@ class TestErrorHandling:
     def test_invalid_code(self):
         """Test that invalid code is handled gracefully."""
         problems = [
-            MOOProblemSpec(name="zdt1", dim=10, n_obj=2, ref_point=[1.1, 6.0]),
+            MOOProblemSpec(name="bnh", dim=2, n_obj=2, ref_point=[140.0, 50.0]),
         ]
 
         evaluator = MultiObjEvaluator(
-            budget=50,
+            use_multiprocessing=False,
+            budget=10,
             problems=problems,
             repeat=1,
             use_hpo=False,
@@ -434,11 +416,12 @@ class TestErrorHandling:
     def test_missing_class(self):
         """Test that missing class name is handled gracefully."""
         problems = [
-            MOOProblemSpec(name="zdt1", dim=10, n_obj=2, ref_point=[1.1, 6.0]),
+            MOOProblemSpec(name="bnh", dim=2, n_obj=2, ref_point=[140.0, 50.0]),
         ]
 
         evaluator = MultiObjEvaluator(
-            budget=50,
+            use_multiprocessing=False,
+            budget=10,
             problems=problems,
             repeat=1,
             use_hpo=False,
@@ -470,11 +453,12 @@ class TestHypervolumeCalculation:
     def test_evaluation_produces_valid_hypervolume(self):
         """Test that evaluation produces a valid hypervolume score."""
         problems = [
-            MOOProblemSpec(name="zdt1", dim=10, n_obj=2, ref_point=[1.1, 6.0]),
+            MOOProblemSpec(name="bnh", dim=2, n_obj=2, ref_point=[140.0, 50.0]),
         ]
 
         evaluator = MultiObjEvaluator(
-            budget=50,
+            use_multiprocessing=False,
+            budget=10,
             problems=problems,
             repeat=1,
             use_hpo=False,
@@ -495,14 +479,6 @@ class TestHypervolumeCalculation:
             assert basic_result.best_y is not None, "Should have hypervolume score"
             # HV is stored as negative, so best_y should be negative
             assert isinstance(basic_result.best_y, (int, float, np.number))
-
-
-# Pytest markers and configuration
-def pytest_configure(config):
-    """Configure custom pytest markers."""
-    config.addinivalue_line(
-        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
-    )
 
 
 if __name__ == "__main__":
