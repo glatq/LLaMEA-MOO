@@ -610,7 +610,7 @@ class IOHEvaluator(AbstractEvaluator):
                 )
 
                 # Step 1: Quick validation with random config
-                validation_passed = validate_with_random_config(
+                validation_passed, validation_error = validate_with_random_config(
                     code=code,
                     cls_name=cls_name,
                     configspace=configspace,
@@ -622,10 +622,14 @@ class IOHEvaluator(AbstractEvaluator):
                 )
 
                 if not validation_passed:
-                    _logger.error("Validation failed. Skipping HPO.")
+                    _logger.error(
+                        f"Validation failed: {validation_error}. Skipping HPO."
+                    )
                     if not hasattr(eval_result, "metadata"):
                         eval_result.metadata = {}
-                    eval_result.metadata["hpo_error"] = "Validation failed"
+                    eval_result.metadata[
+                        "hpo_error"
+                    ] = f"Validation failed: {validation_error}"
                 else:
                     # Step 2: Run SMAC HPO
                     try:

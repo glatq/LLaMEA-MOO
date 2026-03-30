@@ -338,7 +338,7 @@ def validate_with_random_config(
     dim: int,
     budget: int = 100,
     injector: Any = None,
-) -> bool:
+) -> tuple[bool, str]:
     """
     Validate that the algorithm works with a random configuration.
 
@@ -355,11 +355,11 @@ def validate_with_random_config(
         injector: Optional code injector
 
     Returns:
-        True if validation passes, False otherwise
+        (True, "") if validation passes, (False, error_message) otherwise
     """
     if not SMAC_AVAILABLE:
         _logger.warning("Cannot validate: SMAC not available")
-        return False
+        return False, "SMAC not available"
 
     _logger.info(f"Validating {cls_name} with random configuration...")
 
@@ -399,11 +399,11 @@ def validate_with_random_config(
 
         if err:
             _logger.error(f"  Validation failed: {err}")
-            return False
+            return False, str(err)
 
         _logger.info(f"  ✅ Validation passed ({eval_count[0]} evaluations)")
-        return True
+        return True, ""
 
     except Exception as e:
         _logger.error(f"  Validation error: {e}")
-        return False
+        return False, str(e)

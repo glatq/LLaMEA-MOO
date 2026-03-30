@@ -423,15 +423,17 @@ class ESPopulation(Population):
     def get_best_of_all(self, maximize: bool = True):
         best = None
         for ind in self.all_individuals():
+            # Skip individuals with nan fitness (failed evaluations)
+            if isinstance(ind.fitness, float) and math.isnan(ind.fitness):
+                continue
             if best is None:
                 best = ind
+            elif maximize:
+                if ind.fitness > best.fitness:
+                    best = ind
             else:
-                if maximize:
-                    if ind.fitness > best.fitness:
-                        best = ind
-                else:
-                    if ind.fitness < best.fitness:
-                        best = ind
+                if ind.fitness < best.fitness:
+                    best = ind
         return best
 
     def get_best_individual(self, maximize: bool = True):

@@ -236,7 +236,7 @@ class MultiObjEvaluator(AbstractEvaluator):
 
                 # Step 1: Quick validation with random config
                 if self.problem_specs:
-                    validation_passed = validate_with_random_config(
+                    validation_passed, validation_error = validate_with_random_config(
                         code=code,
                         cls_name=cls_name,
                         configspace=configspace,
@@ -246,8 +246,12 @@ class MultiObjEvaluator(AbstractEvaluator):
                     )
 
                     if not validation_passed:
-                        logging.error("Validation failed. Skipping HPO.")
-                        eval_res.metadata["hpo_error"] = "Validation failed"
+                        logging.error(
+                            f"Validation failed: {validation_error}. Skipping HPO."
+                        )
+                        eval_res.metadata[
+                            "hpo_error"
+                        ] = f"Validation failed: {validation_error}"
                     else:
                         # Step 2: Run SMAC HPO
                         try:
