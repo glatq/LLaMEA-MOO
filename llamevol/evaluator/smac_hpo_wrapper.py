@@ -180,10 +180,13 @@ def run_smac_hpo_moo(
             )
 
             hv_indicator = HV(ref_point=ref_point)
-            hv = hv_indicator(Y)
+            raw_hv = hv_indicator(Y)
+            # Normalize HV by reference point volume so all problems
+            # contribute equally when averaged
+            ref_volume = float(np.prod(ref_point))
+            hv = raw_hv / ref_volume if ref_volume > 0 else raw_hv
 
-            # SMAC minimizes, so return negative HV (or 1 - normalized_hv)
-            # Using 1 - hv to keep scores in [0, 1] range
+            # SMAC minimizes, so return 1 - normalized_hv (scores in [0, 1] range)
             score = 1.0 - hv if hv > 0 else 1.0
 
             logging.debug(
@@ -294,8 +297,8 @@ def run_smac_hpo_moo(
     root_logger.handlers = _saved_handlers
     root_logger.setLevel(_saved_level)
     _logger.info(f"Incumbent configuration: {incumbent_dict}")
-    _logger.info(f"Incumbent average HV: {incumbent_hv:.4f}")
-    _logger.info(f"  HV per problem: {[f'{hv:.4f}' for hv in hvs]}")
+    _logger.info(f"Incumbent average normalized HV: {incumbent_hv:.4f}")
+    _logger.info(f"  Normalized HV per problem: {[f'{hv:.4f}' for hv in hvs]}")
 
     return incumbent_dict, incumbent_hv
 

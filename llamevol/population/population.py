@@ -145,7 +145,10 @@ class Population(ABC):
             if index is None:
                 index = self.get_population_size()
             fitness = individual.fitness
-            file_name = f"{generation}-{index}_{name}_{fitness:.4f}"
+            display_fitness = (
+                abs(fitness) if isinstance(fitness, (int, float)) else fitness
+            )
+            file_name = f"{generation}-{index}_{name}_{display_fitness:.4f}"
 
             code_path = f"{_save_dir}/{file_name}.py"
             with open(code_path, "w", encoding="utf-8") as f:

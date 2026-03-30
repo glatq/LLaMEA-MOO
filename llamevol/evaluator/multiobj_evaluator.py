@@ -121,7 +121,11 @@ def _run_single_moo_rep(
                 # Final performance metric
                 front_idx = nds.do(Y, only_non_dominated_front=True)
                 final_hv = float(hv_indicator(Y[front_idx]))
-                basic.best_y = -final_hv
+                # Normalize HV by reference point volume so all problems
+                # contribute equally to the mean score
+                ref_volume = float(np.prod(ref_point))
+                normalized_hv = final_hv / ref_volume if ref_volume > 0 else final_hv
+                basic.best_y = -normalized_hv
 
                 # New: Calculate HV progress curve only if requested
                 if calculate_hv_history:
