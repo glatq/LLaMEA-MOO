@@ -307,11 +307,14 @@ def validate_with_random_config(
     problem_spec: Any,
     budget: int = 100,
     injector: Any = None,
+    n_retries: int = 3,
 ) -> tuple[bool, str]:
     """
-    Validate that the algorithm works with a random configuration.
+    Validate that the algorithm works with random configurations.
 
-    This is a quick sanity check before running full HPO.
+    Tries up to n_retries different random configurations before rejecting.
+    This avoids discarding algorithms that only fail on specific config
+    combinations.
 
     Args:
         code: Algorithm code
@@ -320,6 +323,7 @@ def validate_with_random_config(
         problem_spec: Single problem to test on
         budget: Small budget for validation
         injector: Optional code injector
+        n_retries: Number of random configs to try before rejecting
 
     Returns:
         (True, "") if validation passes, (False, error_message) otherwise
@@ -328,55 +332,65 @@ def validate_with_random_config(
         _logger.warning("Cannot validate: SMAC not available")
         return False, "SMAC not available"
 
-    _logger.info(f"Validating {cls_name} with random configuration...")
+    _logger.info(
+        f"Validating {cls_name} with up to {n_retries} random configurations..."
+    )
 
-    try:
-        # Sample a random configuration
-        config = configspace.sample_configuration()
-        _logger.info(f"  Test config: {dict(config)}")
+    # Get problem once (reused across retries)
+    provider = PymooMOProvider()
+    wrapper = provider.get(
+        problem_id=problem_spec.name,
+        dim=problem_spec.dim,
+        ref_point=problem_spec.ref_point,
+        n_obj=problem_spec.n_obj,
+    )
 
-        # Get problem
-        provider = PymooMOProvider()
-        wrapper = provider.get(
-            problem_id=problem_spec.name,
-            dim=problem_spec.dim,
-            ref_point=problem_spec.ref_point,
-            n_obj=problem_spec.n_obj,
-        )
+    last_error = ""
+    for attempt in range(n_retries):
+        try:
+            config = configspace.sample_configuration()
+            _logger.info(f"  Attempt {attempt + 1}/{n_retries}, config: {dict(config)}")
 
-        # Simple eval function
-        eval_count = [0]
+            eval_count = [0]
 
-        def func(x):
-            eval_count[0] += 1
-            if eval_count[0] > budget:
-                return np.zeros(wrapper.n_obj)
-            return wrapper(np.asarray(x).ravel())
+            def func(x):
+                eval_count[0] += 1
+                if eval_count[0] > budget:
+                    return np.zeros(wrapper.n_obj)
+                return wrapper(np.asarray(x).ravel())
 
-        # Try to execute
-        init_kwargs = {
-            "budget": budget,
-            "dim": problem_spec.dim,
-            "bounds": wrapper.bounds,
-            **dict(config),
-        }
+            init_kwargs = {
+                "budget": budget,
+                "dim": problem_spec.dim,
+                "bounds": wrapper.bounds,
+                **dict(config),
+            }
 
-        _, _, err, _ = default_exec(
-            code=code,
-            cls_name=cls_name,
-            cls=None,
-            init_kwargs=init_kwargs,
-            call_kwargs={"func": func},
-            injector=injector,
-        )
+            _, _, err, _ = default_exec(
+                code=code,
+                cls_name=cls_name,
+                cls=None,
+                init_kwargs=init_kwargs,
+                call_kwargs={"func": func},
+                injector=injector,
+            )
 
-        if err:
-            _logger.error(f"  Validation failed: {err}")
-            return False, str(err)
+            if err:
+                last_error = str(err)
+                _logger.warning(f"  Attempt {attempt + 1}/{n_retries} failed: {err}")
+                continue
 
-        _logger.info(f"  ✅ Validation passed ({eval_count[0]} evaluations)")
-        return True, ""
+            _logger.info(
+                f"  ✅ Validation passed on attempt {attempt + 1} ({eval_count[0]} evaluations)"
+            )
+            return True, ""
 
-    except Exception as e:
-        _logger.error(f"  Validation error: {e}")
-        return False, str(e)
+        except Exception as e:
+            last_error = str(e)
+            _logger.warning(f"  Attempt {attempt + 1}/{n_retries} error: {e}")
+            continue
+
+    _logger.error(
+        f"  Validation failed after {n_retries} attempts. Last error: {last_error}"
+    )
+    return False, last_error
