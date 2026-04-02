@@ -1,0 +1,36 @@
+budget: 100
+repeat: 5
+output_dir: benchmark_results
+
+plotting:
+  save_figures: true
+  show_figures: false
+  convergence_dpi: 150
+  pareto_dpi: 300
+
+problems:
+  - {name: bnh, dim: 2, n_obj: 2, ref_point: [140.0, 50.0]}
+  - {name: osy, dim: 6, n_obj: 2, ref_point: [0.0, 386.0]}
+  - {name: ctp1, dim: 2, n_obj: 2, ref_point: [1.0, 2.0]}
+  - {name: tnk, dim: 2, n_obj: 2, ref_point: [2.0, 2.0]}
+  - {name: mw1, dim: 8, n_obj: 2, ref_point: [1.0, 7.0]}
+  - {name: mw2, dim: 6, n_obj: 2, ref_point: [1.0, 7.0]}
+  - {name: mw3, dim: 6, n_obj: 2, ref_point: [1.0, 7.0]}
+  - {name: mw11, dim: 6, n_obj: 2, ref_point: [30.0, 30.0]}
+
+algorithms:
+  - path: "exp_mo_paper/ESPopulation_evol_1+1_0331113806/28-29_MOBOParEGOEI_0.5432.py"
+    cls_name: MOBOParEGOEI
+    handler_pkl: "exp_mo_paper/ESPopulation_evol_1+1_0331113806/28-29_MOBOParEGOEI_0.5432_handler.pkl"
+
+  - path: "exp_mo_es_search/ESPopulation_evol_4+16_0121124246/4-56_MOBOForestTchebyUCB_-4917.5413.py"
+    cls_name: MOBOForestTchebyUCB
+
+  - path: "MO bench/NSGA-II.py"
+    cls_name: NSGA2Wrapper
+
+  - path: "MO bench/ioc_samo_cobra.py"
+    cls_name: IOCSAMOCOBRAWrapper
+
+  - path: "MO bench/MORS_baseline.py"
+    cls_name: RandomSearchMO

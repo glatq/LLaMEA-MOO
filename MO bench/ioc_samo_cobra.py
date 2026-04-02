@@ -14,7 +14,7 @@ if not os.path.exists(ioc_path):
     ioc_path = os.path.join(os.path.dirname(current_dir), "IOC-SAMO-COBRA")
     if not os.path.exists(ioc_path):
         # Try as sibling to current directory
-        ioc_path = os.path.join(current_dir, "..", "IOC-SAMO-COBRA")
+        ioc_path = os.path.join(current_dir, "../..", "IOC-SAMO-COBRA")
         ioc_path = os.path.abspath(ioc_path)
 
 if str(ioc_path) not in sys.path:

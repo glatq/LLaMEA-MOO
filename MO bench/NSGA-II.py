@@ -1,7 +1,7 @@
 import numpy as np
 from pymoo.algorithms.moo.nsga2 import NSGA2
-from pymoo.optimize import minimize
 from pymoo.core.problem import Problem
+from pymoo.optimize import minimize
 
 
 class NSGA2Wrapper:
