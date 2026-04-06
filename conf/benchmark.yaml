@@ -9,6 +9,8 @@ plotting:
   pareto_dpi: 300
 
 problems:
+  - { name: zdt1, dim: 30, n_obj: 2, ref_point: [ 1.1, 6.0 ] }
+  - { name: zdt4, dim: 10, n_obj: 2, ref_point: [ 1.1, 160.0 ] }
   - {name: bnh, dim: 2, n_obj: 2, ref_point: [140.0, 50.0]}
   - {name: osy, dim: 6, n_obj: 2, ref_point: [0.0, 386.0]}
   - {name: ctp1, dim: 2, n_obj: 2, ref_point: [1.0, 2.0]}
