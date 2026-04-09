@@ -99,8 +99,10 @@ def get_bo_prompt_generator(prompts_cfg: DictConfig) -> BaselinePromptGenerator:
     return prompt_generator
 
 
-def get_mo_prompt_generator():
-    prompt_generator = MultiObjectivePromptGenerator()
+def get_mo_prompt_generator(
+    prompts_cfg: DictConfig = None,
+) -> MultiObjectivePromptGenerator:
+    prompt_generator = MultiObjectivePromptGenerator(prompts_cfg)
     prompt_generator.is_bo = True
     return prompt_generator
 
@@ -146,7 +148,7 @@ def run_exp(cfg: DictConfig):
 
         search_cfg = cfg.mo_search
         evaluator = get_MOOEvaluator(cfg)
-        prompt_generator = get_mo_prompt_generator()
+        prompt_generator = get_mo_prompt_generator(cfg.prompts)
     elif mode == "so":
         search_cfg = cfg.so_search
         evaluator = get_IOHEvaluator(cfg)

@@ -41,8 +41,10 @@ def benchmark_and_plot(cfg):
     ]
 
     # Initialize evaluator
+    timeout = cfg.get("timeout", 1800)
     evaluator = MultiObjEvaluator(
-        budget=budget, problems=problems, repeat=repeat, calculate_hv_history=True
+        budget=budget, problems=problems, repeat=repeat, calculate_hv_history=True,
+        timeout=timeout
     )
 
     all_results = {}
