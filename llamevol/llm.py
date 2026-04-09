@@ -359,6 +359,44 @@ class RequestClient(LLMClient):
             return res
 
 
+class _GenericAISuiteClient(LLMClient):
+    """AISuite client for providers not in the LLMS dict (e.g., anthropic)."""
+
+    def __init__(self, provider: str, model_name: str):
+        super().__init__(api_key=None, model_name=model_name, base_url=None)
+        self.provider = provider
+        self.client = ai.Client()
+
+    def raw_completion(
+        self,
+        messages: list[dict[str, str]],
+        **kwargs: Any,
+    ) -> LLMClientResponse:
+        res = None
+        try:
+            _aisuite_model = f"{self.provider}:{self.model_name}"
+            # Deep copy messages — aisuite's anthropic provider mutates the list
+            # by popping the system message in _extract_system_message()
+            messages_copy = [dict(m) for m in messages]
+            # Remove unsupported kwargs for this provider
+            kwargs = {k: v for k, v in kwargs.items() if k not in ("top_k",)}
+            # Anthropic requires max_tokens; aisuite defaults to 4096 which is
+            # too low for long algorithm code.  Bump to 16384 unless the caller
+            # already set it.
+            if self.provider == "anthropic":
+                kwargs.setdefault("max_tokens", 16384)
+            response = self.client.chat.completions.create(
+                model=_aisuite_model, messages=messages_copy, **kwargs
+            )
+            res = LLMClientResponse(response)
+            res.text = response.choices[0].message.content
+            return res
+        except Exception as e:
+            res = LLMClientResponse(None)
+            res.error = e
+            return res
+
+
 class LLMmanager:
     def __init__(
         self,
@@ -376,7 +414,9 @@ class LLMmanager:
             if model_name is None:
                 raise ValueError("model_name must be provided.")
 
-            if not (api_key or use_vertex):
+            # AISuite providers (anthropic, groq, etc.) read keys from env vars
+            aisuite_providers = {"anthropic", "groq", "mistral", "cohere"}
+            if not (api_key or use_vertex or client_str in aisuite_providers):
                 raise ValueError(
                     "Provide api_key (Gemini Developer API) or enable Vertex "
                     "(set client_str='vertex' or GOOGLE_GENAI_USE_VERTEXAI=1)."
@@ -402,8 +442,14 @@ class LLMmanager:
             self.client = RequestClient(api_key, model_name, base_url)
         elif client_str in ("google", "vertex"):
             self.client = GoogleGenAIClient(api_key, model_name, base_url)
-        else:
+        elif model_key is not None:
             self.client = AISuiteClient(model_key)
+        else:
+            # Generic aisuite provider (anthropic, groq, etc.)
+            # Build an AISuiteClient directly with provider and model name
+            self.client = _GenericAISuiteClient(
+                provider=client_str, model_name=model_name
+            )
 
         self.max_interval = _model[3]
         self.mock_res_provider: Callable[..., str] = None
