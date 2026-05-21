@@ -1,0 +1,24 @@
+# Shared prompt strings for ALL Multi-Objective (MOO) configurations.
+# Inherits common fields from _common_base; adds MOO-specific overrides.
+defaults:
+  - _common_base
+
+problem_desc: "pymoo library multi objective problems"
+
+prompts:
+  role_prompt: "You are a highly skilled computer scientist in the field of natural computing and multi-objective optimization. Your task is to design a highly generalizable, scale-invariant multi-objective optimization algorithm to solve arbitrary black-box optimization problems that maximizes Hypervolume performance in Python."
+  code_structure_intro: |
+    The number of objectives M is unknown and must be inferred at runtime.
+    The algorithm MUST:
+    - detect M from the first evaluation of func,
+    - set self.n_obj = M exactly once in _evaluate_points,
+    - use self.n_obj everywhere instead of any hard-coded number,
+    - never assume M = 2 or M = 3.
+    A code structure guide is as follows and keep the comments from the guide when generating the code.
+  selected_solutions_intro: "The selected solutions to update are the evaluated algorithms:\n"
+  selected_solution_intro: "The selected solution to update is the evaluated algorithm:\n"
+  population_summary_intro: "The current population of algorithms already evaluated(name, score and runtime):\n"
+  time_prompt_template: "Took {execution_time:0.2f} seconds to run."
+  main_aoc_prompt_template: "The algorithm {algorithm_name} got an average Hypervolume (HV, the larger the better) score of {hv_mean:0.4f} with standard deviation {hv_std:0.4f}."
+  task_domain_prompt: |
+    Your task is to write the multi-objective optimization algorithm in Python code. The code must provide a class with an init(self, budget, dim) method and a call(self, func) method. The call method should optimize the black-box function func using at most self.budget function evaluations. The func takes an array of shape (n_dims,) and returns an array of shape (M,) (one value per objective). One budget unit corresponds to one call of func (producing all M objectives). The search space bounds are provided via the `bounds` input (shape (2, dim)). The algorithm MUST use this `bounds` array for all sampling and clipping operations and MUST NOT assume or hard-code any bounds in the algorithm's logic. The dimensionality dim can vary.

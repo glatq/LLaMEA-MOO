@@ -93,20 +93,6 @@ def get_MOOEvaluator(cfg):
     return evaluator
 
 
-def get_bo_prompt_generator(prompts_cfg: DictConfig) -> BaselinePromptGenerator:
-    prompt_generator = BaselinePromptGenerator(prompts_cfg)
-    prompt_generator.is_bo = True
-    return prompt_generator
-
-
-def get_mo_prompt_generator(
-    prompts_cfg: DictConfig = None,
-) -> MultiObjectivePromptGenerator:
-    prompt_generator = MultiObjectivePromptGenerator(prompts_cfg)
-    prompt_generator.is_bo = True
-    return prompt_generator
-
-
 def get_es_population(es_options):
     _n_parent = es_options["n_parent"]
     _n_offspring = es_options["n_offspring"]
@@ -148,11 +134,11 @@ def run_exp(cfg: DictConfig):
 
         search_cfg = cfg.mo_search
         evaluator = get_MOOEvaluator(cfg)
-        prompt_generator = get_mo_prompt_generator(cfg.prompts)
+        prompt_generator = MultiObjectivePromptGenerator(cfg.prompts)
     elif mode == "so":
         search_cfg = cfg.so_search
         evaluator = get_IOHEvaluator(cfg)
-        prompt_generator = get_bo_prompt_generator(cfg.prompts)
+        prompt_generator = BaselinePromptGenerator(cfg.prompts)
     else:
         raise ValueError(f"Unknown mode: {mode}. Use 'so' or 'mo'.")
 

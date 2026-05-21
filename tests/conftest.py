@@ -65,11 +65,23 @@ def vanilla_bl_config_dict():
 
 
 @pytest.fixture
-def vanilla_bl_bo_with_gpu(vanilla_bl_config_dict):
-    vanilla_bl_config_dict["use_cuda"] = True
-    vanilla_bl_config_dict["is_bo"] = True
-    prompt = BaselinePromptGenerator(vanilla_bl_config_dict)
-    return prompt
+def bl_bo_cpu_config_dict():
+    with open(directories.test_data(filename="bl_bo_cpu_for_tests.yaml"), "r") as file:
+        return yaml.safe_load(file)
+
+
+@pytest.fixture
+def bl_bo_gpu_config_dict():
+    with open(directories.test_data(filename="bl_bo_gpu_for_tests.yaml"), "r") as file:
+        return yaml.safe_load(file)
+
+
+@pytest.fixture
+def bl_mini_bo_cpu_config_dict():
+    with open(
+        directories.test_data(filename="bl_mini_bo_cpu_for_tests.yaml"), "r"
+    ) as file:
+        return yaml.safe_load(file)
 
 
 @pytest.fixture
@@ -79,10 +91,18 @@ def vanilla_bl(vanilla_bl_config_dict):
 
 
 @pytest.fixture
-def vanilla_bl_bo(vanilla_bl_config_dict):
-    vanilla_bl_config_dict["is_bo"] = True
-    prompt = BaselinePromptGenerator(vanilla_bl_config_dict)
-    return prompt
+def vanilla_bl_bo_cpu(bl_bo_cpu_config_dict):
+    return BaselinePromptGenerator(bl_bo_cpu_config_dict)
+
+
+@pytest.fixture
+def vanilla_bl_bo_with_gpu(bl_bo_gpu_config_dict):
+    return BaselinePromptGenerator(bl_bo_gpu_config_dict)
+
+
+@pytest.fixture
+def vanilla_bl_mini_bo_cpu(bl_mini_bo_cpu_config_dict):
+    return BaselinePromptGenerator(bl_mini_bo_cpu_config_dict)
 
 
 @pytest.fixture
@@ -114,6 +134,30 @@ def moo_config_dict():
 
 
 @pytest.fixture
+def moo_bo_cpu_config_dict():
+    with open(directories.test_data(filename="moo_bo_cpu_for_tests.yaml"), "r") as file:
+        return yaml.safe_load(file)
+
+
+@pytest.fixture
+def moo_mini_bo_cpu_config_dict():
+    with open(
+        directories.test_data(filename="moo_mini_bo_cpu_for_tests.yaml"), "r"
+    ) as file:
+        return yaml.safe_load(file)
+
+
+@pytest.fixture
 def mopg(moo_config_dict):
     pg = MultiObjectivePromptGenerator(moo_config_dict)
     return pg
+
+
+@pytest.fixture
+def mopg_bo_cpu(moo_bo_cpu_config_dict):
+    return MultiObjectivePromptGenerator(moo_bo_cpu_config_dict)
+
+
+@pytest.fixture
+def mopg_mini_bo_cpu(moo_mini_bo_cpu_config_dict):
+    return MultiObjectivePromptGenerator(moo_mini_bo_cpu_config_dict)

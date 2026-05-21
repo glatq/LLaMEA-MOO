@@ -1,18 +1,17 @@
 task_prompt: |
-  
   Your task is to write the multi-objective optimization algorithm in Python code. The code must provide a class with an init(self, budget, dim) method and a call(self, func) method. The call method should optimize the black-box function func using at most self.budget function evaluations. The func takes an array of shape (n_dims,) and returns an array of shape (M,) (one value per objective). One budget unit corresponds to one call of func (producing all M objectives). The search space bounds are provided via the `bounds` input (shape (2, dim)). The algorithm MUST use this `bounds` array for all sampling and clipping operations and MUST NOT assume or hard-code any bounds in the algorithm's logic. The dimensionality dim can vary.
-  As an expert in numpy, scipy, scikit-learn, torch, and gpytorch, you are allowed to use these libraries. Prefer lightweight models (for example, Gaussian processes or random forests with a sliding window of recent data) and avoid deep neural networks or very heavy models. If you use surrogate models, limit the training set size (for example, using only the most recent 200 points) so that fitting remains cheap. Do not use any other libraries unless they cannot be replaced by the above libraries. Do not remove the comments from the code. Name the class based on the characteristics of the algorithm with a template 'MOBO<Something>'.
+  As an expert in numpy, scipy, scikit-learn, torch, and gpytorch, you are allowed to use these libraries. If you use surrogate models, consider using a sliding window of recent data (e.g., the most recent 200-500 points) to keep model fitting tractable. Avoid deep neural networks. Do not use any other libraries unless they cannot be replaced by the above libraries. Do not remove the comments from the code. Name the class based on the characteristics of the algorithm with a template 'MOBO<Something>'.
   The primary performance metric is Hypervolume (HV) maximization with respect to a fixed reference point. HV and the reference point are handled externally by the evaluator; your algorithm only needs to return a good approximation of the Pareto front (F_pareto, X_pareto). Do not compute the full hypervolume indicator inside the algorithm.
-  
+
   HYPERPARAMETER OPTIMIZATION: Any hyperparameters your algorithm uses will be automatically optimized by SMAC (Sequential Model-Based Algorithm Configuration). You must provide a configuration space as a Python dictionary that defines the hyperparameter search space. Do NOT include the parameters budget, dim, or bounds in the configuration space, as these are problem-specific and fixed. Include all other tunable hyperparameters in the __init__ method with default values, and define their search ranges in the configuration space.
-  
+
   Configuration space format:
   {
       "param_name": (lower_bound, upper_bound),  # For continuous or integer ranges
       "log_param": (lower, upper, "log"),  # For log-scale continuous parameters
       "categorical_param": ["option1", "option2", "option3"]  # For categorical choices
   }
-  
+
   Example:
   {
       "pop_size": (10, 100),
@@ -21,14 +20,14 @@ task_prompt: |
       "mutation_rate": (0.01, 0.5),
       "acquisition_type": ["ei", "ucb", "poi"]
   }
-  
+
   CRITICAL ROBUSTNESS REQUIREMENT: The algorithm's internal search logic (especially the acquisition function and model fitting) MUST be stable and general across all objective scales.
   Any scalarization method (e.g., Tchebycheff or weighted sum) MUST be applied to objectives that are normalized and scaled.
   The normalization MUST be calculated dynamically based on the current observed objective ranges: using the minimum observed value (Ideal Point) and the maximum observed value (Nadir Point) from the archive (`self.y_all`) to scale all objectives to the $[0, 1]$ range.
   This normalization is essential to prevent early pathological evaluations from destabilizing the acquisition function and steering the search to irrelevant regions.
-  
-  If you use hypervolume-based acquisition (e.g., EHVI), you may choose a simple and lightweight internal reference point (for example based on the current observed nadir). This internal reference point is used only for acquisition scoring and does not need to match the evaluator’s reference point. Any HV-related computation used for acquisition must remain local and inexpensive (for example, small candidate sets), and must not compute HV over the entire archive.
-  You can assume typical problem dimensionalities between 2 and 20 and evaluation budgets between 50 and 500. The algorithm must remain computationally lightweight in Python. Its cost should scale approximately linearly with the number of evaluations and dimensions and should avoid O(budget²) operations in the main loop (for example, repeated full-archive dominance checks, full hypervolume calculations, or large nested Python loops).
+
+  If you use hypervolume-based acquisition (e.g., EHVI), you may choose a simple and lightweight internal reference point (for example based on the current observed nadir). This internal reference point is used only for acquisition scoring and does not need to match the evaluator's reference point. Any HV-related computation used for acquisition must remain local and inexpensive (for example, small candidate sets), and must not compute HV over the entire archive.
+  You can assume typical problem dimensionalities between 2 and 20 and evaluation budgets between 50 and 500. The algorithm must remain computationally lightweight in Python. Its cost should scale approximately linearly with the number of evaluations and dimensions and should avoid O(budget^2) operations in the main loop (for example, repeated full-archive dominance checks, full hypervolume calculations, or large nested Python loops).
   Give a robust, computationally efficient multi-objective Bayesian Optimization algorithm to solve this task. It should be conceptually clear and not overly complex. Give the algorithm a concise but comprehensive key-word-style description with the main ideas and justify your decision about the algorithm.
 
 
@@ -42,8 +41,8 @@ bo_task_prompt: |
   The normalization MUST be calculated dynamically based on the current observed objective ranges: using the minimum observed value (Ideal Point) and the maximum observed value (Nadir Point) from the archive (`self.y_all`) to scale all objectives to the $[0, 1]$ range.
   This normalization is essential to prevent early pathological evaluations from destabilizing the acquisition function and steering the search to irrelevant regions.
   
-  If you use hypervolume-based acquisition (e.g., EHVI), you may choose a simple and lightweight internal reference point (for example based on the current observed nadir). This internal reference point is used only for acquisition scoring and does not need to match the evaluator’s reference point. Any HV-related computation used for acquisition must remain local and inexpensive (for example, small candidate sets), and must not compute HV over the entire archive.
-  You can assume typical problem dimensionalities between 2 and 20 and evaluation budgets between 50 and 500. The algorithm must remain computationally lightweight in Python. Its cost should scale approximately linearly with the number of evaluations and dimensions and should avoid O(budget²) operations in the main loop (for example, repeated full-archive dominance checks, full hypervolume calculations, or large nested Python loops).
+  If you use hypervolume-based acquisition (e.g., EHVI), you may choose a simple and lightweight internal reference point (for example based on the current observed nadir). This internal reference point is used only for acquisition scoring and does not need to match the evaluator's reference point. Any HV-related computation used for acquisition must remain local and inexpensive (for example, small candidate sets), and must not compute HV over the entire archive.
+  You can assume typical problem dimensionalities between 2 and 20 and evaluation budgets between 50 and 500. The algorithm must remain computationally lightweight in Python. Its cost should scale approximately linearly with the number of evaluations and dimensions and should avoid O(budget^2) operations in the main loop (for example, repeated full-archive dominance checks, full hypervolume calculations, or large nested Python loops).
   Give a robust, computationally efficient multi-objective Bayesian Optimization algorithm to solve this task. It should be conceptually clear and not overly complex. Give the algorithm a concise but comprehensive key-word-style description with the main ideas and justify your decision about the algorithm.
 
 
@@ -57,8 +56,8 @@ cuda_task_prompt: |
   The normalization MUST be calculated dynamically based on the current observed objective ranges: using the minimum observed value (Ideal Point) and the maximum observed value (Nadir Point) from the archive (`self.y_all`) to scale all objectives to the $[0, 1]$ range.
   This normalization is essential to prevent early pathological evaluations from destabilizing the acquisition function and steering the search to irrelevant regions.
   
-  If you use hypervolume-based acquisition (e.g., EHVI), you may choose a simple and lightweight internal reference point (for example based on the current observed nadir). This internal reference point is used only for acquisition scoring and does not need to match the evaluator’s reference point. Any HV-related computation used for acquisition must remain local and inexpensive (for example, small candidate sets), and must not compute HV over the entire archive.
-  You can assume typical problem dimensionalities between 2 and 20 and evaluation budgets between 50 and 500. The algorithm must remain computationally lightweight in Python. Its cost should scale approximately linearly with the number of evaluations and dimensions and should avoid O(budget²) operations in the main loop (for example, repeated full-archive dominance checks, full hypervolume calculations, or large nested Python loops).
+  If you use hypervolume-based acquisition (e.g., EHVI), you may choose a simple and lightweight internal reference point (for example based on the current observed nadir). This internal reference point is used only for acquisition scoring and does not need to match the evaluator's reference point. Any HV-related computation used for acquisition must remain local and inexpensive (for example, small candidate sets), and must not compute HV over the entire archive.
+  You can assume typical problem dimensionalities between 2 and 20 and evaluation budgets between 50 and 500. The algorithm must remain computationally lightweight in Python. Its cost should scale approximately linearly with the number of evaluations and dimensions and should avoid O(budget^2) operations in the main loop (for example, repeated full-archive dominance checks, full hypervolume calculations, or large nested Python loops).
   Give a robust, computationally efficient multi-objective Bayesian Optimization algorithm to solve this task. It should be conceptually clear and not overly complex. Give the algorithm a concise but comprehensive key-word-style description with the main ideas and justify your decision about the algorithm.
 
 
@@ -246,7 +245,7 @@ bo_code_structure: |
           # Keep per-iteration overhead small and avoid heavy nested optimisation inside this loop.
           # Return a tuple (F_pareto, X_pareto), where F_pareto has shape (K, n_obj)
           # and X_pareto has shape (K, n_dims) for the final non-dominated set.
-          # The algorithm MUST remain correct for any number of objectives self.n_obj ≥ 2 without code changes.
+          # The algorithm MUST remain correct for any number of objectives self.n_obj >= 2 without code changes.
   
           self._evaluate_points(...)
           self._update_eval_points(...)
@@ -262,61 +261,59 @@ bo_code_structure: |
               self._update_eval_points(...)
   
           return F_pareto, X_pareto
-  
-
+  ```
 mini_bo_code_structure: |
-    ```python
-    from collections.abc import Callable
-    import numpy as np
-    
-    class <AlgorithmName>:
-        def __init__(self, budget: int, dim: int, bounds: np.ndarray | None = None,
-                     param1=default1, param2=default2, ...):
-            # Fixed problem parameters
-            self.budget = int(budget)
-            self.dim = int(dim)
-            # bounds has shape (2, <dimension>), bounds[0]: lower bound, bounds[1]: upper bound
-            self.bounds = bounds
-    
-            # Hyperparameters (tuned by SMAC, defined in Space)
-            self.param1 = param1
-            self.param2 = param2
-            # ... add more hyperparameters with default values
-    
-            # X has shape (n_points, n_dims), y has shape (n_points, M)
-            self.X: np.ndarray | None = None
-            self.y: np.ndarray | None = None
-            self.n_evals = 0  # number of function evaluations
-            self.n_init = 0   # unused for pure random search; keep for API consistency
-    
-        @staticmethod
-        def _dominates(a: np.ndarray, b: np.ndarray) -> bool:
-            # Pareto dominance for minimization
-            return np.all(a <= b) and np.any(a < b)
-    
-        def __call__(self, func: Callable[[np.ndarray], np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
-            # func: takes array of shape (n_dims,) and returns a 1-D np.ndarray of objectives (length M).
-            # Return a tuple (self.y, self.X) = (F_nd, X_nd) with shapes (k, M) and (k, dim), respectively.
-            low, high = self.bounds[0], self.bounds[1]
-    
-            X_archive: list[np.ndarray] = []
-            F_archive: list[np.ndarray] = []
-    
-            while self.n_evals < self.budget:
-                # Optimization
-                pass
-            
-            # Persist history if desired
-            if F_archive:
-                self.X = np.vstack(X_archive)
-                self.y = np.vstack(F_archive)
-            else:
-                self.X = np.empty((0, self.dim))
-                self.y = np.empty((0,))
-                
-            return self.y, self.X
-
-
+  ```python
+  from collections.abc import Callable
+  import numpy as np
+  
+  class <AlgorithmName>:
+      def __init__(self, budget: int, dim: int, bounds: np.ndarray | None = None,
+                   param1=default1, param2=default2, ...):
+          # Fixed problem parameters
+          self.budget = int(budget)
+          self.dim = int(dim)
+          # bounds has shape (2, <dimension>), bounds[0]: lower bound, bounds[1]: upper bound
+          self.bounds = bounds
+  
+          # Hyperparameters (tuned by SMAC, defined in Space)
+          self.param1 = param1
+          self.param2 = param2
+          # ... add more hyperparameters with default values
+  
+          # X has shape (n_points, n_dims), y has shape (n_points, M)
+          self.X: np.ndarray | None = None
+          self.y: np.ndarray | None = None
+          self.n_evals = 0  # number of function evaluations
+          self.n_init = 0   # unused for pure random search; keep for API consistency
+  
+      @staticmethod
+      def _dominates(a: np.ndarray, b: np.ndarray) -> bool:
+          # Pareto dominance for minimization
+          return np.all(a <= b) and np.any(a < b)
+  
+      def __call__(self, func: Callable[[np.ndarray], np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+          # func: takes array of shape (n_dims,) and returns a 1-D np.ndarray of objectives (length M).
+          # Return a tuple (self.y, self.X) = (F_nd, X_nd) with shapes (k, M) and (k, dim), respectively.
+          low, high = self.bounds[0], self.bounds[1]
+  
+          X_archive: list[np.ndarray] = []
+          F_archive: list[np.ndarray] = []
+  
+          while self.n_evals < self.budget:
+              # Optimization
+              pass
+  
+          # Persist history if desired
+          if F_archive:
+              self.X = np.vstack(X_archive)
+              self.y = np.vstack(F_archive)
+          else:
+              self.X = np.empty((0, self.dim))
+              self.y = np.empty((0,))
+  
+          return self.y, self.X
+  ```
 role_prompt: "You are a highly skilled computer scientist in the field of natural computing. Your task is to design a highly generalizable, scale-invariant multi-objective metaheuristic algorithm to solve arbitrary black-box optimization problems that are both effective and computationally lightweight in Python. The total runtime of the algorithm should be dominated by calls to the objective function, not by internal overhead."
 
 initial_design_prompt_bo: |
@@ -332,7 +329,7 @@ crossover_operator: "Combine the selected solutions to create a new solution. Th
 
 final_prompt_base: |
   Your task is to write the multi-objective optimization algorithm in Python code. The code must provide a class with an init(self, budget, dim) method and a call(self, func) method. The call method should optimize the black-box function func using at most self.budget function evaluations. The func takes an array of shape (n_dims,) and returns an array of shape (M,) (one value per objective). One budget unit corresponds to one call of func (producing all M objectives). The search space bounds are provided via the `bounds` input (shape (2, dim)). The algorithm MUST use this `bounds` array for all sampling and clipping operations and MUST NOT assume or hard-code any bounds in the algorithm's logic. The dimensionality dim can vary.
-  As an expert in numpy, scipy, scikit-learn, torch, and gpytorch, you are allowed to use these libraries. Prefer lightweight models (for example, Gaussian processes or random forests with a sliding window of recent data) and avoid deep neural networks or very heavy models. If you use surrogate models, limit the training set size (for example, using only the most recent 200 points) so that fitting remains cheap. Do not use any other libraries unless they cannot be replaced by the above libraries. Do not remove the comments from the code. Name the class based on the characteristics of the algorithm with a template 'MOBO<Something>'.
+  As an expert in numpy, scipy, scikit-learn, torch, and gpytorch, you are allowed to use these libraries. If you use surrogate models, consider using a sliding window of recent data (e.g., the most recent 200-500 points) to keep model fitting tractable. Avoid deep neural networks. Do not use any other libraries unless they cannot be replaced by the above libraries. Do not remove the comments from the code. Name the class based on the characteristics of the algorithm with a template 'MOBO<Something>'.
   The primary performance metric is Hypervolume (HV) maximization with respect to a fixed reference point. HV and the reference point are handled externally by the evaluator; your algorithm only needs to return a good approximation of the Pareto front (F_pareto, X_pareto). Do not compute the full hypervolume indicator inside the algorithm.
     
   HYPERPARAMETER OPTIMIZATION: Any hyperparameters your algorithm uses will be automatically optimized by SMAC (Sequential Model-Based Algorithm Configuration). You must provide a configuration space as a Python dictionary that defines the hyperparameter search space. Do NOT include the parameters budget, dim, or bounds in the configuration space, as these are problem-specific and fixed. Include all other tunable hyperparameters in the __init__ method with default values, and define their search ranges in the configuration space.
@@ -358,8 +355,8 @@ final_prompt_base: |
   The normalization MUST be calculated dynamically based on the current observed objective ranges: using the minimum observed value (Ideal Point) and the maximum observed value (Nadir Point) from the archive (`self.y_all`) to scale all objectives to the $[0, 1]$ range.
   This normalization is essential to prevent early pathological evaluations from destabilizing the acquisition function and steering the search to irrelevant regions.
   
-  If you use hypervolume-based acquisition (e.g., EHVI), you may choose a simple and lightweight internal reference point (for example based on the current observed nadir). This internal reference point is used only for acquisition scoring and does not need to match the evaluator’s reference point. Any HV-related computation used for acquisition must remain local and inexpensive (for example, small candidate sets), and must not compute HV over the entire archive.
-  You can assume typical problem dimensionalities between 2 and 20 and evaluation budgets between 50 and 500. The algorithm must remain computationally lightweight in Python. Its cost should scale approximately linearly with the number of evaluations and dimensions and should avoid O(budget²) operations in the main loop (for example, repeated full-archive dominance checks, full hypervolume calculations, or large nested Python loops).
+  If you use hypervolume-based acquisition (e.g., EHVI), you may choose a simple and lightweight internal reference point (for example based on the current observed nadir). This internal reference point is used only for acquisition scoring and does not need to match the evaluator's reference point. Any HV-related computation used for acquisition must remain local and inexpensive (for example, small candidate sets), and must not compute HV over the entire archive.
+  You can assume typical problem dimensionalities between 2 and 20 and evaluation budgets between 50 and 500. The algorithm must remain computationally lightweight in Python. Its cost should scale approximately linearly with the number of evaluations and dimensions and should avoid O(budget^2) operations in the main loop (for example, repeated full-archive dominance checks, full hypervolume calculations, or large nested Python loops).
   Give a robust, computationally efficient multi-objective Bayesian Optimization algorithm to solve this task. It should be conceptually clear and not overly complex. Give the algorithm a concise but comprehensive key-word-style description with the main ideas and justify your decision about the algorithm.
     
 

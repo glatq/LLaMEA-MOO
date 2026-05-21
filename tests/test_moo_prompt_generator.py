@@ -18,9 +18,7 @@ def expected_prompts():
 def test_task_description(mopg, expected_prompts):
     expected = expected_prompts["task_prompt"]
     actual = mopg.task_description(task=GenerationTask.INITIALIZE_SOLUTION)
-    assert (
-        actual == expected
-    )  # Can add more tests when task_description is different when is_bo = True and when use_mini_bo = True
+    assert actual == expected
 
 
 def test_response_format(mopg, expected_prompts):
@@ -34,15 +32,16 @@ def test_code_structure(mopg, expected_prompts):
     actual = mopg.code_structure()
     assert expected == actual
 
+
+def test_bo_code_structure(mopg_bo_cpu, expected_prompts):
     expected = expected_prompts["bo_code_structure"]
-    mopg.is_bo = True
-    actual = mopg.code_structure()
+    actual = mopg_bo_cpu.code_structure()
     assert expected == actual
 
-    expected = expected_prompts["mini_bo_code_structure"]
 
-    mopg.use_mini_bo = True
-    actual = mopg.code_structure()
+def test_mini_bo_code_structure(mopg_mini_bo_cpu, expected_prompts):
+    expected = expected_prompts["mini_bo_code_structure"]
+    actual = mopg_mini_bo_cpu.code_structure()
     assert expected == actual
 
 

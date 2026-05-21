@@ -20,8 +20,17 @@ warnings.filterwarnings("ignore")
 class qEHVIWrapper:
     """BoTorch qLogExpected Hypervolume Improvement for multi-objective optimization."""
 
-    def __init__(self, budget, dim, bounds, n_init_ratio=0.25, batch_size=5,
-                 num_restarts=2, raw_samples=64, mc_samples=32):
+    def __init__(
+        self,
+        budget,
+        dim,
+        bounds,
+        n_init_ratio=0.25,
+        batch_size=5,
+        num_restarts=2,
+        raw_samples=64,
+        mc_samples=32,
+    ):
         self.budget = budget
         self.dim = dim
         self.bounds = np.asarray(bounds, dtype=np.float64)
@@ -50,6 +59,7 @@ class qEHVIWrapper:
 
         # Initial LHS design
         from scipy.stats import qmc as scipy_qmc
+
         sampler = scipy_qmc.LatinHypercube(d=self.dim)
         X_init_unit = sampler.random(self.n_init)
         X_init = scipy_qmc.scale(X_init_unit, lb, ub)
@@ -81,7 +91,7 @@ class qEHVIWrapper:
             # Fit independent GP per objective on normalized data
             models = []
             for i in range(n_obj):
-                gp = SingleTaskGP(X_norm, Y_neg[:, i:i+1])
+                gp = SingleTaskGP(X_norm, Y_neg[:, i : i + 1])
                 models.append(gp)
             model = ModelListGP(*models)
             mll = SumMarginalLogLikelihood(model.likelihood, model)

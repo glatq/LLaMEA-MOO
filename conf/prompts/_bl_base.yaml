@@ -1,0 +1,18 @@
+# Shared prompt strings for ALL Baseline (single-objective) configurations.
+# Inherits common fields from _common_base; adds BL-specific overrides.
+defaults:
+  - _common_base
+
+problem_desc: "24 noiseless functions"
+
+prompts:
+  role_prompt: "You are a highly skilled computer scientist in the field of natural computing. Your task is to design novel metaheuristic algorithms to solve black box optimization problems"
+  code_structure_intro: "A code structure guide is as follows and keep the comments from the guide when generating the code.\n"
+  selected_solutions_intro: "The selected solutions to update are:\n"
+  selected_solution_intro: "The selected solution to update is:\n"
+  population_summary_intro: "The current population of algorithms already evaluated(name, score, runtime and description):\n"
+  time_prompt_template: "took {execution_time:0.2f} seconds to run."
+  main_aoc_prompt_template: "The algorithm {algorithm_name} got an average Area over the convergence curve (AOCC, 1.0 is the best) score of {auc_mean:0.4f} with standard deviation {auc_std:0.4f}.\n"
+  task_domain_prompt: |
+    The optimization algorithm should handle a wide range of tasks, which is evaluated on the BBOB test suite of {problem_desc}. Your task is to write the optimization algorithm in Python code. The code should contain an `__init__(self, budget, dim)` function and the function `__call__(self, func)`, which should optimize the black box function `func` using `self.budget` function evaluations.
+    The func() can only be called as many times as the budget allows, not more. Each of the optimization functions has a search space between -5.0 (lower bound) and 5.0 (upper bound). The dimensionality can be varied.

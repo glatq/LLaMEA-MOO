@@ -1,0 +1,5 @@
+defaults:
+  - _moo_base
+  - _moo_bo_mode
+  - _moo_bo_code
+  - _self_

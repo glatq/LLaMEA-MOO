@@ -14,8 +14,17 @@ from gpytorch.mlls import ExactMarginalLogLikelihood
 class qParEGOWrapper:
     """BoTorch qParEGO: scalarized EI with random Tchebycheff weights."""
 
-    def __init__(self, budget, dim, bounds, n_init_ratio=0.25, batch_size=1,
-                 num_restarts=3, raw_samples=128, rho=0.05):
+    def __init__(
+        self,
+        budget,
+        dim,
+        bounds,
+        n_init_ratio=0.25,
+        batch_size=1,
+        num_restarts=3,
+        raw_samples=128,
+        rho=0.05,
+    ):
         self.budget = budget
         self.dim = dim
         self.bounds = np.asarray(bounds, dtype=np.float64)
@@ -41,6 +50,7 @@ class qParEGOWrapper:
 
         # Initial LHS design
         from scipy.stats import qmc as scipy_qmc
+
         sampler = scipy_qmc.LatinHypercube(d=self.dim)
         X_init_unit = sampler.random(self.n_init)
         X_init = scipy_qmc.scale(X_init_unit, lb, ub)

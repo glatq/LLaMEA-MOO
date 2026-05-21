@@ -1,0 +1,99 @@
+problem_desc: "pymoo library multi objective problems"
+
+prompts:
+  role_prompt: "You are a highly skilled computer scientist in the field of natural computing. Your task is to design a highly generalizable, scale-invariant multi-objective metaheuristic algorithm to solve arbitrary black-box optimization problems that are both effective and computationally lightweight in Python. The total runtime of the algorithm should be dominated by calls to the objective function, not by internal overhead."
+  pre_solution_prompt_template: "algorithms have been designed. The new algorithm should be as **diverse** as possible from the previous ones on every aspect.\nIf the errors from the previous algorithms are provided, analyze them. The new algorithm should be designed to avoid these errors.\n"
+  code_structure_intro: |
+    The number of objectives M is unknown and must be inferred at runtime.
+    The algorithm MUST:
+    - detect M from the first evaluation of func,
+    - set self.n_obj = M exactly once in _evaluate_points,
+    - use self.n_obj everywhere instead of any hard-coded number,
+    - never assume M = 2 or M = 3.
+    A code structure guide is as follows and keep the comments from the guide when generating the code.
+  crossover_operator: "Combine the selected solutions to create a new solution. Then refine the strategy of the new solution to improve it. If the errors from the previous algorithms are provided, analyze them. The new algorithm should be designed to avoid these errors.\n"
+  selected_solutions_intro: "The selected solutions to update are the evaluated algorithms:\n"
+  selected_solution_intro: "The selected solution to update is the evaluated algorithm:\n"
+  mutation_operator: "Refine the strategy of the selected solution to improve it."
+  population_summary_intro: "The current population of algorithms already evaluated(name, score and runtime):\n"
+  candidate_code_wrapper: "```python\n{code}\n```"
+  no_code_exception_msg: "No code was extracted. The code should be encapsulated with ``` in your response."
+  general_error_msg: "An error occurred : {error}"
+  candidate_prompt_template: "{description}\nWith code:\n{solution}\n{feedback}\n"
+  output_format_prompt: |
+
+    Give the response in the format:
+    # Description
+    <description>
+    # Justification
+    <justification for the key components of the algorithm or the changes made>
+    # Code
+    <code>
+    # Space
+    ```python
+    <configuration_space_dict>
+    ```
+
+  task_domain_prompt: |
+    Your task is to write the multi-objective optimization algorithm in Python code. The code must provide a class with an init(self, budget, dim) method and a call(self, func) method. The call method should optimize the black-box function func using at most self.budget function evaluations. The func takes an array of shape (n_dims,) and returns an array of shape (M,) (one value per objective). One budget unit corresponds to one call of func (producing all M objectives). The search space bounds are provided via the `bounds` input (shape (2, dim)). The algorithm MUST use this `bounds` array for all sampling and clipping operations and MUST NOT assume or hard-code any bounds in the algorithm's logic. The dimensionality dim can vary.
+  lib_prompt: "As an expert of numpy, scipy, scikit-learn, torch, gpytorch, you are allowed to use these libraries. "
+  task_mode_prompt: |
+    Prefer lightweight models (for example, Gaussian processes or random forests with a sliding window of recent data) and avoid deep neural networks or very heavy models. If you use surrogate models, limit the training set size (for example, using only the most recent 200 points) so that fitting remains cheap. Do not use any other libraries unless they cannot be replaced by the above libraries. Do not remove the comments from the code. Name the class based on the characteristics of the algorithm with a template 'MOBO<Something>'.
+    The primary performance metric is Hypervolume (HV) maximization with respect to a fixed reference point. HV and the reference point are handled externally by the evaluator; your algorithm only needs to return a good approximation of the Pareto front (F_pareto, X_pareto). Do not compute the full hypervolume indicator inside the algorithm.
+
+    Give a robust, computationally efficient multi-objective optimization algorithm to solve this task. It should be conceptually clear and not overly complex.
+
+  code_structure_template: |
+    ```python
+    from collections.abc import Callable
+    import numpy as np
+
+    class <AlgorithmName>:
+        def __init__(self, budget: int, dim: int, bounds: np.ndarray | None = None,
+                     param1=default1, param2=default2, ...):
+            # Fixed problem parameters
+            self.budget = int(budget)
+            self.dim = int(dim)
+            # bounds has shape (2, <dimension>), bounds[0]: lower bound, bounds[1]: upper bound
+            self.bounds = bounds
+
+            # Hyperparameters (tuned by SMAC, defined in Space)
+            self.param1 = param1
+            self.param2 = param2
+            # ... add more hyperparameters with default values
+
+            # X has shape (n_points, n_dims), y has shape (n_points, M)
+            self.X: np.ndarray | None = None
+            self.y: np.ndarray | None = None
+            self.n_evals = 0  # number of function evaluations
+            self.n_init = 0   # unused for pure random search; keep for API consistency
+
+        @staticmethod
+        def _dominates(a: np.ndarray, b: np.ndarray) -> bool:
+            # Pareto dominance for minimization
+            return np.all(a <= b) and np.any(a < b)
+
+        def __call__(self, func: Callable[[np.ndarray], np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+            # func: takes array of shape (n_dims,) and returns a 1-D np.ndarray of objectives (length M).
+            # Return a tuple (self.y, self.X) = (F_nd, X_nd) with shapes (k, M) and (k, dim), respectively.
+            low, high = self.bounds[0], self.bounds[1]
+
+            X_archive: list[np.ndarray] = []
+            F_archive: list[np.ndarray] = []
+
+            while self.n_evals < self.budget:
+                # Optimization
+                pass
+
+            # Persist history if desired
+            if F_archive:
+                self.X = np.vstack(X_archive)
+                self.y = np.vstack(F_archive)
+            else:
+                self.X = np.empty((0, self.dim))
+                self.y = np.empty((0,))
+
+            return self.y, self.X
+    ```
+  time_prompt_template: "Took {execution_time:0.2f} seconds to run."
+  main_aoc_prompt_template: "The algorithm {algorithm_name} got an average Hypervolume (HV, the larger the better) score of {hv_mean:0.4f} with standard deviation {hv_std:0.4f}."

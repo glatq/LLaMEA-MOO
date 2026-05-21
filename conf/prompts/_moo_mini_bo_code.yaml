@@ -1,0 +1,56 @@
+# Code structure scaffold for MOO mini Bayesian Optimisation mode.
+# Shared by moo_mini_bo_cpu and moo_mini_bo_gpu — compact skeleton with
+# only __init__, _dominates helper, and __call__; no surrogate-method stubs.
+prompts:
+  code_structure_template: |
+    ```python
+    from collections.abc import Callable
+    import numpy as np
+
+    class <AlgorithmName>:
+        def __init__(self, budget: int, dim: int, bounds: np.ndarray | None = None,
+                     param1=default1, param2=default2, ...):
+            # Fixed problem parameters
+            self.budget = int(budget)
+            self.dim = int(dim)
+            # bounds has shape (2, <dimension>), bounds[0]: lower bound, bounds[1]: upper bound
+            self.bounds = bounds
+
+            # Hyperparameters (tuned by SMAC, defined in Space)
+            self.param1 = param1
+            self.param2 = param2
+            # ... add more hyperparameters with default values
+
+            # X has shape (n_points, n_dims), y has shape (n_points, M)
+            self.X: np.ndarray | None = None
+            self.y: np.ndarray | None = None
+            self.n_evals = 0  # number of function evaluations
+            self.n_init = 0   # unused for pure random search; keep for API consistency
+
+        @staticmethod
+        def _dominates(a: np.ndarray, b: np.ndarray) -> bool:
+            # Pareto dominance for minimization
+            return np.all(a <= b) and np.any(a < b)
+
+        def __call__(self, func: Callable[[np.ndarray], np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+            # func: takes array of shape (n_dims,) and returns a 1-D np.ndarray of objectives (length M).
+            # Return a tuple (self.y, self.X) = (F_nd, X_nd) with shapes (k, M) and (k, dim), respectively.
+            low, high = self.bounds[0], self.bounds[1]
+
+            X_archive: list[np.ndarray] = []
+            F_archive: list[np.ndarray] = []
+
+            while self.n_evals < self.budget:
+                # Optimization
+                pass
+
+            # Persist history if desired
+            if F_archive:
+                self.X = np.vstack(X_archive)
+                self.y = np.vstack(F_archive)
+            else:
+                self.X = np.empty((0, self.dim))
+                self.y = np.empty((0,))
+
+            return self.y, self.X
+    ```

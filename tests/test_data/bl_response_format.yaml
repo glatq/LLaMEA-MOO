@@ -1,12 +1,12 @@
-initialize_solution: "Give the response in the format:\n# Description \n<description>\n\
-  # Justification \n<justification for the key components of the algorithm or the\
-  \ changes made>\n# Code \n<code>"
-fix_errors: "Give the response in the format:\n# Description \n<description>\n# Justification\
-  \ \n<justification for the key components of the algorithm or the changes made>\n\
-  # Code \n<code>"
-fix_errors_from_error: "Give the response in the format:\n# Description \n<description>\n\
-  # Justification \n<justification for the key components of the algorithm or the\
-  \ changes made>\n# Code \n<code>"
-optimize_performance: "Give the response in the format:\n# Description \n<description>\n\
-  # Justification \n<justification for the key components of the algorithm or the\
-  \ changes made>\n# Code \n<code>"
+initialize_solution: "Give the response in the format:\n# Description\n<description>\n\
+  # Justification\n<justification for the key components of the algorithm or the\
+  \ changes made>\n# Code\n<code>"
+fix_errors: "Give the response in the format:\n# Description\n<description>\n# Justification\
+  \n<justification for the key components of the algorithm or the changes made>\n\
+  # Code\n<code>"
+fix_errors_from_error: "Give the response in the format:\n# Description\n<description>\n\
+  # Justification\n<justification for the key components of the algorithm or the\
+  \ changes made>\n# Code\n<code>"
+optimize_performance: "Give the response in the format:\n# Description\n<description>\n\
+  # Justification\n<justification for the key components of the algorithm or the\
+  \ changes made>\n# Code\n<code>"

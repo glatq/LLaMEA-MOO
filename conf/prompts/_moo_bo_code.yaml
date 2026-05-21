@@ -1,0 +1,117 @@
+# Code structure scaffold for MOO Bayesian Optimisation mode.
+# Shared by moo_bo_cpu and moo_bo_gpu — full helper-method skeleton with
+# multi-objective conventions (n_obj inference, bounds handling, archive).
+prompts:
+  code_structure_template: |
+
+    ```python
+    from collections.abc import Callable
+    from scipy.stats import qmc  # If you are using QMC sampling, qmc from scipy is encouraged. Remove this line if you have better alternatives.
+    from scipy.stats import norm
+    import numpy as np
+
+
+    class <AlgorithmName>:
+        def __init__(self, budget: int, dim: int, bounds: np.ndarray | None = None,
+                     param1=default1, param2=default2, ...):
+            # Fixed problem parameters
+            self.budget = budget
+            self.dim = dim
+            # bounds has shape (2, dim), bounds[0]: lower bound, bounds[1]: upper bound
+            # The environment (evaluator / problem provider) should pass the true bounds.
+            # Do NOT overwrite self.bounds with hard-coded values.
+            if bounds is None:
+                # Fallback: assume a simple [0, 1]^dim box if no bounds are provided.
+                self.bounds = np.array([[0.0] * dim, [1.0] * dim], dtype=float)
+            else:
+                self.bounds = np.asarray(bounds, dtype=float)
+
+            # Hyperparameters (tuned by SMAC, defined in Space)
+            self.param1 = param1
+            self.param2 = param2
+            # ... add more hyperparameters with default values
+
+            # The number of objectives (self.n_obj) is unknown a priori.
+            # It MUST be inferred on the first call to func inside _evaluate_points.
+            self.n_obj: int | None = None
+
+            # X has shape (n_points, n_dims), y has shape (n_points, n_obj)
+            self.X: np.ndarray | None = None
+            self.y: np.ndarray | None = None
+            self.n_evals = 0  # the number of function evaluations
+
+            # Choose a reasonable number of initial evaluations.
+            # Use a small, budget-aware design (for example, proportional to dim, but not more than a fraction of the budget).
+            self.n_init = <your_strategy>
+
+            # You may define internal batch size, sliding-window sizes, or other state here.
+
+            def _sample_points(self, n_points: int) -> np.ndarray:
+            # Sample n_points candidate points efficiently within self.bounds.
+            # Use self.bounds[0] as lower bounds and self.bounds[1] as upper bounds.
+            # Return array of shape (n_points, n_dims).
+
+
+        def _fit_model(self, X: np.ndarray, y: np.ndarray):
+            # Fit a surrogate model on (X, y).
+            # Return the fitted model and store any required state on self.
+            # Do not change the function signature.
+            # Consider using a sliding window (e.g., most recent 200-500 points) to keep fitting tractable.
+            # Gaussian processes, random forests, or other suitable models are all acceptable.
+
+        def _acquisition_function(self, X: np.ndarray) -> np.ndarray:
+            # Implement a multi-objective acquisition function.
+            # You may use any suitable approach: scalarization-based (e.g., ParEGO, Tchebycheff, weighted sum),
+            # hypervolume-based (e.g., EHVI), decomposition-based (e.g., MOEA/D-style),
+            # Thompson sampling, or novel combinations.
+            # Keep any HV-related computation local and inexpensive
+            # (for example, small candidate sets, small approximated Pareto subsets).
+            # Calculate the acquisition function value for each point in X.
+            # Return a 1-D score per candidate of shape (n_points,) for selection, using vectorised operations when possible.
+            # All weight vectors (if used) MUST have length self.n_obj. Do NOT hard-code weights of size 2 or 3.
+
+        def _select_next_points(self, batch_size: int) -> np.ndarray:
+            # Select the next points to evaluate using the acquisition function.
+            # Generate candidate points and score them with the acquisition function.
+            # The selection strategy can be any heuristic / evolutionary / mathematical / hybrid method.
+            # Return an array of shape (batch_size, n_dims).
+
+        def _evaluate_points(self, func: Callable[[np.ndarray], np.ndarray], X: np.ndarray) -> np.ndarray:
+            # Evaluate the points in X.
+            # On the first evaluation, infer M from func(x). Set self.n_obj = y.shape[0] and enforce this dimension in all later operations.
+            # This method must be the only place where func is called.
+            # Respect the remaining budget: do not exceed self.budget evaluations in total.
+            # Use simple, clear looping over points, and clip points to the bounds if necessary.
+            # Update self.n_evals by the actual number of function calls performed.
+            # Clip points to self.bounds before calling func, to respect the problem domain.
+            # lb, ub = self.bounds
+            # X_clipped = np.clip(X, lb, ub)
+            # then call func on X_clipped
+            # Return an array of shape (n_points, n_obj).
+
+            self.n_evals += len(X)
+
+        def _update_eval_points(self, new_X: np.ndarray, new_y: np.ndarray):
+            # Update the archive with new evaluations.
+            # Do not change the function signature.
+            # IMPORTANT: Keep ALL evaluated points in the archive (self.X_all, self.y_all) for surrogate model training.
+            # The surrogate model needs both dominated and non-dominated points to learn the objective landscape.
+            # Track the non-dominated (Pareto) front separately for returning results.
+            # Dominance comparisons MUST use y.shape[1] == self.n_obj, never a fixed number of objectives.
+
+        def __call__(self, func: Callable[[np.ndarray], np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+            # Main optimization loop.
+            # func takes an array of shape (n_dims,) and returns np.ndarray of shape (M,) (one value per objective).
+            # Always use _evaluate_points to call func so that the budget is respected.
+            # The full run must complete within approximately 60 seconds.
+            # Return a tuple (F_pareto, X_pareto), where F_pareto has shape (K, n_obj)
+            # and X_pareto has shape (K, n_dims) for the final non-dominated set.
+            # The algorithm MUST remain correct for any number of objectives self.n_obj >= 2 without code changes.
+
+            # Your optimization strategy here (initial design, surrogate-assisted, evolutionary, hybrid, etc.)
+
+            while self.n_evals < self.budget:
+                ...
+
+            return F_pareto, X_pareto
+    ```

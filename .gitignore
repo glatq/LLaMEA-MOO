@@ -203,3 +203,4 @@ ppdata/
 smac3_output/
 exp_eval/
 benchmark_results/
+.claude/settings.local.json

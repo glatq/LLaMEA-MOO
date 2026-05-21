@@ -1,0 +1,23 @@
+# Prompt strings shared by ALL configurations (BL and MOO).
+# Both _bl_base and _moo_base inherit this and override domain-specific fields.
+prompts:
+  pre_solution_prompt_template: "algorithms have been designed. The new algorithm should be as **diverse** as possible from the previous ones on every aspect.\nIf the errors from the previous algorithms are provided, analyze them. The new algorithm should be designed to avoid these errors.\n"
+  crossover_operator: "Combine the selected solutions to create a new solution. Then refine the strategy of the new solution to improve it. If the errors from the previous algorithms are provided, analyze them. The new algorithm should be designed to avoid these errors.\n"
+  mutation_operator: "Refine the strategy of the selected solution to improve it."
+  candidate_code_wrapper: "```python\n{code}\n```"
+  no_code_exception_msg: "No code was extracted. The code should be encapsulated with ``` in your response."
+  general_error_msg: "An error occurred : {error}"
+  candidate_prompt_template: "{description}\nWith code:\n{solution}\n{feedback}\n"
+  output_format_prompt: |
+
+    Give the response in the format:
+    # Description
+    <description>
+    # Justification
+    <justification for the key components of the algorithm or the changes made>
+    # Code
+    <code>
+    # Space
+    ```python
+    <configuration_space_dict>
+    ```

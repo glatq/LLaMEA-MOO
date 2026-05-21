@@ -1,0 +1,5 @@
+defaults:
+  - _bl_base
+  - _bl_bo_mode
+  - _bl_mini_bo_code
+  - _self_

@@ -1,0 +1,48 @@
+defaults:
+  - _bl_base
+  - _self_
+
+prompts:
+  lib_prompt: ""
+  task_mode_prompt: |
+
+    HYPERPARAMETER OPTIMIZATION: Any hyperparameters your algorithm uses will be automatically optimized by SMAC (Sequential Model-Based Algorithm Configuration). You must provide a configuration space as a Python dictionary that defines the hyperparameter search space. Do NOT include the parameters budget, dim, or bounds in the configuration space, as these are problem-specific and fixed. Include all other tunable hyperparameters in the __init__ method with default values, and define their search ranges in the configuration space.
+
+    Configuration space format:
+    {
+        "param_name": (lower_bound, upper_bound),  # For continuous or integer ranges
+        "log_param": (lower, upper, "log"),  # For log-scale continuous parameters
+        "categorical_param": ["option1", "option2", "option3"]  # For categorical choices
+    }
+
+    Give an excellent, novel and computationally efficient heuristic algorithm to solve this task, give it a concise but comprehensive key-word-style description with the main idea and justify your decision about the algorithm.
+  code_structure_template: |
+
+    ```python
+    import numpy as np
+
+    class RandomSearch:
+        def __init__(self, budget=10000, dim=10, param1=default1, param2=default2):
+            self.budget = budget
+            self.dim = dim
+            # bounds has (2,<dimension>), bounds[0]: lower bound, bounds[1]: upper bound
+            self.bounds = np.array([[-5.0]*dim, [5.0]*dim])
+
+            # Hyperparameters (tuned by SMAC, defined in Space)
+            self.param1 = param1
+            self.param2 = param2
+
+            self.f_opt = np.Inf
+            self.x_opt = None
+
+        def __call__(self, func):
+            for i in range(self.budget):
+                x = np.random.uniform(self.bounds[0], self.bounds[1])
+
+                f = func(x)
+                if f < self.f_opt:
+                    self.f_opt = f
+                    self.x_opt = x
+
+            return self.f_opt, self.x_opt
+    ```

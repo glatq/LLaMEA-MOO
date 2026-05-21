@@ -26,33 +26,41 @@ prompts:
   task_domain_prompt: |
     The optimization algorithm should handle a wide range of tasks, which is evaluated on the BBOB test suite of {problem_desc}. Your task is to write the optimization algorithm in Python code. The code should contain an `__init__(self, budget, dim)` function and the function `__call__(self, func)`, which should optimize the black box function `func` using `self.budget` function evaluations.
     The func() can only be called as many times as the budget allows, not more. Each of the optimization functions has a search space between -5.0 (lower bound) and 5.0 (upper bound). The dimensionality can be varied.
-  lib_prompt: ""
+  lib_prompt: "As an expert of numpy, scipy, scikit-learn, torch, gpytorch, you are allowed to use these libraries. "
   task_mode_prompt: |
-    Give an excellent, novel and computationally efficient heuristic algorithm to solve this task, give it a concise but comprehensive key-word-style description with the main idea and justify your decision about the algorithm.
+    Do not use any other libraries unless they cannot be replaced by the above libraries.  Do not remove the comments from the code.
+    Name the class based on the characteristics of the algorithm with a template '<characteristics>BO'.
+
+    Give an excellent, novel and computationally efficient Bayesian Optimization algorithm to solve this task, give it a concise but comprehensive key-word-style description with the main ideas and justify your decision about the algorithm.
   code_structure_template: |
 
     ```python
+    from collections.abc import Callable
     import numpy as np
-
-    class RandomSearch:
-        def __init__(self, budget=10000, dim=10):
+    class <AlgorithmName>:
+        def __init__(self, budget:int, dim:int):
             self.budget = budget
             self.dim = dim
-            # bounds has (2,<dimension>), bounds[0]: lower bound, bounds[1]: upper bound
+            # bounds has shape (2,<dimension>), bounds[0]: lower bound, bounds[1]: upper bound
             self.bounds = np.array([[-5.0]*dim, [5.0]*dim])
-            self.f_opt = np.Inf
-            self.x_opt = None
+            # X has shape (n_points, n_dims), y has shape (n_points, 1)
+            self.X: np.ndarray = None
+            self.y: np.ndarray = None
+            self.n_evals = 0 # the number of function evaluations
+            self.n_init = <your_strategy>
 
-        def __call__(self, func):
-            for i in range(self.budget):
-                x = np.random.uniform(self.bounds[0], self.bounds[1])
+            # Do not add any other arguments without a default value
 
-                f = func(x)
-                if f < self.f_opt:
-                    self.f_opt = f
-                    self.x_opt = x
+        def __call__(self, func:Callable[[np.ndarray], np.float64]) -> tuple[np.float64, np.array]:
+            # Main minimize optimization loop
+            # func: takes array of shape (n_dims,) and returns np.float64.
+            # Return a tuple (best_y, best_x)
 
-            return self.f_opt, self.x_opt
+            while self.n_evals < budget:
+                # Optimization
+                pass
+
+            return best_y, best_x
     ```
   time_prompt_template: "took {execution_time:0.2f} seconds to run."
   main_aoc_prompt_template: "The algorithm {algorithm_name} got an average Area over the convergence curve (AOCC, 1.0 is the best) score of {auc_mean:0.4f} with standard deviation {auc_std:0.4f}.\n"

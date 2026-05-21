@@ -3,28 +3,7 @@ from llamevol.evaluator import EvaluatorResult
 from .types import GenerationTask
 from .prompt_strings import PromptStrings
 from .bl_response_handler import BaselineResponseHandler
-
-
-def merge_prompt_configs(default_conf, override_conf):
-    if override_conf is None:
-        return default_conf
-
-    # Safely handle Hydra DictConfig without strictly requiring omegaconf import globally
-    if type(override_conf).__name__ == "DictConfig":
-        from omegaconf import OmegaConf
-
-        override_conf = OmegaConf.to_container(override_conf, resolve=True)
-
-    merged = dict(default_conf)
-    for k, v in override_conf.items():
-        if k == "prompts" and isinstance(v, dict):
-            merged["prompts"].update(v)
-        elif "prompts" in merged and k in merged["prompts"]:
-            # Handle flattened Hydra configs mapping directly to prompt strings
-            merged["prompts"][k] = v
-        else:
-            merged[k] = v
-    return merged
+from ..population import Population
 
 
 class ResponseImpReturnChecker(ABC):
@@ -39,60 +18,34 @@ class PromptGenerator(ABC):
     """Abstract base class for prompt generators."""
 
     def __init__(self, conf):
+        # Safely handle Hydra DictConfig without strictly requiring omegaconf
+        if type(conf).__name__ == "DictConfig":
+            from omegaconf import OmegaConf
+
+            conf = OmegaConf.to_container(conf, resolve=True)
+
         self.prompt_strings = PromptStrings(**conf["prompts"])
-        self.is_bo = conf.get("is_bo", False)
-        self.use_mini_bo = conf.get("use_mini_bo", False)
-        self.use_cuda = conf.get("use_cuda", False)
         self.problem_desc = conf.get("problem_desc", "")
 
     def __str__(self):
-        suffix = ""
-        if hasattr(self, "is_bo") and self.is_bo:
-            if hasattr(self, "use_mini_bo") and self.use_mini_bo:
-                suffix = "MiniBO"
-            else:
-                suffix = "BO"
-        return f"{suffix}{self.__class__.__name__}"
+        return self.__class__.__name__
 
     def task_description(self, task: GenerationTask) -> str:
-        if self.is_bo:
-            return self._bo_task_description(task)
-        return self._task_description(task)
-
-    def _bo_task_description(self, task):
-        if self.use_cuda:
-            lib_prompt = self.prompt_strings.bo_lib_prompt_gpu
-        else:
-            lib_prompt = self.prompt_strings.bo_lib_prompt_cpu
-
-        return self.prompt_strings.bo_task_prompt_template.format(
-            problem_desc=self.problem_desc, lib_prompt=lib_prompt
-        )
-
-    def _task_description(self, task: GenerationTask) -> str:
-        return self.prompt_strings.general_task_prompt.format(
-            problem_desc=self.problem_desc
-        )
+        parts = [
+            self.prompt_strings.task_domain_prompt.format(
+                problem_desc=self.problem_desc
+            ),
+            self.prompt_strings.lib_prompt,
+            self.prompt_strings.task_mode_prompt,
+        ]
+        return "".join(p for p in parts if p)
 
     def task_instruction(self, task: GenerationTask) -> str:
         """explicit COT of the task accomplishment"""
         pass
 
     def code_structure(self) -> str:
-        if self.is_bo:
-            if self.use_mini_bo:
-                return self._mini_bo_code_structure()
-            return self._bo_code_structure()
-        return self._code_structure()
-
-    def _code_structure(self) -> str:
         return self.prompt_strings.code_structure_template
-
-    def _mini_bo_code_structure(self) -> str:
-        return self.prompt_strings.mini_bo_code_structure_template
-
-    def _bo_code_structure(self) -> str:
-        return self.prompt_strings.bo_code_structure_template
 
     def response_format(self, task: GenerationTask) -> str:
         return self.prompt_strings.output_format_prompt
@@ -123,19 +76,100 @@ class PromptGenerator(ABC):
     def get_return_checker(self):
         return None
 
+    def _format_population_entry(self, handler) -> str:
+        name = handler.code_name
+        score = handler.eval_result.score
+        runtime = handler.eval_result.total_execution_time
+        return f"- {name}: {score:.4f}, {runtime:.2f} seconds\n"
+
+    def _format_feedback(self, eval_res, main_metric_prompt: str) -> str:
+        execution_time = eval_res.total_execution_time
+        time_prompt = self.prompt_strings.time_prompt_template.format(
+            execution_time=execution_time
+        )
+
+        hpo_prompt = ""
+        if hasattr(eval_res, "metadata") and eval_res.metadata:
+            if "incumbent" in eval_res.metadata and eval_res.metadata["incumbent"]:
+                incumbent = eval_res.metadata["incumbent"]
+                hpo_prompt = f"\nOptimized hyperparameters: {incumbent}"
+            elif "hpo_error" in eval_res.metadata:
+                hpo_prompt = f"\nNote: {eval_res.metadata['hpo_error']}"
+
+        return f"{main_metric_prompt}\n{time_prompt}{hpo_prompt}"
+
     @abstractmethod
     def evaluation_feedback_prompt(
         self, eval_res: EvaluatorResult, options=None
     ) -> str:
         pass
 
-    @abstractmethod
     def get_prompt(
         self,
         task: GenerationTask,
         problem_desc: str,
         candidates=None,
-        population=None,
+        population: Population = None,
         options: dict = None,
     ) -> tuple[str, str]:
-        pass
+        if task != GenerationTask.INITIALIZE_SOLUTION:
+            if candidates is None or len(candidates) == 0:
+                return "", ""
+
+        role_prompt = self.prompt_strings.role_prompt
+        task_prompt = self.task_description(task)
+        response_format_prompt = self.response_format(task=task)
+
+        if task == GenerationTask.INITIALIZE_SOLUTION:
+            pre_solution_prompt = ""
+            if candidates and len(candidates) > 0:
+                n_solution = len(candidates)
+                pre_solution_prompt = (
+                    f"{n_solution} {self.prompt_strings.pre_solution_prompt_template}"
+                )
+                for i, candidate in enumerate(candidates):
+                    candidate_prompt = self._get_candidate_prompt(candidate)
+                    pre_solution_prompt += (
+                        f"## {candidate.code_name}\n{candidate_prompt}\n"
+                    )
+                pre_solution_prompt += "\n"
+
+            code_structure_prompt = (
+                self.prompt_strings.code_structure_intro + self.code_structure()
+            )
+            final_prompt = f"""{task_prompt}\n{pre_solution_prompt}\n{code_structure_prompt}\n{response_format_prompt}"""
+        else:
+            if len(candidates) > 1:
+                crossover_operator = self.prompt_strings.crossover_operator
+                selected_prompt = self.prompt_strings.selected_solutions_intro
+
+                for candidate in candidates:
+                    candidate_prompt = self._get_candidate_prompt(candidate)
+                    selected_prompt += f"## {candidate.code_name}\n{candidate_prompt}\n"
+
+                selected_prompt += f"{crossover_operator}\n"
+            else:
+                candidate = candidates[0]
+                candidate_prompt = self._get_candidate_prompt(candidate)
+                mutation_operator = self.prompt_strings.mutation_operator
+
+                selected_prompt = f"""{self.prompt_strings.selected_solution_intro}{candidate_prompt}\n{mutation_operator}\n"""
+
+            population_summary = ""
+            if population is not None and population.get_population_size() > 0:
+                current_population = population.get_individuals()
+                population_summary = self.prompt_strings.population_summary_intro
+                for ind in current_population:
+                    handler = Population.get_handler_from_individual(ind)
+                    if handler.eval_result is None:
+                        continue
+                    population_summary += self._format_population_entry(handler)
+
+            final_prompt = f"""{task_prompt}
+{population_summary}
+
+{selected_prompt}
+
+{response_format_prompt}
+"""
+        return role_prompt, final_prompt

@@ -1,0 +1,77 @@
+# Code structure scaffold for BL Bayesian Optimisation mode.
+# Shared by bl_bo_cpu and bl_bo_gpu — the CPU/GPU choice only affects
+# the library sentence in task_prompt_template, not the code skeleton.
+prompts:
+  code_structure_template: |
+
+    ```python
+    from collections.abc import Callable
+    from scipy.stats import qmc #If you are using QMC sampling, qmc from scipy is encouraged. Remove this line if you have better alternatives.
+    from scipy.stats import norm
+    import numpy as np
+    class <AlgorithmName>:
+        def __init__(self, budget:int, dim:int, param1=default1, param2=default2):
+            self.budget = budget
+            self.dim = dim
+            # bounds has shape (2,<dimension>), bounds[0]: lower bound, bounds[1]: upper bound
+            self.bounds = np.array([[-5.0]*dim, [5.0]*dim])
+            # Hyperparameters (tuned by SMAC, defined in Space)
+            self.param1 = param1
+            self.param2 = param2
+            # X has shape (n_points, n_dims), y has shape (n_points, 1)
+            self.X: np.ndarray = None
+            self.y: np.ndarray = None
+            self.n_evals = 0 # the number of function evaluations
+            self.n_init = <your_strategy>
+
+            # Do not add any other arguments without a default value
+
+        def _sample_points(self, n_points):
+            # sample points
+            # return array of shape (n_points, n_dims)
+
+        def _fit_model(self, X, y):
+            # Fit and tune surrogate model
+            # return the model
+            # Do not change the function signature
+
+        def _acquisition_function(self, X):
+            # Implement acquisition function
+            # calculate the acquisition function value for each point in X
+            # return array of shape (n_points, 1)
+
+        def _select_next_points(self, batch_size):
+            # Select the next points to evaluate
+            # Use a selection strategy to optimize/leverage the acquisition function
+            # The selection strategy can be any heuristic/evolutionary/mathematical/hybrid methods.
+            # Your decision should consider the problem characteristics, acquisition function, and the computational efficiency.
+            # return array of shape (batch_size, n_dims)
+
+        def _evaluate_points(self, func, X):
+            # Evaluate the points in X
+            # func: takes array of shape (n_dims,) and returns np.float64.
+            # return array of shape (n_points, 1)
+
+            self.n_evals += len(X)
+
+        def _update_eval_points(self, new_X, new_y):
+            # Update self.X and self.y
+            # Do not change the function signature
+
+        def __call__(self, func:Callable[[np.ndarray], np.float64]) -> tuple[np.float64, np.array]:
+            # Main minimize optimization loop
+            # func: takes array of shape (n_dims,) and returns np.float64.
+            # !!! Do not call func directly. Use _evaluate_points instead and be aware of the budget when calling it. !!!
+            # Return a tuple (best_y, best_x)
+
+            self._evaluate_points()
+            self._update_eval_points()
+            while self.n_evals < budget:
+                # Optimization
+
+                # select points by acquisition function
+                self._evaluate_points()
+                self._update_eval_points()
+
+            return best_y, best_x
+    ```

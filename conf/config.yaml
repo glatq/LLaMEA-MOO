@@ -1,6 +1,7 @@
 # conf/config.yaml
 defaults:
-  - prompts: baseline
+  - hardware: cpu
+  - prompts: bl_bo
   - _self_
 
 mode: "so"  # "so" for single-objective, "mo" for multi-objective

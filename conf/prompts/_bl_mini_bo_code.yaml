@@ -1,0 +1,37 @@
+# Code structure scaffold for BL mini Bayesian Optimisation mode.
+# Shared by bl_mini_bo_cpu and bl_mini_bo_gpu — simpler skeleton without
+# helper method stubs; the LLM fills in a single __call__ body.
+prompts:
+  code_structure_template: |
+
+    ```python
+    from collections.abc import Callable
+    import numpy as np
+    class <AlgorithmName>:
+        def __init__(self, budget:int, dim:int, param1=default1, param2=default2):
+            self.budget = budget
+            self.dim = dim
+            # bounds has shape (2,<dimension>), bounds[0]: lower bound, bounds[1]: upper bound
+            self.bounds = np.array([[-5.0]*dim, [5.0]*dim])
+            # Hyperparameters (tuned by SMAC, defined in Space)
+            self.param1 = param1
+            self.param2 = param2
+            # X has shape (n_points, n_dims), y has shape (n_points, 1)
+            self.X: np.ndarray = None
+            self.y: np.ndarray = None
+            self.n_evals = 0 # the number of function evaluations
+            self.n_init = <your_strategy>
+
+            # Do not add any other arguments without a default value
+
+        def __call__(self, func:Callable[[np.ndarray], np.float64]) -> tuple[np.float64, np.array]:
+            # Main minimize optimization loop
+            # func: takes array of shape (n_dims,) and returns np.float64.
+            # Return a tuple (best_y, best_x)
+
+            while self.n_evals < budget:
+                # Optimization
+                pass
+
+            return best_y, best_x
+    ```

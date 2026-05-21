@@ -1,41 +1,8 @@
-problem_desc: "pymoo library multi objective problems"
+defaults:
+  - _moo_base
+  - _self_
 
 prompts:
-  role_prompt: "You are a highly skilled computer scientist in the field of natural computing. Your task is to design a highly generalizable, scale-invariant multi-objective metaheuristic algorithm to solve arbitrary black-box optimization problems that are both effective and computationally lightweight in Python. The total runtime of the algorithm should be dominated by calls to the objective function, not by internal overhead."
-  pre_solution_prompt_template: "algorithms have been designed. The new algorithm should be as **diverse** as possible from the previous ones on every aspect.\nIf the errors from the previous algorithms are provided, analyze them. The new algorithm should be designed to avoid these errors.\n"
-  code_structure_intro: |
-    The number of objectives M is unknown and must be inferred at runtime.
-    The algorithm MUST:
-    - detect M from the first evaluation of func,
-    - set self.n_obj = M exactly once in _evaluate_points,
-    - use self.n_obj everywhere instead of any hard-coded number,
-    - never assume M = 2 or M = 3.
-    A code structure guide is as follows and keep the comments from the guide when generating the code.
-  crossover_operator: "Combine the selected solutions to create a new solution. Then refine the strategy of the new solution to improve it. If the errors from the previous algorithms are provided, analyze them. The new algorithm should be designed to avoid these errors.\n"
-  selected_solutions_intro: "The selected solutions to update are the evaluated algorithms:\n"
-  selected_solution_intro: "The selected solution to update is the evaluated algorithm:\n"
-  mutation_operator: "Refine the strategy of the selected solution to improve it."
-  population_summary_intro: "The current population of algorithms already evaluated(name, score and runtime):\n"
-  candidate_code_wrapper: "```python\n{code}\n```"
-  no_code_exception_msg: "No code was extracted. The code should be encapsulated with ``` in your response."
-  general_error_msg: "An error occurred : {error}"
-  candidate_prompt_template: "{description}\nWith code:\n{solution}\n{feedback}\n"
-  output_format_prompt: |
-
-    Give the response in the format:
-    # Description
-    <description>
-    # Justification
-    <justification for the key components of the algorithm or the changes made>
-    # Code
-    <code>
-    # Space
-    ```python
-    <configuration_space_dict>
-    ```
-
-  task_domain_prompt: |
-    Your task is to write the multi-objective optimization algorithm in Python code. The code must provide a class with an init(self, budget, dim) method and a call(self, func) method. The call method should optimize the black-box function func using at most self.budget function evaluations. The func takes an array of shape (n_dims,) and returns an array of shape (M,) (one value per objective). One budget unit corresponds to one call of func (producing all M objectives). The search space bounds are provided via the `bounds` input (shape (2, dim)). The algorithm MUST use this `bounds` array for all sampling and clipping operations and MUST NOT assume or hard-code any bounds in the algorithm's logic. The dimensionality dim can vary.
   lib_prompt: "As an expert in numpy, scipy, scikit-learn, torch, and gpytorch, you are allowed to use these libraries. "
   task_mode_prompt: |
     If you use surrogate models, consider using a sliding window of recent data (e.g., the most recent 200-500 points) to keep model fitting tractable. Avoid deep neural networks. Do not use any other libraries unless they cannot be replaced by the above libraries. Do not remove the comments from the code. Name the class based on the characteristics of the algorithm with a template 'MOBO<Something>'.
@@ -50,14 +17,7 @@ prompts:
         "categorical_param": ["option1", "option2", "option3"]  # For categorical choices
     }
 
-    Example:
-    {
-        "pop_size": (10, 100),
-        "n_init": (5, 50),
-        "learning_rate": (0.001, 0.1, "log"),  # Log-scale for parameters spanning orders of magnitude
-        "mutation_rate": (0.01, 0.5),
-        "acquisition_type": ["ei", "ucb", "poi"]
-    }
+    CONFIGURATION SPACE GUIDELINES: Keep the configuration space compact with 3-7 hyperparameters. Avoid extremely large ranges for candidate counts (keep under 500) and model training iterations (keep under 100). Use log-scale ranges for parameters that span orders of magnitude (e.g., learning rates, regularization). Ensure n_init never exceeds the evaluation budget; use a budget-aware default such as min(2*dim+1, budget//4).
 
     CRITICAL ROBUSTNESS REQUIREMENT: The algorithm's internal search logic (especially the acquisition function and model fitting) MUST be stable and general across all objective scales.
     Any scalarization method (e.g., Tchebycheff or weighted sum) MUST be applied to objectives that are normalized and scaled.
@@ -66,8 +26,7 @@ prompts:
 
     If you use hypervolume-based acquisition (e.g., EHVI), you may choose a simple and lightweight internal reference point (for example based on the current observed nadir). This internal reference point is used only for acquisition scoring and does not need to match the evaluator's reference point. Any HV-related computation used for acquisition must remain local and inexpensive (for example, small candidate sets), and must not compute HV over the entire archive.
     You can assume typical problem dimensionalities between 2 and 20 and evaluation budgets between 50 and 500. The algorithm must remain computationally lightweight in Python. Its cost should scale approximately linearly with the number of evaluations and dimensions and should avoid O(budget^2) operations in the main loop (for example, repeated full-archive dominance checks, full hypervolume calculations, or large nested Python loops).
-    Give a robust, computationally efficient multi-objective Bayesian Optimization algorithm to solve this task. It should be conceptually clear and not overly complex. Give the algorithm a concise but comprehensive key-word-style description with the main ideas and justify your decision about the algorithm.
-
+    Give a robust, computationally efficient multi-objective optimization algorithm to solve this task. You are free to choose any approach: surrogate-assisted Bayesian optimization, evolutionary strategies, decomposition methods, or novel hybrid combinations. The algorithm should be conceptually clear and not overly complex. Give the algorithm a concise but comprehensive key-word-style description with the main ideas and justify your decision about the algorithm.
   code_structure_template: |
 
     ```python
@@ -118,6 +77,4 @@ prompts:
                 # No nondominated found (only possible if budget==0); fall back to empty arrays
                 return np.empty((0,)), np.empty((0, self.dim))
             return np.vstack(F), np.vstack(X)
-
-  time_prompt_template: "Took {execution_time:0.2f} seconds to run."
-  main_aoc_prompt_template: "The algorithm {algorithm_name} got an average Hypervolume (HV, the larger the better) score of {hv_mean:0.4f} with standard deviation {hv_std:0.4f}."
+    ```

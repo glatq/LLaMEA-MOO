@@ -1,0 +1,5 @@
+# Backward-compatibility alias → identical to bl_bo.
+# Selecting "+prompts=baseline" (or the conf/config.yaml default) produces
+# the same prompt configuration as "+prompts=bl_bo".
+defaults:
+  - bl_bo
