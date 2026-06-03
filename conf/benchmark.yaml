@@ -8,6 +8,12 @@ plotting:
   convergence_dpi: 150
   pareto_dpi: 300
 
+# Export raw objective / Pareto-front data to CSV so Pareto figures can be
+# regenerated from data (e.g. via plot_from_csv.py), like the HV curves.
+export:
+  objectives: true   # objectives_log.csv: Algorithm, Problem, Repeat, Eval, f1..fM
+  pareto: true       # pareto_front_log.csv: Algorithm, Problem, PointIdx, f1..fM
+
 problems:
   - { name: zdt1, dim: 30, n_obj: 2, ref_point: [ 1.1, 6.0 ] }
   - { name: zdt4, dim: 10, n_obj: 2, ref_point: [ 1.1, 160.0 ] }

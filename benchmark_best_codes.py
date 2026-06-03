@@ -26,6 +26,20 @@ def load_incumbent(handler_pkl_path):
         return None
 
 
+def _append_rows_to_csv(path, rows):
+    """Append `rows` (list of dicts) to the CSV at `path`, creating it if needed.
+
+    Concatenation (rather than a plain file append) lets pandas align columns,
+    so problems with different objective counts (f1..fM) stay consistent.
+    """
+    if not rows:
+        return
+    df = pd.DataFrame(rows)
+    if os.path.exists(path):
+        df = pd.concat([pd.read_csv(path), df], ignore_index=True)
+    df.to_csv(path, index=False)
+
+
 def benchmark_and_plot(cfg):
     budget = cfg.budget
     repeat = cfg.repeat
@@ -52,6 +66,17 @@ def benchmark_and_plot(cfg):
 
     all_results = {}
     log_file = os.path.join(output_dir, "hv_benchmark_log.csv")
+    obj_file = os.path.join(output_dir, "objectives_log.csv")
+    pareto_file = os.path.join(output_dir, "pareto_front_log.csv")
+
+    # Export configuration (objective/Pareto CSVs so figures can be
+    # regenerated from data, like the HV convergence curves already are).
+    export_cfg = cfg.get("export", {}) or {}
+    export_objectives = bool(export_cfg.get("objectives", True))
+    export_pareto = bool(export_cfg.get("pareto", True))
+
+    # Shared non-dominated sorter (used for Pareto export and Pareto plots)
+    nds = NonDominatedSorting()
 
     # Run benchmarking
     for algo_cfg in cfg.algorithms:
@@ -76,8 +101,12 @@ def benchmark_and_plot(cfg):
         )
         all_results[cls_name] = res
 
-        # Log HV history to CSV
+        # Collect HV history (rows) + raw objectives (obj_rows) in one pass.
+        # raw_y_by_problem accumulates every objective vector across repeats so
+        # we can compute one combined non-dominated front per problem.
         rows = []
+        obj_rows = []
+        raw_y_by_problem = {}
         for run in res.result:
             if "-rep" in run.name:
                 prob_name, rep_str = run.name.split("-rep")
@@ -97,8 +126,25 @@ def benchmark_and_plot(cfg):
                         }
                     )
 
-        current_df = pd.DataFrame(rows)
+            raw_y = getattr(run, "raw_y_hist", None)
+            if raw_y is not None and len(raw_y) > 0:
+                raw_y = np.asarray(raw_y, dtype=float)
+                if export_objectives:
+                    for eval_idx, yv in enumerate(raw_y):
+                        obj_row = {
+                            "Algorithm": cls_name,
+                            "Problem": prob_name,
+                            "Repeat": rep_val,
+                            "Eval": eval_idx + 1,
+                        }
+                        for j, val in enumerate(yv):
+                            obj_row[f"f{j + 1}"] = float(val)
+                        obj_rows.append(obj_row)
+                if export_pareto:
+                    raw_y_by_problem.setdefault(prob_name, []).append(raw_y)
 
+        # Write HV history (existing schema/behaviour preserved)
+        current_df = pd.DataFrame(rows)
         if os.path.exists(log_file):
             existing_df = pd.read_csv(log_file)
             full_df = pd.concat([existing_df, current_df], ignore_index=True)
@@ -111,6 +157,33 @@ def benchmark_and_plot(cfg):
         full_df = full_df.sort_values(by=["Algorithm", "Problem", "Repeat", "Epoch"])
         full_df.to_csv(log_file, index=False)
         print(f"Updated and sorted {log_file} with results for {cls_name}")
+
+        # Write raw objective vectors (one row per evaluation)
+        if export_objectives:
+            _append_rows_to_csv(obj_file, obj_rows)
+            if obj_rows:
+                print(f"Updated {obj_file} with raw objectives for {cls_name}")
+
+        # Write combined non-dominated front per problem (sorted by f1)
+        if export_pareto:
+            pareto_rows = []
+            for prob_name, ys in raw_y_by_problem.items():
+                Y_combined = np.vstack(ys)
+                front_idx = nds.do(Y_combined, only_non_dominated_front=True)
+                pf = Y_combined[front_idx]
+                pf = pf[pf[:, 0].argsort()]
+                for k, pt in enumerate(pf):
+                    pareto_row = {
+                        "Algorithm": cls_name,
+                        "Problem": prob_name,
+                        "PointIdx": k,
+                    }
+                    for j, val in enumerate(pt):
+                        pareto_row[f"f{j + 1}"] = float(val)
+                    pareto_rows.append(pareto_row)
+            _append_rows_to_csv(pareto_file, pareto_rows)
+            if pareto_rows:
+                print(f"Updated {pareto_file} with Pareto front for {cls_name}")
 
     # Plotting
     save_figs = cfg.plotting.save_figures
@@ -176,9 +249,7 @@ def benchmark_and_plot(cfg):
         else:
             plt.close()
 
-    # Pareto front plots
-    nds = NonDominatedSorting()
-
+    # Pareto front plots (reuses the `nds` sorter created above)
     for spec in problems:
         if spec.n_obj != 2:
             print(f"Skipping Pareto plot for {spec.name} (n_obj != 2)")
