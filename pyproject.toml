@@ -18,8 +18,8 @@ jsonlines = "^4.0.0"
 smac = "^2.2.0"
 requests = "^2.32.3"
 python-dotenv = "^1.0.1"
-botorch = "^0.12.0"
-gpytorch = "^1.13"
+botorch = "^0.16.1"
+gpytorch = "^1.15"
 sentence-transformers = "^3.4.0"
 scikit-optimize = "^0.10.2"
 aisuite = {extras = ["anthropic", "groq", "openai"], version = "^0.1.9"}
@@ -29,6 +29,13 @@ hebo = "^0.3.6"
 cmaes = "^0.11.1"
 hydra-core = "^1.3.2"
 omegaconf = "^2.3.0"
+bofire = {extras = ["optimization"], version = "^0.3.1"}
+# bofire 0.3.1 needs a newer pydantic than 2.7 (collections.abc.Sequence schema
+# generation) and, via shap->numba, a coverage with coverage.types.Tracer (>=7.10).
+pydantic = "^2.13"
+# packaging >=24.2 provides packaging.licenses, required by the Poetry version
+# installed in this env; keeps `poetry lock`/`check` working after install.
+packaging = "^24.2"
 
 #[tool.poetry.dev-dependencies]
 #black = "^23.11.0"
@@ -43,6 +50,8 @@ jupyter = "^1.0.0"
 pytest-cov = "^4.1.0"
 codecov = "^2.1.13"
 pytest-mock = "^3.14.0"
+# numba (pulled via bofire[optimization] -> shap) needs coverage.types.Tracer (>=7.10)
+coverage = "^7.10"
 
 [tool.pytest.ini_options]
 markers = [

@@ -42,3 +42,11 @@ algorithms:
 
   - path: "MO bench/MORS_baseline.py"
     cls_name: RandomSearchMO
+
+  # State-of-the-art Bayesian baselines via BOFire (external, trusted MOBO
+  # framework wrapping BoTorch) instead of in-house wrappers.
+  - path: "MO bench/bofire_baseline.py"
+    cls_name: BoFireQparEGOWrapper
+
+  - path: "MO bench/bofire_baseline.py"
+    cls_name: BoFireQLogNEHVIWrapper
