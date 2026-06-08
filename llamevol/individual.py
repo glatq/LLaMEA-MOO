@@ -1,45 +1,37 @@
-import json
 import uuid
+from typing import Any, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class Individual:
+class Individual(BaseModel):
     """
     Represents a candidate solution (an individual) in the evolutionary algorithm.
     Each individual has properties such as solution code, fitness, feedback, and metadata for additional information.
     """
 
-    def __init__(
-        self,
-        solution="",
-        name="",
-        description="",
-        configspace=None,
-        generation=0,
-        parent_id=None,
-    ):
-        """
-        Initializes an individual with optional attributes.
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
-        Args:
-            solution (str): The solution (code) of the individual.
-            name (str): The name of the individual (typically the class name in the solution).
-            description (str): A short description of the individual (e.g., algorithm's purpose or behavior).
-            configspace (Optional[ConfigSpace]): Optional configuration space for HPO.
-            generation (int): The generation this individual belongs to.
-            parent_id (str): UUID of the parent individual.
-        """
-        self.id = str(uuid.uuid4())  # Unique ID for this individual
-        self.solution = solution
-        self.name = name
-        self.description = description
-        self.configspace = configspace
-        self.generation = generation
-        self.fitness = None
-        self.feedback = ""
-        self.error = ""
-        self.parent_id = parent_id
-        self.metadata = {}  # Dictionary to store additional metadata
-        self.mutation_prompt = None
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    solution: str = ""
+    """The solution (code) of the individual."""
+    name: str = ""
+    """The name of the individual (typically the class name in the solution)."""
+    description: str = ""
+    """A short description of the individual (e.g., algorithm's purpose or behavior)."""
+    configspace: Any = None
+    """Optional configuration space for HPO."""
+    generation: int = 0
+    """The generation this individual belongs to."""
+    fitness: Optional[float] = None
+    feedback: str = ""
+    error: str = ""
+    parent_id: Optional[list[str]] = None
+    """UUIDs of the parent individual(s)."""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    """Dictionary to store additional metadata."""
+    mutation_prompt: Optional[str] = None
+    island_index: Optional[int] = None
 
     def set_mutation_prompt(self, mutation_prompt):
         """
@@ -67,7 +59,7 @@ class Individual:
         Args:
             key (str): The key for the metadata to obtain.
         """
-        return self.metadata[key] if key in self.metadata.keys() else None
+        return self.metadata.get(key)
 
     def set_scores(self, fitness, feedback="", error=""):
         self.fitness = fitness
@@ -96,72 +88,11 @@ class Individual:
             description=self.description,
             configspace=self.configspace,
             generation=self.generation + 1,
-            parent_id=self.id,  # Link this individual as the parent
+            parent_id=[self.id],
         )
-        new_individual.metadata = self.metadata.copy()  # Copy the metadata as well
+        new_individual.metadata = self.metadata.copy()
         return new_individual
 
-    @classmethod
-    def from_dict(cls, data):
-        """
-        Creates an individual from a dictionary.
-
-        Args:
-            data (dict): A dictionary containing the individual's attributes.
-
-        Returns:
-            Individual: An instance of Individual created from the dictionary.
-        """
-        individual = cls()
-        individual.id = data["id"]
-        individual.solution = data["solution"]
-        individual.name = data["name"]
-        individual.description = data["description"]
-        individual.generation = data["generation"]
-        individual.fitness = data["fitness"]
-        individual.feedback = data["feedback"]
-        individual.error = data["error"]
-        individual.parent_id = data["parent_id"]
-        individual.metadata = data["metadata"]
-        individual.mutation_prompt = data["mutation_prompt"]
-        return individual
-
-    def to_dict(self):
-        """
-        Converts the individual to a dictionary.
-
-        Returns:
-            dict: A dictionary representation of the individual.
-        """
-        try:
-            cs = self.configspace
-            cs = cs.to_serialized_dict()
-        except Exception:
-            cs = ""
-        return {
-            "id": self.id,
-            "solution": self.solution,
-            "name": self.name,
-            "description": self.description,
-            "configspace": cs,
-            "generation": self.generation,
-            "fitness": self.fitness,
-            "feedback": self.feedback,
-            "error": self.error,
-            "parent_id": self.parent_id,
-            "metadata": self.metadata,
-            "mutation_prompt": self.mutation_prompt,
-        }
-
-    # JSON serialization methods. Used by a custom JSON encoder in utils.py.
     def __to_json__(self):
-        return self.to_dict()
-
-    def to_json(self):
-        """
-        Converts the individual to a JSON string.
-
-        Returns:
-            str: A JSON string representation of the individual.
-        """
-        return json.dumps(self.to_dict(), default=str, indent=4)
+        """Used by LogggerJSONEncoder in utils.py."""
+        return self.model_dump(mode="python")

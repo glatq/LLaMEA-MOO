@@ -139,11 +139,10 @@ class IslandESPopulation(Population):
         return False
 
     def __set_island_index(self, individual: Individual, island_index: int):
-        setattr(individual, "island_index", island_index)
+        individual.island_index = island_index
 
     def __get_island_index(self, individual: Individual):
-        index = getattr(individual, "island_index", None)
-        return index
+        return individual.island_index
 
     def get_population_size(self):
         return sum([wrapper.pop.get_population_size() for wrapper in self.populations])
