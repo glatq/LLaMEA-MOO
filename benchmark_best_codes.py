@@ -68,6 +68,7 @@ def benchmark_and_plot(cfg):
     log_file = os.path.join(output_dir, "hv_benchmark_log.csv")
     obj_file = os.path.join(output_dir, "objectives_log.csv")
     pareto_file = os.path.join(output_dir, "pareto_front_log.csv")
+    runtime_file = os.path.join(output_dir, "runtime_log.csv")
 
     # Export configuration (objective/Pareto CSVs so figures can be
     # regenerated from data, like the HV convergence curves already are).
@@ -106,6 +107,7 @@ def benchmark_and_plot(cfg):
         # we can compute one combined non-dominated front per problem.
         rows = []
         obj_rows = []
+        runtime_rows = []
         raw_y_by_problem = {}
         for run in res.result:
             if "-rep" in run.name:
@@ -113,6 +115,18 @@ def benchmark_and_plot(cfg):
                 rep_val = int(rep_str)
             else:
                 prob_name, rep_val = run.name, 1
+
+            # Per-run wall-clock time (for the time-accuracy comparison)
+            exec_time = getattr(run, "execution_time", None)
+            if exec_time is not None:
+                runtime_rows.append(
+                    {
+                        "Algorithm": cls_name,
+                        "Problem": prob_name,
+                        "Repeat": rep_val,
+                        "ExecutionTime": float(exec_time),
+                    }
+                )
 
             if hasattr(run, "hv_hist") and run.hv_hist is not None:
                 for epoch, hv_value in enumerate(run.hv_hist):
@@ -184,6 +198,11 @@ def benchmark_and_plot(cfg):
             _append_rows_to_csv(pareto_file, pareto_rows)
             if pareto_rows:
                 print(f"Updated {pareto_file} with Pareto front for {cls_name}")
+
+        # Write per-run wall-clock times (time-accuracy comparison)
+        _append_rows_to_csv(runtime_file, runtime_rows)
+        if runtime_rows:
+            print(f"Updated {runtime_file} with runtimes for {cls_name}")
 
     # Plotting
     save_figs = cfg.plotting.save_figures

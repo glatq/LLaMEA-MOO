@@ -5,6 +5,8 @@ import numpy as np
 
 from pymoo.problems import get_problem
 
+from .re_problems import get_re_problem
+
 
 @dataclass
 class ProblemSpec:
@@ -73,24 +75,28 @@ class PymooMOProvider:
         seed: Optional[int] = None,
         **kwargs,
     ) -> _PymooProblemWrapper:
-        base_kwargs = dict(n_var=dim, **kwargs)
+        # Real-world RE problems are provided locally (not available in pymoo);
+        # everything else (ZDT/DTLZ/WFG/...) goes through pymoo as before.
+        prob = get_re_problem(problem_id)
+        if prob is None:
+            base_kwargs = dict(n_var=dim, **kwargs)
 
-        # Some problems (DTLZ) take n_obj; others (ZDT, BNH) don't.
-        try:
-            prob = get_problem(problem_id, **base_kwargs)
-        except TypeError:
-            # First, try again without n_obj (for problems with fixed #objectives)
-            if "n_obj" in base_kwargs:
-                base_kwargs = {k: v for k, v in base_kwargs.items() if k != "n_obj"}
+            # Some problems (DTLZ) take n_obj; others (ZDT, BNH) don't.
             try:
                 prob = get_problem(problem_id, **base_kwargs)
             except TypeError:
-                # Final fallback: also drop n_var (for fixed-dim problems like BNH)
-                base_kwargs = {k: v for k, v in base_kwargs.items() if k != "n_var"}
-                if base_kwargs:
+                # First, try again without n_obj (for problems with fixed #objectives)
+                if "n_obj" in base_kwargs:
+                    base_kwargs = {k: v for k, v in base_kwargs.items() if k != "n_obj"}
+                try:
                     prob = get_problem(problem_id, **base_kwargs)
-                else:
-                    prob = get_problem(problem_id)
+                except TypeError:
+                    # Final fallback: also drop n_var (for fixed-dim problems like BNH)
+                    base_kwargs = {k: v for k, v in base_kwargs.items() if k != "n_var"}
+                    if base_kwargs:
+                        prob = get_problem(problem_id, **base_kwargs)
+                    else:
+                        prob = get_problem(problem_id)
 
         if seed is not None and hasattr(prob, "rng"):
             try:
