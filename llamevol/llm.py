@@ -1,22 +1,16 @@
-"""LLM manager to connect to different types of models."""
+"""LLM manager to connect to different types of models via LangChain."""
 
-import time
 import os
-from datetime import datetime
-from abc import ABC, abstractmethod
 import logging
 from typing import Optional, Any
 from collections.abc import Callable
-import requests
-import openai
-import aisuite as ai
-from aisuite.providers.groq_provider import GroqMessageConverter
-from google import genai
-from google.genai import types
 
+from langchain_anthropic import ChatAnthropic
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_vertexai import ChatVertexAI
+from langchain_openai import ChatOpenAI
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_BASE_URL_FOR_OPENAI_CLIENT = os.getenv("GROQ_BASE_URL_FOR_OPENAI_CLIENT", None)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -26,27 +20,6 @@ ONEHUB_BASE_URL = os.getenv("ONEHUB_BASE_URL")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 LLMS = {
-    "llama3-70b-8192": (
-        "llama3-70b-8192",
-        GROQ_API_KEY,
-        GROQ_BASE_URL_FOR_OPENAI_CLIENT,
-        2,
-        "groq",
-    ),
-    "llama-3.3-70b-versatile": (
-        "llama-3.3-70b-versatile",
-        GROQ_API_KEY,
-        GROQ_BASE_URL_FOR_OPENAI_CLIENT,
-        15,
-        "groq",
-    ),
-    "llama-4-maverick": (
-        "meta-llama/llama-4-maverick-17b-128e-instruct",
-        GROQ_API_KEY,
-        GROQ_BASE_URL_FOR_OPENAI_CLIENT,
-        5,
-        "groq",
-    ),
     "gemini-2.0-flash-exp": (
         "gemini-2.0-flash-exp",
         GEMINI_API_KEY,
@@ -73,9 +46,15 @@ LLMS = {
         ONEHUB_API_KEY,
         ONEHUB_BASE_URL,
         5,
-        None,
+        "openrouter",
     ),
-    "onehub-gemma2-9b-it": ("gemma2-9b-it", ONEHUB_API_KEY, ONEHUB_BASE_URL, 5, None),
+    "onehub-gemma2-9b-it": (
+        "gemma2-9b-it",
+        ONEHUB_API_KEY,
+        ONEHUB_BASE_URL,
+        5,
+        "openrouter",
+    ),
     "o_deepseek-r1-free": (
         "deepseek/deepseek-r1-0528:free",
         OPENROUTER_API_KEY,
@@ -121,6 +100,15 @@ LLMS = {
     "gpt-4o": ("gpt-4o-2024-11-20", OPENAI_API_KEY, None, 5, "openai"),
 }
 
+_SUPPORTED_KWARGS = {
+    "google": {"temperature", "top_k", "top_p"},
+    "vertex": {"temperature", "top_k", "top_p"},
+    "openai": {"temperature", "top_p"},
+    "openrouter": {"temperature", "top_p"},
+    "request": {"temperature", "top_p"},
+    "anthropic": {"temperature", "top_p", "max_tokens"},
+}
+
 
 class LLMClientResponse:
     def __init__(self, response):
@@ -154,247 +142,41 @@ class LLMClientResponse:
         return str(self.response)
 
 
-class LLMClient(ABC):
-    """Abstract base class for LLM backends."""
+def _create_model(client_str, model_name, api_key, base_url):
+    if client_str == "google":
+        return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key)
 
-    def __init__(self, api_key: str, model_name: str, base_url: Optional[str] = None):
-        self.model_name = model_name
-        self.base_url = base_url
-        self.api_key = api_key
+    if client_str == "vertex":
+        return ChatVertexAI(
+            model_name=model_name,
+            project="starry-seat-441021-m2",
+            location="us-central1",
+        )
 
-    @abstractmethod
-    def raw_completion(
-        self,
-        messages: list[dict[str, str]],
-        **kwargs: Any,
-    ) -> LLMClientResponse:
-        """Generate a raw completion from the LLM."""
+    if client_str in ("openai", "openrouter", "request"):
+        kwargs = {"model": model_name, "api_key": api_key}
+        if base_url:
+            kwargs["base_url"] = base_url
+        return ChatOpenAI(**kwargs)
 
-    @property
-    def name(self) -> str:
-        """Return the name of the LLM backend."""
-        return f"{self.model_name}"
+    if client_str == "anthropic":
+        return ChatAnthropic(model=model_name, max_tokens=16384)
+
+    raise ValueError(f"Unsupported client_str: {client_str}")
 
 
-class GoogleGenAIClient(LLMClient):
-    def __init__(self, api_key: str, model_name: str, base_url: Optional[str] = None):
-        super().__init__(api_key, model_name, base_url)
-        if api_key:
-            self.client = genai.Client(api_key=api_key)
+def _convert_messages(session_messages):
+    lc_messages = []
+    for msg in session_messages:
+        role = msg["role"]
+        content = msg["content"]
+        if role == "system":
+            lc_messages.append(SystemMessage(content=content))
+        elif role == "assistant":
+            lc_messages.append(AIMessage(content=content))
         else:
-            self.client = genai.Client(
-                vertexai=True,
-                project="starry-seat-441021-m2",
-                location="us-central1",
-                http_options=types.HttpOptions(api_version="v1"),
-            )
-
-    def raw_completion(
-        self,
-        messages: list[dict[str, str]],
-        **kwargs: Any,
-    ) -> LLMClientResponse:
-        """Generate a raw completion using Google's GenAI API."""
-        try:
-            sys_prompt = None
-            user_contents = []
-            for _msg in messages:
-                if _msg["role"] == "system":
-                    sys_prompt = _msg["content"]
-                else:
-                    user_contents.append(types.Part.from_text(text=_msg["content"]))
-                    user_contents.append(_msg["content"])
-
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=user_contents,
-                config=types.GenerateContentConfig(
-                    system_instruction=sys_prompt, **kwargs
-                ),
-            )
-            res = LLMClientResponse(response)
-            res.text = response.text
-            res.prompt_token_count = response.usage_metadata.prompt_token_count
-            res.response_token_count = response.usage_metadata.candidates_token_count
-            return res
-        except Exception as e:
-            res = LLMClientResponse(None)
-            res.error = e
-            return res
-
-
-class CustomGroqMessageConverter(GroqMessageConverter):
-    @staticmethod
-    def convert_response(response_data):
-        res = GroqMessageConverter.convert_response(response_data)
-
-        current_timestamp = time.time()
-        setattr(res, "_response_timestamp", current_timestamp)
-
-        AISuiteClient.raw_response_map[current_timestamp] = response_data
-
-        return res
-
-
-class AISuiteClient(LLMClient):
-    # content should be deleted after use
-    raw_response_map = {}
-
-    def __init__(self, model_key: str):
-        if model_key not in LLMS:
-            raise ValueError(f"Invalid model key: {model_key}")
-        _model = LLMS[model_key]
-        api_key = _model[1]
-        model_name = _model[0]
-        base_url = _model[2]
-
-        self.provider = _model[4]
-
-        super().__init__(api_key, model_name, base_url)
-        _config = {
-            "groq": {
-                "api_key": GROQ_API_KEY,
-            },
-        }
-
-        self.client = ai.Client(provider_configs=_config)
-
-        if self.provider == "groq":
-            provider = self.client.providers.get(self.provider)
-            provider.transformer = CustomGroqMessageConverter()
-
-    def raw_completion(
-        self,
-        messages: list[dict[str, str]],
-        **kwargs: Any,
-    ) -> LLMClientResponse:
-        """Generate a raw completion using AISuite's API."""
-        res = None
-        try:
-            _aisuite_model = f"{self.provider}:{self.model_name}"
-            response = self.client.chat.completions.create(
-                model=_aisuite_model, messages=messages, **kwargs
-            )
-
-            res = LLMClientResponse(response)
-            res.text = response.choices[0].message.content
-
-            raw_response = None
-            if getattr(response, "_response_timestamp", None) is not None:
-                _response_timestamp = getattr(response, "_response_timestamp")
-                raw_response = AISuiteClient.raw_response_map.pop(
-                    _response_timestamp, None
-                )
-                res.response = raw_response
-                if self.provider == "groq":
-                    res.prompt_token_count = raw_response["usage"]["prompt_tokens"]
-                    res.response_token_count = raw_response["usage"][
-                        "completion_tokens"
-                    ]
-
-            return res
-        except Exception as e:
-            res = LLMClientResponse(None)
-            res.error = e
-            return res
-
-
-class OpenAIClient(LLMClient):
-    """OpenAI GPT backend implementation."""
-
-    def __init__(self, api_key: str, model_name: str, base_url: Optional[str] = None):
-        super().__init__(api_key, model_name, base_url)
-        self.client = openai.OpenAI(api_key=api_key, base_url=base_url)
-
-    def raw_completion(
-        self,
-        messages: list[dict[str, str]],
-        **kwargs: Any,
-    ) -> LLMClientResponse:
-        """Generate a raw completion using OpenAI's API."""
-        res = None
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model_name, messages=messages, **kwargs
-            )
-            res = LLMClientResponse(response)
-            res.text = response.choices[0].message.content
-            res.prompt_token_count = response.usage.prompt_tokens
-            res.response_token_count = response.usage.completion_tokens
-            return res
-        except Exception as e:
-            res = LLMClientResponse(None)
-            res.error = e
-            return res
-
-
-class RequestClient(LLMClient):
-    def raw_completion(
-        self,
-        messages: list[dict[str, str]],
-        **kwargs: Any,
-    ) -> LLMClientResponse:
-        url = self.base_url + "/chat/completions"
-        payload = {"model": self.model_name, "messages": messages, **kwargs}
-
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
-        }
-
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
-
-        res = None
-        try:
-            json_res = response.json()
-            res = LLMClientResponse(json_res)
-            res.text = json_res["choices"][0]["message"]["content"]
-            if "usage" in json_res:
-                res.prompt_token_count = json_res["usage"]["prompt_tokens"]
-                res.response_token_count = json_res["usage"]["completion_tokens"]
-            return res
-        except Exception as e:
-            res = LLMClientResponse(None)
-            res.error = e
-            return res
-
-
-class _GenericAISuiteClient(LLMClient):
-    """AISuite client for providers not in the LLMS dict (e.g., anthropic)."""
-
-    def __init__(self, provider: str, model_name: str):
-        super().__init__(api_key=None, model_name=model_name, base_url=None)
-        self.provider = provider
-        self.client = ai.Client()
-
-    def raw_completion(
-        self,
-        messages: list[dict[str, str]],
-        **kwargs: Any,
-    ) -> LLMClientResponse:
-        res = None
-        try:
-            _aisuite_model = f"{self.provider}:{self.model_name}"
-            # Deep copy messages — aisuite's anthropic provider mutates the list
-            # by popping the system message in _extract_system_message()
-            messages_copy = [dict(m) for m in messages]
-            # Remove unsupported kwargs for this provider
-            kwargs = {k: v for k, v in kwargs.items() if k not in ("top_k",)}
-            # Anthropic requires max_tokens; aisuite defaults to 4096 which is
-            # too low for long algorithm code.  Bump to 16384 unless the caller
-            # already set it.
-            if self.provider == "anthropic":
-                kwargs.setdefault("max_tokens", 16384)
-            response = self.client.chat.completions.create(
-                model=_aisuite_model, messages=messages_copy, **kwargs
-            )
-            res = LLMClientResponse(response)
-            res.text = response.choices[0].message.content
-            return res
-        except Exception as e:
-            res = LLMClientResponse(None)
-            res.error = e
-            return res
+            lc_messages.append(HumanMessage(content=content))
+    return lc_messages
 
 
 class LLMmanager:
@@ -414,9 +196,8 @@ class LLMmanager:
             if model_name is None:
                 raise ValueError("model_name must be provided.")
 
-            # AISuite providers (anthropic, groq, etc.) read keys from env vars
-            aisuite_providers = {"anthropic", "groq", "mistral", "cohere"}
-            if not (api_key or use_vertex or client_str in aisuite_providers):
+            keyless_providers = {"anthropic"}
+            if not (api_key or use_vertex or client_str in keyless_providers):
                 raise ValueError(
                     "Provide api_key (Gemini Developer API) or enable Vertex "
                     "(set client_str='vertex' or GOOGLE_GENAI_USE_VERTEXAI=1)."
@@ -429,33 +210,20 @@ class LLMmanager:
 
             _model = LLMS[model_key]
 
-        api_key = _model[1]
-        model_name = _model[0]
-        base_url = _model[2]
-        client_str = _model[4]
-
-        if client_str == "openai":
-            self.client = OpenAIClient(api_key, model_name, base_url)
-        elif client_str == "openrouter":
-            self.client = OpenAIClient(api_key, model_name, base_url)
-        elif client_str == "request":
-            self.client = RequestClient(api_key, model_name, base_url)
-        elif client_str in ("google", "vertex"):
-            self.client = GoogleGenAIClient(api_key, model_name, base_url)
-        elif model_key is not None:
-            self.client = AISuiteClient(model_key)
-        else:
-            # Generic aisuite provider (anthropic, groq, etc.)
-            # Build an AISuiteClient directly with provider and model name
-            self.client = _GenericAISuiteClient(
-                provider=client_str, model_name=model_name
-            )
+        self._client_str = _model[4]
+        self._model_name = _model[0]
+        self._model = _create_model(
+            client_str=self._client_str,
+            model_name=self._model_name,
+            api_key=_model[1],
+            base_url=_model[2],
+        )
 
         self.max_interval = _model[3]
         self.mock_res_provider: Callable[..., str] = None
 
     def model_name(self) -> str:
-        return self.client.name
+        return self._model_name
 
     def chat(self, session_messages, **kwargs):
         if self.mock_res_provider is not None:
@@ -466,8 +234,25 @@ class LLMmanager:
             return res
 
         logging.info("LLM: %s, %s", self.model_name(), kwargs)
-        response = self.client.raw_completion(session_messages, **kwargs)
 
-        if response.error is not None:
-            logging.error("LLM: %s, %s", self.model_name(), response.error)
-        return response
+        supported = _SUPPORTED_KWARGS.get(self._client_str, set())
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k in supported}
+
+        res = LLMClientResponse(None)
+        try:
+            lc_messages = _convert_messages(session_messages)
+            model = self._model
+            if filtered_kwargs:
+                model = model.bind(**filtered_kwargs)
+            response = model.invoke(lc_messages)
+
+            res.text = response.content
+            res.response = response
+            usage = getattr(response, "usage_metadata", None) or {}
+            res.prompt_token_count = usage.get("input_tokens", 0)
+            res.response_token_count = usage.get("output_tokens", 0)
+        except Exception as e:
+            res.error = e
+            logging.error("LLM: %s, %s", self.model_name(), e)
+
+        return res

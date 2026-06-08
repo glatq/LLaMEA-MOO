@@ -192,14 +192,14 @@ The `LLaMEvol` class (`llamevol/llamevol.py`) is the central orchestrator of the
 This module (`llamevol/llm.py`) acts as a central manager for interacting with various Large Language Models (LLMs). 
 
 **Features:**
-- Provides a unified interface (`LLMmanager`) to connect to different LLM providers (Groq, Google GenAI, OpenAI-compatible APIs like OpenRouter).
+- Provides a unified interface (`LLMmanager`) to connect to different LLM providers (Google GenAI, OpenAI, Anthropic, OpenRouter).
 - Abstracts away the specific API details for each provider.
 - Manages API keys and base URLs, primarily loaded from environment variables.
 - Defines a standardized response object (`LLMClientResponse`) containing the generated text, token counts, and potential errors.
-- Supports different client implementations (`OpenAIClient`, `GoogleGenAIClient`, `AISuiteClient`, `RequestClient`).
+- Supports different LangChain-based client implementations for Google, OpenAI, Anthropic, and OpenRouter providers.
 
 **Usage:**
-1.  **Environment Variables(Optional):** Ensure the necessary API keys and base URLs for the desired LLMs are set as environment variables (e.g., `GROQ_API_KEY`, `GEMINI_API_KEY`, etc.). Copy and rename `.env.template` to `.env` and fill in the required keys.
+1.  **Environment Variables(Optional):** Ensure the necessary API keys and base URLs for the desired LLMs are set as environment variables (e.g., `GEMINI_API_KEY`, `OPENAI_API_KEY`, etc.). Copy and rename `.env.template` to `.env` and fill in the required keys.
     ```bash
     cp .env.example .env
     # Edit .env to add your API keys
@@ -236,16 +236,13 @@ This module (`llamevol/llm.py`) acts as a central manager for interacting with v
     - the environment variable name for the API key 
     - the environment variable name for the base URL (if applicable) 
     - a maximum interval value (**Deprecated**, designed for rate limiting and retries). 
-    - the client type string (`'groq'`, `'google'`, `'openai'`, `'openrouter'`, `'request'`, or `None` for default handling like `AISuiteClient`). 
+    - the client type string (`'google'`, `'vertex'`, `'openai'`, `'openrouter'`, `'request'`, or `'anthropic'`). 
 
 - **Adding New Providers:** 
-    1. Create a new class that inherits from `LLMClient`.
-    2. Implement the `raw_completion` method to handle the specific API request/response logic for the new provider.
-    3. Update the `LLMmanager.__init__` method to recognize a new `client_str` and instantiate your custom client class when that string is provided.
-
-- **Adding New Providers from AISuite:** 
-   1. Install the the provider-specific package (e.g., `pip install 'aisuite[anthropic]'`).
-   2. Add the corresponding `API_KEY` in `__init__` of `AISuiteClient`.
+    1. Install the corresponding `langchain-<provider>` package.
+    2. Import the chat model class at the top of `llm.py`.
+    3. Add a branch in `_create_model()` for the new `client_str`.
+    4. Add the supported kwargs to `_SUPPORTED_KWARGS`.
 
 ### Prompt Generator
 This component constructs the prompts sent to the LLM for generating or modifying optimization algorithms.
