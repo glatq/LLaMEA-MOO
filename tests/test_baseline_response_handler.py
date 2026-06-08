@@ -1,11 +1,11 @@
 import pytest
-from llamevol.prompt_generators.moo_response_handler import MooResponseHandler
+from llamevol.prompt_generators.response_handler import ResponseHandler
 from llamevol.prompt_generators.types import GenerationTask
 
 
 @pytest.fixture
 def baseline_rh():
-    rh = MooResponseHandler()
+    rh = ResponseHandler()
     return rh
 
 
@@ -55,6 +55,25 @@ def test_extract_justification_from_response(
     )
     assert expected_error == actual_error
     assert expected == actual
+
+
+def test_extract_code_fallback_without_header(baseline_rh):
+    response = (
+        "# Description\nSome description\n"
+        "# Justification\nSome justification\n"
+        "# Code\n"
+        "```python\nclass MyBO:\n    pass\n```\n"
+    )
+    code, err = baseline_rh.extract_from_response(response, "Code")
+    assert err == ""
+    assert "class MyBO" in code
+
+    response_no_header = (
+        "Here is the algorithm:\n" "```python\nclass FallbackBO:\n    pass\n```\n"
+    )
+    code, err = baseline_rh.extract_from_response(response_no_header, "Code")
+    assert err == ""
+    assert "class FallbackBO" in code
 
 
 def test_extract_response(baseline_rh, response, expected_response_handler_prompts):

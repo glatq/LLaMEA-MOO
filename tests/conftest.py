@@ -4,7 +4,7 @@ from llamevol.evaluator import EvaluatorResult
 from llamevol.prompt_generators.moo_prompt_generator import (
     MultiObjectivePromptGenerator,
 )
-from llamevol.prompt_generators.bl_response_handler import BaselineResponseHandler
+from llamevol.prompt_generators.response_handler import ResponseHandler
 from llamevol.prompt_generators.bl_prompt_generator import (
     BaselinePromptGenerator,
 )
@@ -107,7 +107,7 @@ def vanilla_bl_mini_bo_cpu(bl_mini_bo_cpu_config_dict):
 
 @pytest.fixture
 def vanilla_blrh():
-    rh = BaselineResponseHandler()
+    rh = ResponseHandler()
     return rh
 
 

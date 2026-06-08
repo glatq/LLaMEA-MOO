@@ -1,5 +1,5 @@
 from .abstract_prompt_generator import PromptGenerator
-from .moo_response_handler import MooResponseHandler
+from .response_handler import ResponseHandler
 import numpy as np
 from ..evaluator import EvaluatorResult
 
@@ -104,4 +104,4 @@ class MultiObjectivePromptGenerator(PromptGenerator):
         return self._format_feedback(eval_res, main_hv_prompt)
 
     def get_response_handler(self):
-        return MooResponseHandler()
+        return ResponseHandler()

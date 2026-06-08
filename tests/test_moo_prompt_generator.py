@@ -2,7 +2,7 @@ import pytest
 import yaml
 import numpy as np
 from llamevol import directories
-from llamevol.prompt_generators.moo_response_handler import MooResponseHandler
+from llamevol.prompt_generators.response_handler import ResponseHandler
 from llamevol.prompt_generators.types import GenerationTask
 from llamevol.evaluator.evaluator_result import EvaluatorBasicResult
 from tests.conftest import mopg
@@ -47,7 +47,7 @@ def test_mini_bo_code_structure(mopg_mini_bo_cpu, expected_prompts):
 
 def test_response_handler(mopg, expected_prompts):
     rh = mopg.get_response_handler()
-    assert type(rh) is MooResponseHandler
+    assert type(rh) is ResponseHandler
 
 
 def make_basic_result(id_str: str, hv: float) -> EvaluatorBasicResult:

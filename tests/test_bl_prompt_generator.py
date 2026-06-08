@@ -1,4 +1,4 @@
-from llamevol.prompt_generators.bl_response_handler import BaselineResponseHandler
+from llamevol.prompt_generators.response_handler import ResponseHandler
 from llamevol.prompt_generators.types import GenerationTask
 from .conftest import bl_get_prompt
 
@@ -244,4 +244,4 @@ class TestGetPrompt:
 
 def test_get_response_handler(vanilla_bl):
     rh = vanilla_bl.get_response_handler()
-    assert type(rh) is BaselineResponseHandler
+    assert type(rh) is ResponseHandler

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from llamevol.evaluator import EvaluatorResult
 from .types import GenerationTask
 from .prompt_strings import PromptStrings
-from .bl_response_handler import BaselineResponseHandler
+from .response_handler import ResponseHandler
 from ..population import Population
 
 
@@ -71,7 +71,7 @@ class PromptGenerator(ABC):
         )
 
     def get_response_handler(self):
-        return BaselineResponseHandler()
+        return ResponseHandler()
 
     def get_return_checker(self):
         return None
