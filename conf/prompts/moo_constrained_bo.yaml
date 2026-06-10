@@ -1,0 +1,8 @@
+# Composed prompt group for CONSTRAINED multi-objective Bayesian optimisation.
+# Mirrors moo_bo.yaml but swaps in the constraint-aware base / mode / code
+# partials. Select it with:  python run_es_search.py mode=mo prompts=moo_constrained_bo
+defaults:
+  - _moo_constrained_base
+  - _moo_constrained_bo_mode
+  - _moo_constrained_bo_code
+  - _self_

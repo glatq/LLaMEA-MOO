@@ -1,0 +1,38 @@
+# task_mode_prompt for CONSTRAINED MOO Bayesian Optimisation variants.
+# Parallel to _moo_bo_mode; swaps in the FEASIBLE-Hypervolume metric and the
+# Constraint Dominance Principle (CDP) handling guidance. Kept self-contained
+# so the qParEGO/qLogNEHVI HPO + robustness guidance is preserved.
+prompts:
+  task_mode_prompt: |
+    If you use surrogate models, consider using a sliding window of recent data (e.g., the most recent 200-500 points) to keep model fitting tractable. Avoid deep neural networks. Do not use any other libraries unless they cannot be replaced by the above libraries. Do not remove the comments from the code. Name the class based on the characteristics of the algorithm with a template 'MOBO<Something>'.
+    The primary performance metric is FEASIBLE Hypervolume (HV) maximization with respect to a fixed reference point: the evaluator computes HV externally over ONLY the feasible non-dominated points (a point is feasible when every constraint satisfies G <= 0; its total violation is cv = sum(max(0, G))). Infeasible points contribute nothing to the score, so locating the feasible region is as important as optimizing the objectives. HV and the reference point are handled externally; your algorithm only needs to return a good approximation of the feasible Pareto front as (F_pareto, X_pareto, G_pareto). Do not compute the hypervolume indicator inside the algorithm.
+
+    CONSTRAINT HANDLING: Model and exploit the constraints explicitly rather than discarding infeasible samples. A robust default is the Constraint Dominance Principle (CDP): (1) a feasible point always dominates an infeasible one; (2) between two infeasible points, the one with the smaller total violation cv = sum(max(0, G)) dominates; (3) between two feasible points, ordinary Pareto dominance on the objectives applies. Use CDP (or an equivalent feasibility-aware rule, e.g. a feasibility-weighted/penalized acquisition) for selection, ranking, and for choosing the returned front. While no feasible point has been found yet, drive the search toward lower total violation.
+
+    HYPERPARAMETER OPTIMIZATION: Any hyperparameters your algorithm uses will be automatically optimized by SMAC (Sequential Model-Based Algorithm Configuration). You must provide a configuration space as a Python dictionary that defines the hyperparameter search space. Do NOT include the parameters budget, dim, or bounds in the configuration space, as these are problem-specific and fixed. Include all other tunable hyperparameters in the __init__ method with default values, and define their search ranges in the configuration space.
+
+    Configuration space format:
+    {
+        "param_name": (lower_bound, upper_bound),  # For continuous or integer ranges
+        "log_param": (lower, upper, "log"),  # For log-scale continuous parameters
+        "categorical_param": ["option1", "option2", "option3"]  # For categorical choices
+    }
+
+    Example:
+    {
+        "pop_size": (10, 100),
+        "n_init": (5, 50),
+        "penalty_weight": (1.0, 1000.0, "log"),  # Log-scale for parameters spanning orders of magnitude
+        "constraint_handling": ["cdp", "penalty"]
+    }
+
+    CONFIGURATION SPACE GUIDELINES: Keep the configuration space compact with 3-7 hyperparameters. Avoid extremely large ranges for candidate counts (keep under 500) and model training iterations (keep under 100). Use log-scale ranges for parameters that span orders of magnitude (e.g., penalty weights, learning rates). Ensure n_init never exceeds the evaluation budget; use a budget-aware default such as min(2*dim+1, budget//4).
+
+    CRITICAL ROBUSTNESS REQUIREMENT: The algorithm's internal search logic (acquisition function, model fitting, scalarization) MUST be stable and general across all objective AND constraint scales.
+    Any scalarization method (e.g., Tchebycheff or weighted sum) MUST be applied to objectives that are normalized and scaled dynamically to the [0, 1] range, using the minimum observed value (Ideal Point) and the maximum observed value (Nadir Point) from the archive (prefer the feasible archive when feasible points exist).
+    Constraint values MUST likewise be normalized when they are combined (for example into a single penalty or violation measure) so that a single large-scale constraint cannot dominate the feasibility signal.
+    This normalization is essential to prevent early pathological evaluations from destabilizing the acquisition function and steering the search to irrelevant regions.
+
+    If you use hypervolume-based acquisition (e.g., EHVI), you may choose a simple and lightweight internal reference point (for example based on the current observed feasible nadir). This internal reference point is used only for acquisition scoring and does not need to match the evaluator's reference point. Any HV-related computation used for acquisition must remain local and inexpensive (small candidate sets) and must not compute HV over the entire archive.
+    You can assume typical problem dimensionalities between 2 and 20 and evaluation budgets between 50 and 500. The algorithm must complete a single run (one call to `__call__`) within approximately 60 seconds on a standard CPU. Avoid O(budget^2) operations in the main loop (for example repeated full-archive dominance checks, full hypervolume calculations, or large nested Python loops). Using O(n^3) surrogate models like Gaussian Processes is fine as long as you limit the training set size.
+    Give a robust, computationally efficient constrained multi-objective optimization algorithm to solve this task. The algorithm should be conceptually clear and not overly complex. Give the algorithm a concise but comprehensive key-word-style description with the main ideas and justify your decision about the algorithm.

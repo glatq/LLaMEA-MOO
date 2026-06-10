@@ -1,0 +1,130 @@
+# Code structure scaffold for CONSTRAINED MOO Bayesian Optimisation mode.
+# Parallel to _moo_bo_code, extended with: the func(x) -> (F, G) contract,
+# a constraint-violation helper, Constraint-Dominance-Principle (CDP) selection,
+# and a (F_pareto, X_pareto, G_pareto) return. Providing this minimal CDP +
+# surrogate skeleton means the LLM adapts a working constraint-handling pattern
+# instead of inventing one from scratch.
+prompts:
+  code_structure_template: |
+
+    ```python
+    from collections.abc import Callable
+    from scipy.stats import qmc  # If you are using QMC sampling, qmc from scipy is encouraged. Remove this line if you have better alternatives.
+    from scipy.stats import norm
+    import numpy as np
+
+
+    class <AlgorithmName>:
+        def __init__(self, budget: int, dim: int, bounds: np.ndarray | None = None,
+                     param1=default1, param2=default2, ...):
+            # Fixed problem parameters
+            self.budget = budget
+            self.dim = dim
+            # bounds has shape (2, dim), bounds[0]: lower bound, bounds[1]: upper bound.
+            # Do NOT overwrite self.bounds with hard-coded values.
+            if bounds is None:
+                self.bounds = np.array([[0.0] * dim, [1.0] * dim], dtype=float)
+            else:
+                self.bounds = np.asarray(bounds, dtype=float)
+
+            # Hyperparameters (tuned by SMAC, defined in Space)
+            self.param1 = param1
+            self.param2 = param2
+            # ... add more hyperparameters with default values
+
+            # Numbers of objectives / constraints are unknown a priori.
+            # They MUST be inferred on the first call to func inside _evaluate_points.
+            self.n_obj: int | None = None
+            self.n_constr: int | None = None
+
+            # Archive of ALL evaluated points (used for surrogate training).
+            # X: (n_points, dim), F: (n_points, n_obj), G: (n_points, n_constr)
+            self.X: np.ndarray | None = None
+            self.F: np.ndarray | None = None
+            self.G: np.ndarray | None = None
+            self.n_evals = 0
+
+            # Small, budget-aware initial design (never exceed the budget).
+            self.n_init = <your_strategy>
+
+        def _sample_points(self, n_points: int) -> np.ndarray:
+            # Sample n_points within self.bounds (use bounds[0]/bounds[1]).
+            # Return array of shape (n_points, dim).
+
+        @staticmethod
+        def _violation(G: np.ndarray) -> np.ndarray:
+            # Total constraint violation per row: cv = sum(max(0, G)), shape (n_points,).
+            # cv == 0  <=>  feasible (every constraint satisfies G <= 0).
+            G = np.atleast_2d(G)
+            return np.maximum(0.0, G).sum(axis=1)
+
+        @staticmethod
+        def _cdp_dominates(f_a, cv_a, f_b, cv_b) -> bool:
+            # Constraint Dominance Principle (a dominates b?):
+            #   1. feasible (cv == 0) beats infeasible;
+            #   2. both infeasible -> smaller cv wins;
+            #   3. both feasible   -> Pareto dominance on objectives (minimization).
+            if cv_a <= 0 and cv_b > 0:
+                return True
+            if cv_a > 0 and cv_b > 0:
+                return cv_a < cv_b
+            if cv_a <= 0 and cv_b <= 0:
+                return np.all(f_a <= f_b) and np.any(f_a < f_b)
+            return False
+
+        def _fit_model(self, X: np.ndarray, F: np.ndarray, G: np.ndarray):
+            # Fit surrogate(s) on (X, F) and, when n_constr > 0, on (X, G) as well,
+            # so the search can predict both objective values and feasibility.
+            # Do not change the signature. Consider a sliding window (200-500 points)
+            # and limit GP training-set size to stay within the time budget.
+
+        def _acquisition_function(self, X: np.ndarray) -> np.ndarray:
+            # Feasibility-aware acquisition: combine an objective acquisition
+            # (scalarization / EHVI / Thompson, etc.) with a feasibility signal
+            # (e.g. predicted probability that all G <= 0, or a normalized penalty
+            # on predicted violation). Normalize objectives to [0, 1] using the
+            # feasible ideal/nadir when available. Return a 1-D score per candidate,
+            # shape (n_points,). All weight vectors (if used) MUST have length self.n_obj.
+
+        def _select_next_points(self, batch_size: int) -> np.ndarray:
+            # Generate candidates and rank them with the acquisition function.
+            # While no feasible point exists, bias selection toward lower predicted
+            # violation. Return an array of shape (batch_size, dim).
+
+        def _evaluate_points(self, func: Callable, X: np.ndarray):
+            # The ONLY place func is called. func(x) returns a tuple (F_i, G_i).
+            # On the first evaluation infer the dimensions and set them once:
+            #   self.n_obj = len(F_i); self.n_constr = len(G_i)
+            # Respect the remaining budget; clip X to self.bounds before calling func.
+            #   lb, ub = self.bounds
+            #   X_clipped = np.clip(X, lb, ub)
+            # Return (F, G) with F shape (n_points, n_obj) and G shape (n_points, n_constr).
+            self.n_evals += len(X)
+
+        def _update_eval_points(self, new_X, new_F, new_G):
+            # Append to the full archive (self.X, self.F, self.G) -- keep ALL points,
+            # feasible and infeasible, for surrogate training. Track the feasible
+            # non-dominated front separately for the returned result. Dominance MUST
+            # use CDP and self.n_obj / self.n_constr, never a fixed number.
+
+        def _pareto_feasible(self):
+            # Return (F_pareto, X_pareto, G_pareto) for the current archive:
+            # the non-dominated set restricted to feasible points (cv == 0).
+            # If NO feasible point has been found, fall back to the points with the
+            # smallest total violation so the algorithm always returns something.
+
+        def __call__(self, func: Callable) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+            # Main optimization loop.
+            # func takes an array of shape (dim,) and returns a tuple (F, G):
+            #   F shape (M,) objectives (minimized), G shape (C,) constraints (G <= 0 feasible).
+            # Always call func via _evaluate_points so the budget is respected.
+            # The full run must complete within approximately 60 seconds.
+            # Return (F_pareto, X_pareto, G_pareto) for the final feasible non-dominated set.
+            # The algorithm MUST remain correct for any self.n_obj >= 2 and any self.n_constr >= 1.
+
+            # Initial design, then surrogate-assisted / CDP-guided loop.
+            while self.n_evals < self.budget:
+                ...
+
+            return F_pareto, X_pareto, G_pareto
+    ```

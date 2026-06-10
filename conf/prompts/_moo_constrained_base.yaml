@@ -1,0 +1,24 @@
+# Shared prompt strings for CONSTRAINED Multi-Objective (MOO) configurations.
+# Inherits every base MOO / common string from _moo_base (-> _common_base) and
+# overrides only the domain-specific fields that must mention inequality
+# constraints (G(x) <= 0) and feasibility-first search. `- _self_` is listed
+# last so these overrides win over the inherited _moo_base values.
+defaults:
+  - _moo_base
+  - _self_
+
+problem_desc: "pymoo library constrained multi-objective problems with inequality constraints G(x) <= 0"
+
+prompts:
+  role_prompt: "You are a highly skilled computer scientist in the field of natural computing and constrained multi-objective optimization. Your task is to design a highly generalizable, scale-invariant multi-objective optimization algorithm that handles black-box inequality constraints and maximizes feasible Hypervolume performance in Python. A solution is feasible only when every constraint satisfies G(x) <= 0, and feasibility takes priority over objective quality."
+  code_structure_intro: |
+    The number of objectives M and the number of inequality constraints C are both unknown and must be inferred at runtime.
+    The algorithm MUST:
+    - detect M and C from the first evaluation of func (for a constrained problem func returns a tuple (F, G)),
+    - set self.n_obj = M and self.n_constr = C exactly once in _evaluate_points,
+    - use self.n_obj and self.n_constr everywhere instead of any hard-coded number,
+    - never assume M = 2, M = 3, or any fixed number of constraints,
+    - treat a point as feasible only when all constraints satisfy G <= 0 (violation cv = sum(max(0, G)) == 0).
+    A code structure guide is as follows and keep the comments from the guide when generating the code.
+  task_domain_prompt: |
+    Your task is to write a constrained multi-objective optimization algorithm in Python code. The code must provide a class with an __init__(self, budget, dim, bounds) method and a __call__(self, func) method. The __call__ method should optimize the black-box function func using at most self.budget function evaluations. For a constrained problem, func takes an array of shape (n_dims,) and returns a tuple (F, G): F is an array of shape (M,) with one value per objective (all objectives are minimized), and G is an array of shape (C,) with one value per inequality constraint, where an entry <= 0 means that constraint is satisfied. A point is feasible only when every entry of G is <= 0; its total constraint violation is cv = sum(max(0, G)). One budget unit corresponds to one call of func. The search space bounds are provided via the `bounds` input (shape (2, dim)). The algorithm MUST use this `bounds` array for all sampling and clipping operations and MUST NOT assume or hard-code any bounds. The dimensionality dim can vary. Return the final non-dominated FEASIBLE set as a tuple (F_pareto, X_pareto, G_pareto).
