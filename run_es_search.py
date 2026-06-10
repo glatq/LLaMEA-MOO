@@ -9,6 +9,9 @@ from llamevol.prompt_generators.bl_prompt_generator import BaselinePromptGenerat
 from llamevol.prompt_generators.moo_prompt_generator import (
     MultiObjectivePromptGenerator,
 )
+from llamevol.prompt_generators.constrained_moo_prompt_generator import (
+    ConstrainedMOOPromptGenerator,
+)
 from llamevol.population import ESPopulation
 from llamevol.llm import LLMmanager
 from llamevol import LLaMEvol
@@ -134,7 +137,13 @@ def run_exp(cfg: DictConfig):
 
         search_cfg = cfg.mo_search
         evaluator = get_MOOEvaluator(cfg)
-        prompt_generator = MultiObjectivePromptGenerator(cfg.prompts)
+        # Constrained runs (set mo_search.constrained=true, typically together
+        # with prompts=moo_constrained_bo) use the feasibility-aware generator;
+        # everything else keeps the unconstrained generator unchanged.
+        if search_cfg.get("constrained", False):
+            prompt_generator = ConstrainedMOOPromptGenerator(cfg.prompts)
+        else:
+            prompt_generator = MultiObjectivePromptGenerator(cfg.prompts)
     elif mode == "so":
         search_cfg = cfg.so_search
         evaluator = get_IOHEvaluator(cfg)
