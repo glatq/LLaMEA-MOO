@@ -50,3 +50,11 @@ algorithms:
 
   - path: "MO bench/bofire_baseline.py"
     cls_name: BoFireQLogNEHVIWrapper
+
+  # Constrained SOTA Bayesian baseline: BOFire qLogNEHVI MOBO with output
+  # constraints (the constrained successor to qParEGO). Auto-detects the
+  # constrained func(x) -> (F, G) contract; on unconstrained problems it runs
+  # plain qLogNEHVI. Constraint handling activates once the constraint-aware
+  # data layer feeds G.
+  - path: "MO bench/bofire_baseline.py"
+    cls_name: BoFireConstrainedQLogNEHVIWrapper
