@@ -416,9 +416,9 @@ class MOBO_MOEAD_EI_Hybrid_Fixed:
         ideal_point_full_archive = np.min(self.y_all, axis=0)
         nadir_point_full_archive = np.max(self.y_all, axis=0)
         obj_range_full_archive = nadir_point_full_archive - ideal_point_full_archive
-        obj_range_full_archive[obj_range_full_archive == 0] = (
-            1e-6  # Avoid division by zero
-        )
+        obj_range_full_archive[
+            obj_range_full_archive == 0
+        ] = 1e-6  # Avoid division by zero
 
         # Normalize all past observed objectives (for f_min_scalar)
         y_all_normalized = (

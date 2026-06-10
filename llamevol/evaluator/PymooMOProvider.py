@@ -18,6 +18,10 @@ class ProblemSpec:
     lb: np.ndarray
     ub: np.ndarray
     ref_point: Optional[np.ndarray] = None
+    # Number of inequality constraints (G <= 0). 0 == unconstrained.
+    # Auto-detected from the underlying problem; defaults to 0 so every
+    # existing (unconstrained) problem keeps today's behaviour.
+    n_constr: int = 0
 
 
 class _PymooProblemWrapper:
@@ -28,8 +32,10 @@ class _PymooProblemWrapper:
         - name: str
         - bounds: np.ndarray of shape (2, dim)
         - n_obj: int
+        - n_constr: int
         - ref_point: Optional[np.ndarray]
-        - __call__(x) -> np.ndarray of shape (n_obj,)
+        - __call__(x) -> F                       (unconstrained, n_constr == 0)
+        - __call__(x) -> (F, G)                  (constrained, n_constr > 0)
     """
 
     def __init__(self, prob, spec: ProblemSpec):
@@ -50,11 +56,21 @@ class _PymooProblemWrapper:
         return self._spec.n_obj
 
     @property
+    def n_constr(self) -> int:
+        return self._spec.n_constr
+
+    @property
     def ref_point(self) -> Optional[np.ndarray]:
         return self._spec.ref_point
 
-    def __call__(self, x: np.ndarray) -> np.ndarray:
+    def __call__(self, x: np.ndarray):
         x = np.asarray(x, dtype=float).reshape(1, -1)
+        if self._spec.n_constr > 0:
+            # Constrained: request objectives AND inequality constraints.
+            # pymoo returns (F, G) with F shape (1, n_obj), G shape (1, n_constr)
+            # and the G <= 0 feasibility convention (no sign flip needed).
+            F, G = self._prob.evaluate(x, return_values_of=["F", "G"])
+            return np.asarray(F, dtype=float), np.asarray(G, dtype=float)
         F = self._prob.evaluate(x, return_values_of=["F"])[0]
         return np.asarray(F, dtype=float)
 
@@ -117,6 +133,12 @@ class PymooMOProvider:
 
         n_obj = int(getattr(prob, "n_obj", 2))
 
+        # Auto-detect inequality constraints. pymoo problems expose
+        # ``n_ieq_constr``; the local RE problems (and any other plain object)
+        # do not, so they fall back to 0 == unconstrained.
+        _n_ieq = getattr(prob, "n_ieq_constr", 0)
+        n_constr = int(_n_ieq) if _n_ieq else 0
+
         spec = ProblemSpec(
             name=str(problem_id),
             dim=int(dim),
@@ -126,5 +148,6 @@ class PymooMOProvider:
             ref_point=(
                 None if ref_point is None else np.asarray(ref_point, float).ravel()
             ),
+            n_constr=n_constr,
         )
         return _PymooProblemWrapper(prob, spec)

@@ -753,6 +753,13 @@ class EvaluatorBasicResult:
         self.best_y = None
         self.best_x = None
 
+        # Constraint-aware fields. Populated only for constrained MOO runs
+        # (n_constr > 0); they stay None on the unconstrained path so legacy
+        # serialization / behaviour is unchanged.
+        self.feasibility_rate = None  # fraction of evaluated points with cv == 0
+        self.cv_history = None  # per-evaluation constraint violation, shape (N,)
+        self.raw_g_hist = None  # per-evaluation constraints G, shape (N, n_constr)
+
         self.y_aoc = 0.0
         self.log_y_aoc = 0.0
         self.log_y_aoc_ioh = 0.0
@@ -804,6 +811,23 @@ class EvaluatorBasicResult:
 
         d["best_y"] = self.best_y
         d["best_x"] = self.best_x.tolist() if self.best_x is not None else None
+
+        # Constraint-aware fields: emitted only when populated (constrained
+        # runs), so unconstrained logs are byte-for-byte unchanged.
+        if self.feasibility_rate is not None:
+            d["feasibility_rate"] = self.feasibility_rate
+        if self.cv_history is not None:
+            d["cv_history"] = (
+                self.cv_history.tolist()
+                if isinstance(self.cv_history, np.ndarray)
+                else self.cv_history
+            )
+        if self.raw_g_hist is not None:
+            d["raw_g_hist"] = (
+                self.raw_g_hist.tolist()
+                if isinstance(self.raw_g_hist, np.ndarray)
+                else self.raw_g_hist
+            )
 
         d["y_aoc"] = self.y_aoc
 

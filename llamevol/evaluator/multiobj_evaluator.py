@@ -6,13 +6,12 @@ from typing import Any, Optional, Sequence, List, Dict
 from threadpoolctl import threadpool_limits
 from tqdm import tqdm
 import numpy as np
-from pymoo.indicators.hv import HV
-from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 import concurrent.futures
 import multiprocessing
 from .evaluator import AbstractEvaluator
 from .evaluator_result import EvaluatorResult, EvaluatorBasicResult
 from .exec_utils import default_exec
+from .moo_metrics import score_moo_run, raw_hv
 from .PymooMOProvider import PymooMOProvider
 from ..configspace_ext.configspace_utils import extract_configspace_from_response
 
@@ -63,23 +62,39 @@ def _run_single_moo_rep(
             n_obj=spec.n_obj,
         )
 
+        # Auto-detected from the problem: 0 == unconstrained (untouched legacy
+        # path), > 0 == constrained (func returns/accepts the (F, G) tuple).
+        n_constr = int(getattr(wrapper, "n_constr", 0))
+
         run_t0 = time.time()
         basic = EvaluatorBasicResult()
         basic.name = f"{spec.name}-rep{rep + 1}"
 
-        x_hist, y_hist = [], []
+        x_hist, y_hist, g_hist = [], [], []
         pbar = tqdm(total=budget, desc=f"Run {spec.name}", leave=False)
 
         def func(x):
             if stop_event and stop_event.is_set():
                 raise StopIteration("Timeout requested by parent")
             if len(y_hist) >= budget:
+                if n_constr > 0:
+                    return np.zeros(wrapper.n_obj), np.zeros(n_constr)
                 return np.zeros(wrapper.n_obj)
 
-            yy = np.asarray(
-                wrapper(np.asarray(x, dtype=float).ravel()), dtype=float
-            ).reshape(-1, wrapper.n_obj)[0]
+            out = wrapper(np.asarray(x, dtype=float).ravel())
 
+            if n_constr > 0:
+                ff, gg = out
+                yy = np.asarray(ff, dtype=float).reshape(-1, wrapper.n_obj)[0]
+                gg = np.asarray(gg, dtype=float).reshape(-1, n_constr)[0]
+                x_hist.append(np.asarray(x).ravel())
+                y_hist.append(yy)
+                g_hist.append(gg)
+                pbar.update(1)
+                # Constrained contract: the algorithm receives (F, G).
+                return yy, gg
+
+            yy = np.asarray(out, dtype=float).reshape(-1, wrapper.n_obj)[0]
             x_hist.append(np.asarray(x).ravel())
             y_hist.append(yy)
             pbar.update(1)
@@ -115,25 +130,30 @@ def _run_single_moo_rep(
                     if getattr(wrapper, "ref_point", None) is not None
                     else np.ones(wrapper.n_obj) * 1.2
                 )
-                hv_indicator = HV(ref_point=ref_point)
-                nds = NonDominatedSorting()
 
-                # Final performance metric
-                front_idx = nds.do(Y, only_non_dominated_front=True)
-                final_hv = float(hv_indicator(Y[front_idx]))
-                # Normalize HV by reference point volume so all problems
-                # contribute equally to the mean score
-                ref_volume = float(np.prod(ref_point))
-                normalized_hv = final_hv / ref_volume if ref_volume > 0 else final_hv
-                basic.best_y = -normalized_hv
+                # Final performance metric. For n_constr == 0 this is the
+                # (normalized) hypervolume exactly as before; for n_constr > 0
+                # it is the feasible-HV with the soft infeasible fallback.
+                G = np.asarray(g_hist) if n_constr > 0 else None
+                score = score_moo_run(Y, ref_point, G=G)
+                basic.best_y = -score.score
 
-                # New: Calculate HV progress curve only if requested
+                if n_constr > 0:
+                    basic.raw_g_hist = G
+                    basic.cv_history = score.cv
+                    basic.feasibility_rate = score.feasibility_rate
+
+                # HV progress curve only if requested. Constrained runs track
+                # the *feasible* HV (front restricted to cv == 0 points seen so
+                # far); unconstrained runs are unchanged.
                 if calculate_hv_history:
                     hv_curve = []
                     for i in range(1, len(Y) + 1):
-                        Y_sub = Y[:i]
-                        f_idx = nds.do(Y_sub, only_non_dominated_front=True)
-                        hv_curve.append(float(hv_indicator(Y_sub[f_idx])))
+                        if n_constr > 0:
+                            feas_i = score.cv[:i] <= 0.0
+                            hv_curve.append(raw_hv(Y[:i][feas_i], ref_point))
+                        else:
+                            hv_curve.append(raw_hv(Y[:i], ref_point))
                     basic.hv_hist = np.asarray(hv_curve)
 
     return basic

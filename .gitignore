@@ -204,3 +204,16 @@ smac3_output/
 exp_eval/
 benchmark_results/
 .claude/settings.local.json
+
+# --- Paper-revision artifacts (local only, not for version control) ---
+.claude/
+paper_figures/
+paper_results/
+tokens_by_run_model.csv
+tokens_summary.csv
+# paper-analysis scripts (read from the gitignored paper_results/)
+cd_diagram.py
+emit_paper_numbers.py
+merge_benchmark_csvs.py
+plot_from_csv.py
+significance_tests.py
