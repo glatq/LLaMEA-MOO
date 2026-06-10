@@ -40,6 +40,21 @@ def _append_rows_to_csv(path, rows):
     df.to_csv(path, index=False)
 
 
+def feasible_fraction_curve(cv_history):
+    """Running fraction of feasible (cv == 0) evaluations after each evaluation.
+
+    cv_history is the per-evaluation constraint violation cv = sum(max(0, G)).
+    Returns an array of the same length whose i-th entry is the fraction of the
+    first (i+1) evaluations that were feasible -- a feasibility "convergence"
+    curve analogous to the HV curve.
+    """
+    cv = np.asarray(cv_history, dtype=float)
+    if cv.size == 0:
+        return np.empty(0)
+    feasible = (cv <= 0.0).astype(float)
+    return np.cumsum(feasible) / np.arange(1, cv.size + 1)
+
+
 def benchmark_and_plot(cfg):
     budget = cfg.budget
     repeat = cfg.repeat
@@ -69,6 +84,10 @@ def benchmark_and_plot(cfg):
     obj_file = os.path.join(output_dir, "objectives_log.csv")
     pareto_file = os.path.join(output_dir, "pareto_front_log.csv")
     runtime_file = os.path.join(output_dir, "runtime_log.csv")
+    # Constraint-aware logs (written only for constrained problems, where the
+    # evaluator populated per-evaluation cv_history / feasibility_rate).
+    feas_file = os.path.join(output_dir, "feasibility_log.csv")
+    feas_summary_file = os.path.join(output_dir, "feasibility_summary.csv")
 
     # Export configuration (objective/Pareto CSVs so figures can be
     # regenerated from data, like the HV convergence curves already are).
@@ -108,6 +127,8 @@ def benchmark_and_plot(cfg):
         rows = []
         obj_rows = []
         runtime_rows = []
+        feas_rows = []
+        feas_summary_rows = []
         raw_y_by_problem = {}
         for run in res.result:
             if "-rep" in run.name:
@@ -139,6 +160,35 @@ def benchmark_and_plot(cfg):
                             "HV": hv_value,
                         }
                     )
+
+            # Constraint feasibility (only present for constrained problems).
+            cv_hist = getattr(run, "cv_history", None)
+            if cv_hist is not None and len(cv_hist) > 0:
+                cv_arr = np.asarray(cv_hist, dtype=float)
+                frac_curve = feasible_fraction_curve(cv_arr)
+                for eval_idx, (cv_val, frac) in enumerate(zip(cv_arr, frac_curve)):
+                    feas_rows.append(
+                        {
+                            "Algorithm": cls_name,
+                            "Problem": prob_name,
+                            "Repeat": rep_val,
+                            "Eval": eval_idx + 1,
+                            "CV": float(cv_val),
+                            "FeasibleFraction": float(frac),
+                        }
+                    )
+                feas_rate = getattr(run, "feasibility_rate", None)
+                if feas_rate is None:
+                    feas_rate = float(np.mean(cv_arr <= 0.0))
+                feas_summary_rows.append(
+                    {
+                        "Algorithm": cls_name,
+                        "Problem": prob_name,
+                        "Repeat": rep_val,
+                        "FeasibilityRate": float(feas_rate),
+                        "MeanCV": float(np.mean(cv_arr)),
+                    }
+                )
 
             raw_y = getattr(run, "raw_y_hist", None)
             if raw_y is not None and len(raw_y) > 0:
@@ -203,6 +253,14 @@ def benchmark_and_plot(cfg):
         _append_rows_to_csv(runtime_file, runtime_rows)
         if runtime_rows:
             print(f"Updated {runtime_file} with runtimes for {cls_name}")
+
+        # Write constraint feasibility logs (only for constrained problems)
+        _append_rows_to_csv(feas_file, feas_rows)
+        _append_rows_to_csv(feas_summary_file, feas_summary_rows)
+        if feas_rows:
+            print(
+                f"Updated {feas_file}/{feas_summary_file} with feasibility for {cls_name}"
+            )
 
     # Plotting
     save_figs = cfg.plotting.save_figures
