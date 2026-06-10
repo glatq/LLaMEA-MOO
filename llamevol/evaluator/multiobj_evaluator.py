@@ -175,6 +175,7 @@ class MultiObjEvaluator(AbstractEvaluator):
         hpo_validation_budget: int = 100,  # Budget for validation
         hpo_n_problems: int = None,  # Number of problems for HPO (None = all)
         hpo_n_workers: int = 1,  # Parallel SMAC workers
+        hpo_infeasibility_penalty: float = 0.1,  # lambda for the constrained SMAC objective
         use_multiprocessing: bool = True,  # Use ProcessPoolExecutor (False for fast tests)
     ):
         super().__init__()
@@ -194,6 +195,7 @@ class MultiObjEvaluator(AbstractEvaluator):
                 max_budget=hpo_max_budget,
                 walltime_limit=hpo_walltime,
                 n_workers=hpo_n_workers,
+                infeasibility_penalty=hpo_infeasibility_penalty,
             )
             if self.use_hpo
             else None

@@ -15,10 +15,10 @@ from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, Tuple
 
 import numpy as np
-from pymoo.indicators.hv import HV
 
 from .PymooMOProvider import PymooMOProvider
 from .exec_utils import default_exec
+from .moo_metrics import score_moo_run
 
 try:
     from ConfigSpace import ConfigurationSpace, Configuration
@@ -44,6 +44,31 @@ class SMACHPOConfig:
     walltime_limit: int = 3600  # 1 hour
     n_workers: int = 1
     deterministic: bool = False
+    # Weight on the infeasibility-rate penalty added to the constrained SMAC
+    # objective: 1 - feasible_HV + infeasibility_penalty * (1 - feasibility_rate).
+    # Ignored for unconstrained problems.
+    infeasibility_penalty: float = 0.1
+
+
+def _moo_objective(Y, ref_point, G=None, infeasibility_penalty: float = 0.0) -> float:
+    """SMAC cost (lower is better) for one MO run.
+
+    Unconstrained (G is None / empty): ``1 - normalized_HV`` -- identical to the
+    legacy objective. Constrained: ``1 - normalized_feasible_HV +
+    infeasibility_penalty * (1 - feasibility_rate)``, so SMAC is rewarded both
+    for feasible hypervolume and for raising the feasible fraction.
+
+    Feasible-HV is computed with ``moo_metrics.score_moo_run`` so the constrained
+    SMAC cost is consistent with the evaluator's feasible-HV fitness.
+    """
+    has_constraints = G is not None and np.asarray(G).size > 0
+    result = score_moo_run(Y, ref_point, G=(G if has_constraints else None))
+    if has_constraints:
+        return float(
+            1.0 - result.score + infeasibility_penalty * (1.0 - result.feasibility_rate)
+        )
+    # Unconstrained: preserve the legacy guard (degenerate HV -> worst cost 1.0).
+    return float(1.0 - result.score if result.score > 0 else 1.0)
 
 
 def run_smac_hpo_moo(
@@ -124,17 +149,27 @@ def run_smac_hpo_moo(
             n_obj=problem_spec.n_obj,
         )
 
-        # Track evaluations
+        n_constr = int(getattr(wrapper, "n_constr", 0))
+
+        # Track evaluations (constraints too, when the problem is constrained)
         y_hist = []
+        g_hist = []
 
         def func(x):
-            """Evaluation function that tracks history."""
+            """Evaluation function that tracks history (and constraints if any)."""
             if len(y_hist) >= budget:
+                if n_constr > 0:
+                    return np.zeros(wrapper.n_obj), np.zeros(n_constr)
                 return np.zeros(wrapper.n_obj)
 
-            y = wrapper(np.asarray(x).ravel())
-            y_hist.append(y)
-            return y
+            out = wrapper(np.asarray(x).ravel())
+            if n_constr > 0:
+                yy, gg = out
+                y_hist.append(np.asarray(yy, dtype=float).ravel())
+                g_hist.append(np.asarray(gg, dtype=float).ravel())
+                return yy, gg
+            y_hist.append(out)
+            return out
 
         # Set random seed
         np.random.seed(seed)
@@ -179,25 +214,27 @@ def run_smac_hpo_moo(
                 else np.ones(wrapper.n_obj) * 1.2
             )
 
-            hv_indicator = HV(ref_point=ref_point)
-            raw_hv = hv_indicator(Y)
-            # Normalize HV by reference point volume so all problems
-            # contribute equally when averaged
-            ref_volume = float(np.prod(ref_point))
-            hv = raw_hv / ref_volume if ref_volume > 0 else raw_hv
-
-            # SMAC minimizes, so return 1 - normalized_hv (scores in [0, 1] range)
-            score = 1.0 - hv if hv > 0 else 1.0
+            # Constraint-aware SMAC cost. Unconstrained problems keep the
+            # 1 - normalized_HV objective; constrained problems use
+            # 1 - feasible_HV + lambda * infeasibility_rate (shared feasible-HV
+            # scoring with the evaluator via moo_metrics.score_moo_run).
+            G = np.array(g_hist) if n_constr > 0 else None
+            score = _moo_objective(
+                Y,
+                ref_point,
+                G=G,
+                infeasibility_penalty=hpo_config.infeasibility_penalty,
+            )
 
             logging.debug(
-                f"  {problem_spec.name}: HV={hv:.4f}, score={score:.4f}, "
+                f"  {problem_spec.name}: cost={score:.4f}, n_constr={n_constr}, "
                 f"evals={len(y_hist)}, config={dict(config)}"
             )
 
             return float(score)
 
         except Exception as e:
-            _logger.error(f"HV calculation error on {problem_spec.name}: {e}")
+            _logger.error(f"Score calculation error on {problem_spec.name}: {e}")
             return 1.0
 
     # Create instance strings (one per problem)
@@ -288,7 +325,9 @@ def run_smac_hpo_moo(
     hvs = []
     for i, problem_spec in enumerate(problem_specs):
         score = objective_function(incumbent, str(i), seed=0)
-        hv = 1.0 - score  # Convert back to hypervolume
+        # Negated SMAC cost: equals normalized HV for unconstrained problems and
+        # feasible-HV minus the infeasibility penalty for constrained ones.
+        hv = 1.0 - score
         hvs.append(hv)
 
     incumbent_hv = float(np.mean(hvs))
@@ -347,6 +386,7 @@ def validate_with_random_config(
         ref_point=problem_spec.ref_point,
         n_obj=problem_spec.n_obj,
     )
+    n_constr = int(getattr(wrapper, "n_constr", 0))
 
     last_error = ""
     for attempt in range(n_retries):
@@ -359,6 +399,10 @@ def validate_with_random_config(
             def func(x):
                 eval_count[0] += 1
                 if eval_count[0] > budget:
+                    # Match the (F, G) contract so constrained algorithms that
+                    # unpack the tuple don't crash once the budget is exhausted.
+                    if n_constr > 0:
+                        return np.zeros(wrapper.n_obj), np.zeros(n_constr)
                     return np.zeros(wrapper.n_obj)
                 return wrapper(np.asarray(x).ravel())
 

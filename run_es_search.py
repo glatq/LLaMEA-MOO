@@ -65,6 +65,7 @@ def get_MOOEvaluator(cfg):
     hpo_validation_budget = cfg.mo_search.get("hpo_validation_budget", 20)
     hpo_n_problems = cfg.mo_search.get("hpo_n_problems", None)
     hpo_n_workers = cfg.mo_search.get("hpo_n_workers", 1)
+    hpo_infeasibility_penalty = cfg.mo_search.get("hpo_infeasibility_penalty", 0.1)
 
     # Build MOOProblemSpec list from config
     problems = [
@@ -91,6 +92,7 @@ def get_MOOEvaluator(cfg):
         hpo_validation_budget=hpo_validation_budget,
         hpo_n_problems=hpo_n_problems,
         hpo_n_workers=hpo_n_workers,
+        hpo_infeasibility_penalty=hpo_infeasibility_penalty,
     )
 
     return evaluator
