@@ -18,6 +18,7 @@ problems:
   - { name: zdt1, dim: 30, n_obj: 2, ref_point: [ 1.1, 6.0 ] }
   - { name: zdt4, dim: 10, n_obj: 2, ref_point: [ 1.1, 160.0 ] }
   - {name: bnh, dim: 2, n_obj: 2, ref_point: [140.0, 50.0]}
+  # OSY has a negative f1. Use only in benchmarks.
   - {name: osy, dim: 6, n_obj: 2, ref_point: [0.0, 386.0]}
   - {name: ctp1, dim: 2, n_obj: 2, ref_point: [1.0, 2.0]}
   - {name: tnk, dim: 2, n_obj: 2, ref_point: [2.0, 2.0]}
