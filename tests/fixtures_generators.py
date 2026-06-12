@@ -1,3 +1,5 @@
+from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
+
 from llamevol.prompt_generators.abstract_prompt_generator import (
     PromptGenerator,
     EvaluatorResult,
@@ -18,8 +20,8 @@ class DummyGenerator(PromptGenerator):
         candidates=None,
         population=None,
         options=None,
-    ) -> tuple[str, str]:
-        return "SYS", "USER"
+    ) -> list[BaseMessage]:
+        return [SystemMessage(content="SYS"), HumanMessage(content="USER")]
 
     def get_response_handler(self) -> ResponseHandler:
         return ResponseHandler()

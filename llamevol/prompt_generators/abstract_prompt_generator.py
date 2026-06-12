@@ -1,9 +1,19 @@
 from abc import ABC, abstractmethod
+
+from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage
+from langchain_core.prompts import PromptTemplate
+
 from llamevol.evaluator import EvaluatorResult
 from .types import GenerationTask
 from .prompt_strings import PromptStrings
 from .response_handler import ResponseHandler
 from ..population import Population
+
+
+def _render(template: str, **kwargs) -> str:
+    if not kwargs:
+        return template
+    return PromptTemplate.from_template(template).format(**kwargs)
 
 
 class ResponseImpReturnChecker(ABC):
@@ -32,8 +42,9 @@ class PromptGenerator(ABC):
 
     def task_description(self, task: GenerationTask) -> str:
         parts = [
-            self.prompt_strings.task_domain_prompt.format(
-                problem_desc=self.problem_desc
+            _render(
+                self.prompt_strings.task_domain_prompt,
+                problem_desc=self.problem_desc,
             ),
             self.prompt_strings.lib_prompt,
             self.prompt_strings.task_mode_prompt,
@@ -52,22 +63,25 @@ class PromptGenerator(ABC):
 
     def _get_candidate_prompt(self, candidate) -> str:
         description = candidate.desc
-        solution = self.prompt_strings.candidate_code_wrapper.format(
-            code=candidate.code
+        solution = _render(
+            self.prompt_strings.candidate_code_wrapper, code=candidate.code
         )
 
         if candidate.error:
             if candidate.error_type == "NoCodeException":
                 feedback = self.prompt_strings.no_code_exception_msg
             else:
-                feedback = self.prompt_strings.general_error_msg.format(
-                    error=candidate.error
+                feedback = _render(
+                    self.prompt_strings.general_error_msg, error=candidate.error
                 )
         else:
             feedback = self.evaluation_feedback_prompt(candidate.eval_result)
 
-        return self.prompt_strings.candidate_prompt_template.format(
-            description=description, solution=solution, feedback=feedback
+        return _render(
+            self.prompt_strings.candidate_prompt_template,
+            description=description,
+            solution=solution,
+            feedback=feedback,
         )
 
     def get_response_handler(self):
@@ -84,8 +98,9 @@ class PromptGenerator(ABC):
 
     def _format_feedback(self, eval_res, main_metric_prompt: str) -> str:
         execution_time = eval_res.total_execution_time
-        time_prompt = self.prompt_strings.time_prompt_template.format(
-            execution_time=execution_time
+        time_prompt = _render(
+            self.prompt_strings.time_prompt_template,
+            execution_time=f"{execution_time:0.2f}",
         )
 
         hpo_prompt = ""
@@ -111,10 +126,10 @@ class PromptGenerator(ABC):
         candidates=None,
         population: Population = None,
         options: dict = None,
-    ) -> tuple[str, str]:
+    ) -> list[BaseMessage]:
         if task != GenerationTask.INITIALIZE_SOLUTION:
             if candidates is None or len(candidates) == 0:
-                return "", ""
+                return []
 
         role_prompt = self.prompt_strings.role_prompt
         task_prompt = self.task_description(task)
@@ -172,4 +187,7 @@ class PromptGenerator(ABC):
 
 {response_format_prompt}
 """
-        return role_prompt, final_prompt
+        return [
+            SystemMessage(content=role_prompt),
+            HumanMessage(content=final_prompt),
+        ]

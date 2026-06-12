@@ -165,14 +165,12 @@ def test_evaluation_feedback_prompt_empty_when_no_results(vanilla_bl, eval_res):
 
 class TestGetPrompt:
     def test_non_initialize_empty_solution(self, vanilla_bl):
-        expected_role_prompt, expected_final_prompt = "", ""
-        actual_role_prompt, actual_final_prompt = vanilla_bl.get_prompt(
+        messages = vanilla_bl.get_prompt(
             task=GenerationTask.OPTIMIZE_PERFORMANCE,
             problem_desc="24 noiseless functions",
             candidates=[],
         )
-        assert expected_role_prompt == actual_role_prompt
-        assert expected_final_prompt == actual_final_prompt
+        assert messages == []
 
     def test_initialize_solution_no_candidates(
         self, vanilla_bl, vanilla_blrh, bl_get_prompt
@@ -180,14 +178,14 @@ class TestGetPrompt:
         expected_role_prompt = bl_get_prompt["role_prompt"]
 
         expected_final_prompt = bl_get_prompt["initialize_solution"]
-        actual_role_prompt, actual_final_prompt = vanilla_bl.get_prompt(
+        messages = vanilla_bl.get_prompt(
             task=GenerationTask.INITIALIZE_SOLUTION,
             problem_desc="24 noiseless functions",
             candidates=[],
         )
 
-        assert expected_role_prompt == actual_role_prompt
-        assert expected_final_prompt == actual_final_prompt
+        assert expected_role_prompt == messages[0].content
+        assert expected_final_prompt == messages[1].content
 
     def test_initialize_solution_with_candidates(
         self, vanilla_bl, vanilla_blrh, bl_get_prompt
@@ -201,12 +199,12 @@ class TestGetPrompt:
         expected_final_prompt = bl_get_prompt[
             "initialize_solution_with_pre_solution_prompt"
         ]
-        actual_role_prompt, actual_final_prompt = vanilla_bl.get_prompt(
+        messages = vanilla_bl.get_prompt(
             task=GenerationTask.INITIALIZE_SOLUTION,
             problem_desc="24 noiseless functions",
             candidates=[c1, c2],
         )
-        assert expected_final_prompt == actual_final_prompt
+        assert expected_final_prompt == messages[1].content
 
     def test_non_initialize_solution(self, vanilla_bl, vanilla_blrh, bl_get_prompt):
         c1 = vanilla_blrh
@@ -214,14 +212,14 @@ class TestGetPrompt:
 
         expected_role_prompt = bl_get_prompt["role_prompt"]
         expected_final_prompt = bl_get_prompt["non_initialize_solution"]
-        actual_role_prompt, actual_final_prompt = vanilla_bl.get_prompt(
+        messages = vanilla_bl.get_prompt(
             task=GenerationTask.FIX_ERRORS_FROM_ERROR,
             problem_desc="24 noiseless functions",
             candidates=[c1],
         )
 
-        assert expected_role_prompt == actual_role_prompt
-        assert expected_final_prompt == normalize_prompt(actual_final_prompt)
+        assert expected_role_prompt == messages[0].content
+        assert expected_final_prompt == normalize_prompt(messages[1].content)
 
     def test_non_initialize_solution_with_crossover(
         self, vanilla_bl, vanilla_blrh, bl_get_prompt
@@ -233,13 +231,13 @@ class TestGetPrompt:
 
         expected_role_prompt = bl_get_prompt["role_prompt"]
         expected_final_prompt = bl_get_prompt["non_initialize_solution_with_crossover"]
-        actual_role_prompt, actual_final_prompt = vanilla_bl.get_prompt(
+        messages = vanilla_bl.get_prompt(
             task=GenerationTask.FIX_ERRORS,
             problem_desc="24 noiseless functions",
             candidates=[c1, c2],
         )
-        assert expected_role_prompt == actual_role_prompt
-        assert expected_final_prompt == normalize_prompt(actual_final_prompt)
+        assert expected_role_prompt == messages[0].content
+        assert expected_final_prompt == normalize_prompt(messages[1].content)
 
 
 def test_get_response_handler(vanilla_bl):

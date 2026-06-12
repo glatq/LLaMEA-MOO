@@ -173,6 +173,8 @@ def run_exp(cfg: DictConfig):
         api_key=search_cfg.llm.api_key,
         base_url=search_cfg.llm.base_url,
         client_str=search_cfg.llm.client,
+        project=search_cfg.llm.get("project"),
+        location=search_cfg.llm.get("location"),
     )
 
     # define ES parameters

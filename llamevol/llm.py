@@ -6,7 +6,7 @@ from typing import Optional, Any
 from collections.abc import Callable
 
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AIMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_vertexai import ChatVertexAI
 from langchain_openai import ChatOpenAI
@@ -142,15 +142,18 @@ class LLMClientResponse:
         return str(self.response)
 
 
-def _create_model(client_str, model_name, api_key, base_url):
+def _create_model(
+    client_str, model_name, api_key, base_url, project=None, location=None
+):
     if client_str == "google":
         return ChatGoogleGenerativeAI(model=model_name, google_api_key=api_key)
 
     if client_str == "vertex":
+        # project/location are configurable (default to the team project/region).
         return ChatVertexAI(
             model_name=model_name,
-            project="starry-seat-441021-m2",
-            location="us-central1",
+            project=project or "starry-seat-441021-m2",
+            location=location or "us-central1",
         )
 
     if client_str in ("openai", "openrouter", "request"):
@@ -160,7 +163,11 @@ def _create_model(client_str, model_name, api_key, base_url):
         return ChatOpenAI(**kwargs)
 
     if client_str == "anthropic":
-        return ChatAnthropic(model=model_name, max_tokens=16384)
+        # Pass api_key when provided; otherwise ChatAnthropic reads ANTHROPIC_API_KEY.
+        kwargs = {"model": model_name, "max_tokens": 16384}
+        if api_key:
+            kwargs["api_key"] = api_key
+        return ChatAnthropic(**kwargs)
 
     raise ValueError(f"Unsupported client_str: {client_str}")
 
@@ -187,6 +194,8 @@ class LLMmanager:
         api_key: str = None,
         base_url: str = None,
         client_str: str = None,
+        project: str = None,
+        location: str = None,
     ):
         use_vertex = (client_str == "vertex") or (
             os.getenv("GOOGLE_GENAI_USE_VERTEXAI") == "1"
@@ -217,6 +226,8 @@ class LLMmanager:
             model_name=self._model_name,
             api_key=_model[1],
             base_url=_model[2],
+            project=project,
+            location=location,
         )
 
         self.max_interval = _model[3]
@@ -240,7 +251,11 @@ class LLMmanager:
 
         res = LLMClientResponse(None)
         try:
-            lc_messages = _convert_messages(session_messages)
+            # Accept either already-built LangChain messages or our dict format.
+            if session_messages and isinstance(session_messages[0], BaseMessage):
+                lc_messages = session_messages
+            else:
+                lc_messages = _convert_messages(session_messages)
             model = self._model
             if filtered_kwargs:
                 model = model.bind(**filtered_kwargs)

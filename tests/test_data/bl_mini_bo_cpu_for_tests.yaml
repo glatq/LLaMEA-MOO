@@ -62,5 +62,5 @@ prompts:
 
             return best_y, best_x
     ```
-  time_prompt_template: "took {execution_time:0.2f} seconds to run."
-  main_aoc_prompt_template: "The algorithm {algorithm_name} got an average Area over the convergence curve (AOCC, 1.0 is the best) score of {auc_mean:0.4f} with standard deviation {auc_std:0.4f}.\n"
+  time_prompt_template: "took {execution_time} seconds to run."
+  main_aoc_prompt_template: "The algorithm {algorithm_name} got an average Area over the convergence curve (AOCC, 1.0 is the best) score of {auc_mean} with standard deviation {auc_std}.\n"

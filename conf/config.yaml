@@ -55,6 +55,8 @@ mo_search:
     base_url: null
     client: "vertex"
     api_key: null
+    project: null
+    location: "us-central1"
     temperature: 0.5
     top_k: 60
   log_dir: "exp_mo_es_search"
@@ -98,6 +100,8 @@ so_search:
     base_url: null
     client: "vertex"
     api_key: null
+    project: null
+    location: "us-central1"
     temperature: 0.5
     top_k: 60
   log_dir: "exp_es_search"

@@ -119,5 +119,5 @@ prompts:
                 return np.empty((0,)), np.empty((0, self.dim))
             return np.vstack(F), np.vstack(X)
 
-  time_prompt_template: "Took {execution_time:0.2f} seconds to run."
-  main_aoc_prompt_template: "The algorithm {algorithm_name} got an average Hypervolume (HV, the larger the better) score of {hv_mean:0.4f} with standard deviation {hv_std:0.4f}."
+  time_prompt_template: "Took {execution_time} seconds to run."
+  main_aoc_prompt_template: "The algorithm {algorithm_name} got an average Hypervolume (HV, the larger the better) score of {hv_mean} with standard deviation {hv_std}."

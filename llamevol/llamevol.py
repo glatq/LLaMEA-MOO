@@ -86,8 +86,8 @@ class LLaMEvol:
                 else:
                     break
 
-        response_handler.sys_prompt = session_messages[0]["content"]
-        response_handler.prompt = session_messages[1]["content"]
+        response_handler.sys_prompt = session_messages[0].content
+        response_handler.prompt = session_messages[1].content
         response_handler.llm_model = llm.model_name()
         response_handler.raw_response = res_content
 
@@ -282,16 +282,12 @@ class LLaMEvol:
 
                     _problem_description = _evaluator.problem_prompt()
 
-                    role_setting, prompt = _promptor.get_prompt(
+                    session_messages = _promptor.get_prompt(
                         task=current_task,
                         problem_desc=_problem_description,
                         candidates=parent_handlers,
                         population=population,
                     )
-                    session_messages = [
-                        {"role": "system", "content": role_setting},
-                        {"role": "user", "content": prompt},
-                    ]
 
                     next_handler = _promptor.get_response_handler()
                     kwargs = {

@@ -81,7 +81,7 @@ def test_empty_results_feedback_prompt(mopg, eval_res, expected_prompts):
 
 
 def test_get_prompt(mopg, expected_prompts):
-    actual_role_prompt, actual_final_prompt = mopg.get_prompt(
+    messages = mopg.get_prompt(
         task=GenerationTask.INITIALIZE_SOLUTION,
         problem_desc="pymoo library multi objective problems",
         candidates=[],
@@ -104,7 +104,7 @@ def test_get_prompt(mopg, expected_prompts):
         + expected_response_format.strip()
     )
 
-    assert expected_role_prompt == actual_role_prompt
+    assert expected_role_prompt == messages[0].content
     assert normalize_prompt(expected_final_prompt) == normalize_prompt(
-        actual_final_prompt
+        messages[1].content
     )

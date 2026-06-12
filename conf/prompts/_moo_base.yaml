@@ -18,7 +18,7 @@ prompts:
   selected_solutions_intro: "The selected solutions to update are the evaluated algorithms:\n"
   selected_solution_intro: "The selected solution to update is the evaluated algorithm:\n"
   population_summary_intro: "The current population of algorithms already evaluated(name, score and runtime):\n"
-  time_prompt_template: "Took {execution_time:0.2f} seconds to run."
-  main_aoc_prompt_template: "The algorithm {algorithm_name} got an average Hypervolume (HV, the larger the better) score of {hv_mean:0.4f} with standard deviation {hv_std:0.4f}."
+  time_prompt_template: "Took {execution_time} seconds to run."
+  main_aoc_prompt_template: "The algorithm {algorithm_name} got an average Hypervolume (HV, the larger the better) score of {hv_mean} with standard deviation {hv_std}."
   task_domain_prompt: |
     Your task is to write the multi-objective optimization algorithm in Python code. The code must provide a class with an init(self, budget, dim) method and a call(self, func) method. The call method should optimize the black-box function func using at most self.budget function evaluations. The func takes an array of shape (n_dims,) and returns an array of shape (M,) (one value per objective). One budget unit corresponds to one call of func (producing all M objectives). The search space bounds are provided via the `bounds` input (shape (2, dim)). The algorithm MUST use this `bounds` array for all sampling and clipping operations and MUST NOT assume or hard-code any bounds in the algorithm's logic. The dimensionality dim can vary.

@@ -2,6 +2,7 @@ import numpy as np
 from .abstract_prompt_generator import (
     PromptGenerator,
     EvaluatorResult,
+    _render,
 )
 
 
@@ -27,8 +28,11 @@ class BaselinePromptGenerator(PromptGenerator):
         auc_mean = np.mean(aocs)
         auc_std = np.std(aocs)
 
-        main_aoc_prompt = self.prompt_strings.main_aoc_prompt_template.format(
-            algorithm_name=algorithm_name, auc_mean=auc_mean, auc_std=auc_std
+        main_aoc_prompt = _render(
+            self.prompt_strings.main_aoc_prompt_template,
+            algorithm_name=algorithm_name,
+            auc_mean=f"{auc_mean:0.4f}",
+            auc_std=f"{auc_std:0.4f}",
         )
 
         return self._format_feedback(eval_res, main_aoc_prompt)
