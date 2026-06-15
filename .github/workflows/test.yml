@@ -55,4 +55,4 @@ jobs:
         run: poetry run black --check --verbose ./llamevol/
 
       - name: Test with pytest
-        run: poetry run pytest --cov=llamevol tests/
+        run: make test
