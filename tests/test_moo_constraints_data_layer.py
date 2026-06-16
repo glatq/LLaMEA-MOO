@@ -169,11 +169,13 @@ def test_evaluator_unconstrained_backward_compat():
     assert basic.feasibility_rate is None
     assert basic.cv_history is None
     assert basic.raw_g_hist is None
-    # Score is exactly -normalized_hv over the captured archive (locks the
-    # legacy formula).
+    # best_y is exactly -normalized_hv over the captured archive (the per-run
+    # loss for the convergence machinery; locks the legacy formula).
     expected = -normalized_hv(basic.raw_y_hist, [1.1, 6.0])
     assert basic.best_y == pytest.approx(expected, rel=1e-12)
-    assert res.score == pytest.approx(basic.best_y, rel=1e-12)
+    # The run *score* is the population fitness, which selection maximizes, so it
+    # is +HV = -best_y (higher is better).
+    assert res.score == pytest.approx(-basic.best_y, rel=1e-12)
 
 
 def test_evaluator_constrained_bnh_produces_feasibility_metadata():

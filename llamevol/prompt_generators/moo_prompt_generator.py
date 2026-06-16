@@ -15,9 +15,10 @@ class MultiObjectivePromptGenerator(PromptGenerator):
             return ""
 
         algorithm_name = eval_res.name
-        hvs = [res.best_y for res in eval_res.result]
-
-        valid_hvs = [hv for hv in hvs if hv is not None]
+        # best_y is stored as -HV (a per-point loss). Report the hypervolume as
+        # +HV so the number matches "larger is better" and is consistent with
+        # the population summary, which shows the (positive) run score.
+        valid_hvs = [-res.best_y for res in eval_res.result if res.best_y is not None]
         if not valid_hvs:
             hv_mean, hv_std = 0.0, 0.0
         else:

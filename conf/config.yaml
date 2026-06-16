@@ -26,6 +26,9 @@ mo_search:
   hpo_n_problems: 3  # Number of problems for HPO (null = all). Evenly spaced subset.
   hpo_n_workers: 3  # Parallel SMAC workers (set to hpo_n_problems for max parallelism)
 
+  # Unconstrained suite (used when constrained=false). Keep constrained
+  # problems OUT of this list: they return (F, G), which an unconstrained
+  # algorithm cannot consume, and they would also pollute SMAC HPO.
   problems:
     - { name: "zdt1", dim: 30, n_obj: 2, ref_point: [ 1.1, 6.0 ] }
     - { name: "zdt2", dim: 30, n_obj: 2, ref_point: [ 1.1, 7.0 ] }
@@ -48,6 +51,12 @@ mo_search:
       dim: ${mo_search.dtlz_dimension}
       n_obj: 3
       ref_point: [ 2.0, 1.2, 1.2 ]
+
+  # Constrained suite (used when constrained=true, typically with
+  # prompts=moo_constrained_bo). bnh lives here, not in `problems` above.
+  # Note: SMAC HPO subsets this list to `hpo_n_problems` (3) evenly-spaced
+  # problems, so add >= 3 constrained problems if you want HPO to tune on 3.
+  constrained_problems:
     - { name: "bnh", dim: 2, n_obj: 2, ref_point: [ 140.0, 50.0 ] }
 
   llm:

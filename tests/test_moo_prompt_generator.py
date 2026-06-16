@@ -53,7 +53,8 @@ def test_response_handler(mopg, expected_prompts):
 def make_basic_result(id_str: str, hv: float) -> EvaluatorBasicResult:
     r = EvaluatorBasicResult()
     r.id = id_str
-    r.best_y = hv
+    # best_y is stored as the -HV loss; `hv` is the (positive) hypervolume.
+    r.best_y = -hv
     return r
 
 

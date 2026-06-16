@@ -402,8 +402,15 @@ class MultiObjEvaluator(AbstractEvaluator):
                     eval_res.error, eval_res.error_type = str(e), "ExecError"
                     break
 
+        # ``best_y`` is stored as -HV: a loss for the convergence machinery, where
+        # lower is better (see ``-score.score`` above and ``np.argmin`` usage).
+        # The population fitness, however, is *maximized* by selection -- every
+        # ESPopulation/Population sort uses ``reverse=True`` and keeps the highest
+        # fitness, and failed runs are pinned to ``-inf``. The run score therefore
+        # must be +HV (higher is better); negating the mean here makes selection
+        # breed toward higher hypervolume instead of away from it.
         valid_scores = [r.best_y for r in eval_res.result if r.best_y is not None]
-        eval_res.score = float(np.mean(valid_scores)) if valid_scores else float("nan")
+        eval_res.score = -float(np.mean(valid_scores)) if valid_scores else float("nan")
         eval_res.total_execution_time = time.time() - t0
         return eval_res
 
@@ -419,8 +426,8 @@ class MultiObjEvaluator(AbstractEvaluator):
             return (
                 f"You are evaluated on the multi-objective problem '{s.name}' "
                 f"of dimension {s.dim} with {s.n_obj} objectives. "
-                "The goal is to minimize a scalar loss defined as minus the hypervolume "
-                "of the non-dominated front obtained within a fixed evaluation budget."
+                "The goal is to maximize the hypervolume of the non-dominated front "
+                "obtained within a fixed evaluation budget."
             )
         else:
             names = ", ".join(sorted({spec.name for spec in self.problem_specs}))
@@ -429,5 +436,5 @@ class MultiObjEvaluator(AbstractEvaluator):
                 f"{names}. Each problem has a limited evaluation budget; for each run "
                 "we compute the hypervolume (HV) of your non-dominated front with "
                 "respect to a fixed reference point. Your scalar fitness is the "
-                "negative mean HV over all problems and repeats (lower is better)."
+                "mean HV over all problems and repeats (higher is better)."
             )

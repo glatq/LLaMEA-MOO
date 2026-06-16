@@ -66,13 +66,13 @@ def test_multiobj_evaluator_with_real_pymoo():
     assert basic.x_hist is not None
     assert basic.x_hist.shape[0] <= evaluator.budget
 
-    # Score should be finite and equal to -HV for this run
+    # Score should be finite; best_y is the per-run loss (-HV).
     assert np.isfinite(res.score)
     assert np.isfinite(basic.best_y)
 
-    # Because repeat == 1 and score is defined as -mean(HV), we expect:
-    # res.score == -basic.best_y
-    assert pytest.approx(res.score, rel=1e-8) == basic.best_y
+    # The run score is the population fitness (maximized by selection) = +mean(HV).
+    # With repeat == 1 that is exactly -best_y, so res.score == -basic.best_y.
+    assert pytest.approx(res.score, rel=1e-8) == -basic.best_y
 
 
 # 1. Define a "bad" optimizer that intentionally exceeds a short timeout

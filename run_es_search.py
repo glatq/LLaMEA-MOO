@@ -67,7 +67,14 @@ def get_MOOEvaluator(cfg):
     hpo_n_workers = cfg.mo_search.get("hpo_n_workers", 1)
     hpo_infeasibility_penalty = cfg.mo_search.get("hpo_infeasibility_penalty", 0.1)
 
-    # Build MOOProblemSpec list from config
+    # Pick the problem suite by mode: constrained runs use the constrained
+    # suite, unconstrained runs use the unconstrained suite. The two lists are
+    # kept separate in the config so a constrained problem (which returns
+    # (F, G)) never reaches an unconstrained algorithm, and vice versa.
+    if cfg.mo_search.get("constrained", False):
+        problem_cfg = cfg.mo_search.constrained_problems
+    else:
+        problem_cfg = cfg.mo_search.problems
     problems = [
         MOOProblemSpec(
             name=p.name,
@@ -75,7 +82,7 @@ def get_MOOEvaluator(cfg):
             n_obj=p.n_obj,
             ref_point=list(p.ref_point),
         )
-        for p in cfg.mo_search.problems
+        for p in problem_cfg
     ]
 
     evaluator = MultiObjEvaluator(

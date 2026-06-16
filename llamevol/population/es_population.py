@@ -6,6 +6,23 @@ from .population import Population, PopulationQueryItem, desc_similarity
 from ..individual import Individual
 
 
+def _selection_fitness(individual):
+    """Fitness used for ranking individuals during selection.
+
+    Selection maximizes fitness (every sort below uses ``reverse=True`` and
+    keeps the top), so a non-finite score must rank last and never survive. A
+    MOO run that errors on every problem yields ``nan`` fitness, and ``nan``
+    corrupts the sort -- every ``nan`` comparison is False, so the broken
+    individual can slip into the kept parents. Mapping ``None``/``nan``/``inf``
+    to ``-inf`` guarantees it sorts to the bottom, matching the non-finite skip
+    already done in ``get_best_individual``.
+    """
+    f = individual.fitness
+    if isinstance(f, (int, float)) and math.isfinite(f):
+        return float(f)
+    return float("-inf")
+
+
 class ESPopulationQueryItemType:
     INIT = "INIT"
     EXCLUSIVE_CROSSOVER = "EXCLUSIVE_CROSSOVER"
@@ -153,7 +170,9 @@ class ESPopulation(Population):
             if self.use_elitism:
                 _candidates = last_gen + last_pop
                 candidates = sorted(
-                    _candidates, key=lambda x: self.individuals[x].fitness, reverse=True
+                    _candidates,
+                    key=lambda x: _selection_fitness(self.individuals[x]),
+                    reverse=True,
                 )
                 next_pop = candidates[: self.n_parent]
             else:
@@ -166,7 +185,7 @@ class ESPopulation(Population):
                 else:
                     candidates = sorted(
                         _candidates,
-                        key=lambda x: self.individuals[x].fitness,
+                        key=lambda x: _selection_fitness(self.individuals[x]),
                         reverse=True,
                     )
                     next_pop = candidates[: self.n_parent]
@@ -271,7 +290,7 @@ class ESPopulation(Population):
 
         last_pop = self.selected_generations[-1]
         last_pop = [self.individuals[id] for id in last_pop if id in self.individuals]
-        sorted_last_pop = sorted(last_pop, key=lambda x: x.fitness, reverse=True)
+        sorted_last_pop = sorted(last_pop, key=_selection_fitness, reverse=True)
 
         # custom parent selection strategy
         if self.get_parent_strategy is not None:
