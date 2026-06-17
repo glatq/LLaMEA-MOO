@@ -2,6 +2,14 @@ budget: 100
 repeat: 5
 output_dir: benchmark_results
 
+# Benchmark mode. Run the unconstrained and constrained suites as two SEPARATE
+# experiments so constrained problems are never mixed with unconstrained ones:
+#   python benchmark_best_codes.py                    # unconstrained (problems + algorithms)
+#   python benchmark_best_codes.py constrained=true   # constrained (constrained_problems + constrained_algorithms)
+# Override output_dir per experiment to keep the CSVs/figures apart, e.g.
+#   python benchmark_best_codes.py constrained=true output_dir=benchmark_results_constrained
+constrained: false
+
 plotting:
   save_figures: true
   show_figures: false
@@ -14,18 +22,12 @@ export:
   objectives: true   # objectives_log.csv: Algorithm, Problem, Repeat, Eval, f1..fM
   pareto: true       # pareto_front_log.csv: Algorithm, Problem, PointIdx, f1..fM
 
+# =========================== UNCONSTRAINED ===========================
+# Used when constrained=false. Unconstrained problems only -- constrained
+# problems live in constrained_problems below, never here.
 problems:
   - { name: zdt1, dim: 30, n_obj: 2, ref_point: [ 1.1, 6.0 ] }
   - { name: zdt4, dim: 10, n_obj: 2, ref_point: [ 1.1, 160.0 ] }
-  - {name: bnh, dim: 2, n_obj: 2, ref_point: [140.0, 50.0]}
-  # OSY has a negative f1. Use only in benchmarks.
-  - {name: osy, dim: 6, n_obj: 2, ref_point: [0.0, 386.0]}
-  - {name: ctp1, dim: 2, n_obj: 2, ref_point: [1.0, 2.0]}
-  - {name: tnk, dim: 2, n_obj: 2, ref_point: [2.0, 2.0]}
-  - {name: mw1, dim: 8, n_obj: 2, ref_point: [1.0, 7.0]}
-  - {name: mw2, dim: 6, n_obj: 2, ref_point: [1.0, 7.0]}
-  - {name: mw3, dim: 6, n_obj: 2, ref_point: [1.0, 7.0]}
-  - {name: mw11, dim: 6, n_obj: 2, ref_point: [30.0, 30.0]}
 
 algorithms:
   - path: "exp_mo_paper/ESPopulation_evol_1+1_0331113806/28-29_MOBOParEGOEI_0.5432.py"
@@ -38,9 +40,6 @@ algorithms:
   - path: "MO bench/NSGA-II.py"
     cls_name: NSGA2Wrapper
 
-  - path: "MO bench/ioc_samo_cobra.py"
-    cls_name: IOCSAMOCOBRAWrapper
-
   - path: "MO bench/MORS_baseline.py"
     cls_name: RandomSearchMO
 
@@ -52,10 +51,53 @@ algorithms:
   - path: "MO bench/bofire_baseline.py"
     cls_name: BoFireQLogNEHVIWrapper
 
+# ============================ CONSTRAINED ============================
+# Used when constrained=true. SEEN are the 9 problems LLaMEA-MOO trained on
+# (conf/config.yaml mo_search.constrained_problems, identical ref points).
+# HELD-OUT are unseen constrained problems for generalization, including tight
+# (tnk, mw*) and negative-objective (osy) ones that are benchmark-only. All
+# return the constrained (F, G) contract, so only constraint-aware algorithms
+# belong in constrained_algorithms.
+constrained_problems:
+  # --- seen (training suite) ---
+  - { name: "bnh",     dim: 2,  n_obj: 2, ref_point: [ 150.0, 55.0 ] }
+  - { name: "ctp1",    dim: 5,  n_obj: 2, ref_point: [ 1.1, 5.0 ] }
+  - { name: "ctp2",    dim: 5,  n_obj: 2, ref_point: [ 1.1, 5.0 ] }
+  - { name: "ctp3",    dim: 5,  n_obj: 2, ref_point: [ 1.1, 5.0 ] }
+  - { name: "ctp4",    dim: 5,  n_obj: 2, ref_point: [ 1.1, 5.0 ] }
+  - { name: "ctp5",    dim: 5,  n_obj: 2, ref_point: [ 1.1, 5.0 ] }
+  - { name: "ctp6",    dim: 5,  n_obj: 2, ref_point: [ 1.1, 80.0 ] }
+  - { name: "ctp7",    dim: 5,  n_obj: 2, ref_point: [ 1.1, 5.0 ] }
+  - { name: "c3dtlz4", dim: 12, n_obj: 3, ref_point: [ 3.0, 2.5, 2.8 ] }
+  # --- held-out (unseen) ---
+  - { name: "ctp8",    dim: 5,  n_obj: 2, ref_point: [ 1.1, 80.0 ] }
+  - { name: "tnk",     dim: 2,  n_obj: 2, ref_point: [ 2.0, 2.0 ] }
+  - { name: "osy",     dim: 6,  n_obj: 2, ref_point: [ 0.0, 386.0 ] }  # negative f1, benchmark-only
+  - { name: "mw1",     dim: 8,  n_obj: 2, ref_point: [ 1.0, 7.0 ] }
+  - { name: "mw2",     dim: 6,  n_obj: 2, ref_point: [ 1.0, 7.0 ] }
+  - { name: "mw3",     dim: 6,  n_obj: 2, ref_point: [ 1.0, 7.0 ] }
+  - { name: "mw11",    dim: 6,  n_obj: 2, ref_point: [ 30.0, 30.0 ] }
+
+constrained_algorithms:
+  # Constraint-aware baselines.
+  - path: "MO bench/NSGA-II.py"
+    cls_name: NSGA2Wrapper
+
+  - path: "MO bench/ioc_samo_cobra.py"
+    cls_name: IOCSAMOCOBRAWrapper
+
+  - path: "MO bench/MORS_baseline.py"
+    cls_name: RandomSearchMO
+
   # Constrained SOTA Bayesian baseline: BOFire qLogNEHVI MOBO with output
   # constraints (the constrained successor to qParEGO). Auto-detects the
-  # constrained func(x) -> (F, G) contract; on unconstrained problems it runs
-  # plain qLogNEHVI. Constraint handling activates once the constraint-aware
-  # data layer feeds G.
+  # constrained func(x) -> (F, G) contract and activates constraint handling
+  # once the constraint-aware data layer feeds G.
   - path: "MO bench/bofire_baseline.py"
     cls_name: BoFireConstrainedQLogNEHVIWrapper
+
+  # Best LLaMEA-MOO constrained algorithm -- fill in after the constrained runs,
+  # e.g.:
+  # - path: "exp_mo_constrained_run1/ESPopulation_.../X-Y_<Algo>_<score>.py"
+  #   cls_name: <Algo>
+  #   handler_pkl: "exp_mo_constrained_run1/ESPopulation_.../X-Y_<Algo>_<score>_handler.pkl"

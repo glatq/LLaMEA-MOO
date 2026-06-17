@@ -61,12 +61,24 @@ def benchmark_and_plot(cfg):
     output_dir = cfg.output_dir
     os.makedirs(output_dir, exist_ok=True)
 
+    # Pick the suite by mode so constrained and unconstrained run as two separate
+    # experiments (constrained problems return (F, G) and must not be fed to
+    # unconstrained algorithms, and vice versa). constrained=true uses the
+    # constrained_problems / constrained_algorithms sections of benchmark.yaml.
+    constrained = bool(cfg.get("constrained", False))
+    problem_cfg = cfg.constrained_problems if constrained else cfg.problems
+    algorithm_cfg = cfg.constrained_algorithms if constrained else cfg.algorithms
+    print(
+        f"Benchmark mode: {'CONSTRAINED' if constrained else 'unconstrained'} "
+        f"({len(problem_cfg)} problems, {len(algorithm_cfg)} algorithms)"
+    )
+
     # Build problem specs
     problems = [
         MOOProblemSpec(
             name=p.name, dim=p.dim, n_obj=p.n_obj, ref_point=list(p.ref_point)
         )
-        for p in cfg.problems
+        for p in problem_cfg
     ]
 
     # Initialize evaluator
@@ -99,7 +111,7 @@ def benchmark_and_plot(cfg):
     nds = NonDominatedSorting()
 
     # Run benchmarking
-    for algo_cfg in cfg.algorithms:
+    for algo_cfg in algorithm_cfg:
         path = algo_cfg.path
         cls_name = algo_cfg.cls_name
 
