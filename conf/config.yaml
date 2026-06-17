@@ -15,6 +15,7 @@ mo_search:
   n_population: 100
   repeat: 3
   evaluator_timeout: 1800 # 30 * 60
+  constrained: false  # true -> use constrained_problems + feasibility-aware generator (prompts=moo_constrained_bo)
 
   # SMAC HPO configuration
   use_hpo: true  # Enable SMAC-based hyperparameter optimization
@@ -52,12 +53,28 @@ mo_search:
       n_obj: 3
       ref_point: [ 2.0, 1.2, 1.2 ]
 
-  # Constrained suite (used when constrained=true, typically with
-  # prompts=moo_constrained_bo). bnh lives here, not in `problems` above.
-  # Note: SMAC HPO subsets this list to `hpo_n_problems` (3) evenly-spaced
-  # problems, so add >= 3 constrained problems if you want HPO to tune on 3.
+  # Constrained TRAINING suite (used when constrained=true, with
+  # prompts=moo_constrained_bo). Only problems with attainable feasibility are
+  # here, so feasible-HV gives a real gradient. Ref points are relaxed
+  # (feasible-nadir + margin from a 20k random-sample scan); only the normalized
+  # mean HV matters, so the magnitude is irrelevant as long as the ref point is
+  # fixed per problem and dominates the feasible front. The 9 problems span 3
+  # dims (2/5/12), 2 and 3 objectives, and feasibility rates from ~26% to 100%.
+  # SMAC tunes on hpo_n_problems evenly-spaced entries: with 9 problems,
+  # hpo_n_problems=3 -> [bnh, ctp4, c3dtlz4]; hpo_n_problems=4 -> [bnh, ctp2,
+  # ctp5, c3dtlz4]. Tight problems (mw*, c1dtlz1, ~0% feasible) and problems
+  # with negative objectives (osy, srn) are benchmark-only -- keep those in
+  # conf/benchmark.yaml, NOT here.
   constrained_problems:
-    - { name: "bnh", dim: 2, n_obj: 2, ref_point: [ 140.0, 50.0 ] }
+    - { name: "bnh",     dim: 2,  n_obj: 2, ref_point: [ 150.0, 55.0 ] }
+    - { name: "ctp1",    dim: 5,  n_obj: 2, ref_point: [ 1.1, 5.0 ] }
+    - { name: "ctp2",    dim: 5,  n_obj: 2, ref_point: [ 1.1, 5.0 ] }
+    - { name: "ctp3",    dim: 5,  n_obj: 2, ref_point: [ 1.1, 5.0 ] }
+    - { name: "ctp4",    dim: 5,  n_obj: 2, ref_point: [ 1.1, 5.0 ] }
+    - { name: "ctp5",    dim: 5,  n_obj: 2, ref_point: [ 1.1, 5.0 ] }
+    - { name: "ctp6",    dim: 5,  n_obj: 2, ref_point: [ 1.1, 80.0 ] }
+    - { name: "ctp7",    dim: 5,  n_obj: 2, ref_point: [ 1.1, 5.0 ] }
+    - { name: "c3dtlz4", dim: 12, n_obj: 3, ref_point: [ 3.0, 2.5, 2.8 ] }
 
   llm:
     model_name: "gemini-2.5-flash"
