@@ -1,4 +1,5 @@
 import os
+import gc
 import time
 import logging
 from dataclasses import dataclass
@@ -412,6 +413,9 @@ class MultiObjEvaluator(AbstractEvaluator):
         valid_scores = [r.best_y for r in eval_res.result if r.best_y is not None]
         eval_res.score = -float(np.mean(valid_scores)) if valid_scores else float("nan")
         eval_res.total_execution_time = time.time() - t0
+        # Reclaim per-individual transients (HPO/eval workers are already gone by
+        # here) so memory does not creep across generations in the main process.
+        gc.collect()
         return eval_res
 
     def problem_name(self) -> str:

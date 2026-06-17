@@ -11,6 +11,7 @@ _handler.setFormatter(
 )
 _logger.addHandler(_handler)
 import time
+import gc
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -320,24 +321,33 @@ def run_smac_hpo_moo(
     # Convert incumbent to dictionary
     incumbent_dict = dict(incumbent)
 
-    # Calculate incumbent's average HV across all problems
-    _logger.info("  Evaluating incumbent on all problems...")
-    hvs = []
-    for i, problem_spec in enumerate(problem_specs):
-        score = objective_function(incumbent, str(i), seed=0)
-        # Negated SMAC cost: equals normalized HV for unconstrained problems and
-        # feasible-HV minus the infeasibility penalty for constrained ones.
-        hv = 1.0 - score
-        hvs.append(hv)
-
-    incumbent_hv = float(np.mean(hvs))
+    # Incumbent HV is read from SMAC's own run history -- we do NOT re-evaluate
+    # the algorithm here. The old re-evaluation ran the algorithm in this
+    # long-lived process once per HPO problem, and torch/numpy caches from those
+    # in-process runs were never released, so main-process memory grew ~1 GB per
+    # generation across a long run (eventual OOM). SMAC already recorded the
+    # incumbent's cost during the search, so reuse it (this value is logging-only;
+    # it is not used for selection or feedback -- the final full-problem
+    # evaluation produces the score that matters).
+    try:
+        incumbent_cost = float(smac.runhistory.get_cost(incumbent))
+    except Exception:  # SMAC API variations / no recorded cost
+        try:
+            incumbent_cost = float(smac.runhistory.average_cost(incumbent))
+        except Exception:
+            incumbent_cost = float("nan")
+    incumbent_hv = 1.0 - incumbent_cost
 
     # Final restore of root logger before returning
     root_logger.handlers = _saved_handlers
     root_logger.setLevel(_saved_level)
     _logger.info(f"Incumbent configuration: {incumbent_dict}")
-    _logger.info(f"Incumbent average normalized HV: {incumbent_hv:.4f}")
-    _logger.info(f"  Normalized HV per problem: {[f'{hv:.4f}' for hv in hvs]}")
+    _logger.info(f"Incumbent normalized HV (from run history): {incumbent_hv:.4f}")
+
+    # Release SMAC state for this individual so it does not accumulate in the
+    # main process across generations.
+    del smac, scenario, incumbent
+    gc.collect()
 
     return incumbent_dict, incumbent_hv
 
