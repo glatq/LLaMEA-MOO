@@ -185,9 +185,6 @@ exp-*
 jobs/*.log
 currentexp
 outcmaes
-Benchmarks/LLAMBO
-Benchmarks/bayesmark_*results*
-Benchmarks/hpo_results*
 Experiments/log_eater
 pop_*
 exp_es_search

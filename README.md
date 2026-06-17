@@ -26,16 +26,6 @@
    ```
 4. The results will be saved in `exp_es_search/` directory.
 
-### Run BBOB Evaluations
-1. Run the script:
-   ```bash
-   bash run_algo_evaluation.sh
-   ```
-2. The results will be saved in `exp_eval/` directory.
-
-### Run Bayesmark Evaluations
-Follow the instructions in the `Benchmarks/Readme.md`.
-
 ## Development
 
 The project follows a modular structure primarily located within the `llamevol/` directory.
@@ -48,7 +38,6 @@ The project follows a modular structure primarily located within the `llamevol/`
     - **`evaluator/`**: Includes code for executing and evaluating the performance of generated algorithms, often using benchmark suites like BBOB (via IOHprofiler). It handles code execution, error capture, and metric calculation.
     - **`population/`**: Manages the collection (population) of `Individual` algorithms, implementing selection strategies and diversity maintenance.
     - **`utils.py`**: Provides utility functions, including logging, serialization and plotting.
-- **`Benchmarks/`**: Contains scripts and results for running external benchmarks like Bayesmark.
 - **`Experiments/`**: Holds scripts for running specific experiments and plotting results.
 
 ### Usage Example
@@ -134,7 +123,7 @@ The `IOHEvaluator` supports several modes for parallelizing the evaluation of al
     - **Description:** Uses Python's `concurrent.futures.ProcessPoolExecutor` to run evaluation tasks in separate processes. Suitable for the algorithm which don't use multiple cores effectively. 
 
 4.  **MPI (Custom Task Manager):**
-    - **How:** Set `use_mpi = True` (e.g., `evaluator.use_mpi = True`). Requires MPI environment, `mpi4py` installed and a specific command to run the script (e.g., `mpiexec python pyfile`). An example can be found in `run_algo_evaluation.py`.
+    - **How:** Set `use_mpi = True` (e.g., `evaluator.use_mpi = True`). Requires MPI environment, `mpi4py` installed and a specific command to run the script (e.g., `mpiexec python pyfile`).
     - **Description:** Utilizes a custom master-worker implementation (`MPITaskManager`) built on top of `mpi4py`. The main node(rank 0) distributes tasks to worker nodes(rank > 0). Suitable for distributed systems.
 
 5.  **MPI (mpi4py.futures):**
@@ -142,7 +131,7 @@ The `IOHEvaluator` supports several modes for parallelizing the evaluation of al
     - **Description:** Leverages `mpi4py.futures.MPIPoolExecutor` for a higher-level interface to MPI-based parallelism. Similar to the process pool but designed specifically for MPI environments.
 
 **Configuration:**
-These options are typically set as attributes on the `IOHEvaluator` instance *before* calling the `evaluate` method. An example can be found in `run_algo_evaluation.py`.
+These options are typically set as attributes on the `IOHEvaluator` instance *before* calling the `evaluate` method.
 
 ### LLaMEvol
 The `LLaMEvol` class (`llamevol/llamevol.py`) is the central orchestrator of the evolutionary algorithm. It coordinates the interactions between the LLM, Evaluator, Prompt Generator, and Population components to drive the search for optimal algorithms.
