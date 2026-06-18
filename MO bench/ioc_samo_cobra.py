@@ -43,55 +43,77 @@ class IOCSAMOCOBRAWrapper:
             f"\n[IOC-SAMO-COBRA] Starting optimization with budget={self.budget}, dim={self.dim}"
         )
 
-        # Infer number of objectives from first evaluation
+        # Infer #objectives and, for constrained problems, #constraints from the
+        # first evaluation. Constrained problems return (F, G) with G <= 0
+        # feasible -- the same convention SAMO-COBRA uses internally
+        # (paretofrontFeasible: feasible = sum(G <= 0) == n_constraints), so G is
+        # passed through unchanged. (np.asarray of a ragged (F, G) tuple raises
+        # on numpy>=1.24, which is why the old objectives-only probe crashed
+        # whenever n_obj != n_constr.)
         test_x = np.random.uniform(self.bounds[0], self.bounds[1], self.dim)
-        test_y = func(test_x)
-        n_obj = len(np.asarray(test_y).ravel())
-        print(f"[IOC-SAMO-COBRA] Detected {n_obj} objectives")
+        test_out = func(test_x)
+        constrained = isinstance(test_out, tuple) and len(test_out) == 2
+        if constrained:
+            f0, g0 = test_out
+            n_obj = len(np.asarray(f0).ravel())
+            n_constr = len(np.asarray(g0).ravel())
+        else:
+            n_obj = len(np.asarray(test_out).ravel())
+            n_constr = 0
+        print(f"[IOC-SAMO-COBRA] Detected {n_obj} objectives, {n_constr} constraints")
 
         # Reset tracking (used only for budget control, not for storing history)
         self.eval_count = 1  # Count the test evaluation
 
         # Create problem class compatible with IOC-SAMO-COBRA
         class WrappedProblem:
-            def __init__(self, dim, n_obj, bounds, eval_func, wrapper_ref):
+            def __init__(self, dim, n_obj, n_constr, bounds, eval_func, wrapper_ref):
                 self.lower = np.full(dim, bounds[0])
                 self.upper = np.full(dim, bounds[1])
-                self.nConstraints = 0  # No constraints
+                self.nConstraints = n_constr
                 self.nObj = n_obj
                 # Set a reasonable reference point (will be overridden by evaluator)
                 self.ref = np.ones(n_obj) * 100.0
                 self.nadir = None
-                self.cheapConstr = []  # No constraints
+                self.cheapConstr = [False] * n_constr  # constraints are expensive
                 self.cheapObj = [False] * n_obj  # All objectives are expensive
                 self.eval_func = eval_func
                 self.wrapper = wrapper_ref
+                self._constrained = n_constr > 0
 
             def evaluate(self, x):
-                """Expensive evaluation method."""
+                """Expensive evaluation method. Returns [objectives, constraints]
+                with constraints in the G <= 0 feasible convention."""
                 if self.wrapper.eval_count >= self.wrapper.budget:
                     # Budget exhausted, return dummy value (won't be used by evaluator)
-                    return [np.zeros(self.nObj), np.array([])]
+                    return [np.zeros(self.nObj), np.zeros(self.nConstraints)]
 
                 # Ensure x is a 1D numpy array
                 x_eval = np.asarray(x).ravel()
                 y = self.eval_func(x_eval)  # This call is tracked by evaluator
-                y_array = np.asarray(y).ravel()
+                if self._constrained:
+                    f, g = y
+                    f_array = np.asarray(f, dtype=float).ravel()
+                    g_array = np.asarray(g, dtype=float).ravel()
+                else:
+                    f_array = np.asarray(y, dtype=float).ravel()
+                    g_array = np.array([])
 
                 self.wrapper.eval_count += 1
-
-                # Return [objectives, constraints]
-                # Constraints must be negative for violations
-                return [y_array, np.array([])]
+                return [f_array, g_array]
 
             def cheap_evaluate(self, x):
                 """Cheap evaluation for candidate generation."""
-                # Since all objectives are expensive, return NaNs
-                return [np.full(self.nObj, np.nan), np.array([])]
+                # Since all objectives/constraints are expensive, return NaNs.
+                return [
+                    np.full(self.nObj, np.nan),
+                    np.full(self.nConstraints, np.nan),
+                ]
 
         problem = WrappedProblem(
             dim=self.dim,
             n_obj=n_obj,
+            n_constr=n_constr,
             bounds=self.bounds,
             eval_func=func,
             wrapper_ref=self,
