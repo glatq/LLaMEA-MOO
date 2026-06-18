@@ -172,7 +172,8 @@ class MultiObjEvaluator(AbstractEvaluator):
         hpo_trials: int = 500,  # Number of SMAC trials
         hpo_min_budget: int = 50,  # Min budget for multi-fidelity
         hpo_max_budget: int = 200,  # Max budget for multi-fidelity
-        hpo_walltime: int = 3600,  # HPO time limit (1 hour)
+        hpo_walltime: int = 3600,  # HPO time limit (1 hour, total budget)
+        hpo_trial_walltime: float = None,  # Per-trial cap (s); None = no cap
         hpo_validation_budget: int = 100,  # Budget for validation
         hpo_n_problems: int = None,  # Number of problems for HPO (None = all)
         hpo_n_workers: int = 1,  # Parallel SMAC workers
@@ -195,6 +196,7 @@ class MultiObjEvaluator(AbstractEvaluator):
                 min_budget=hpo_min_budget,
                 max_budget=hpo_max_budget,
                 walltime_limit=hpo_walltime,
+                trial_walltime_limit=hpo_trial_walltime,
                 n_workers=hpo_n_workers,
                 infeasibility_penalty=hpo_infeasibility_penalty,
             )

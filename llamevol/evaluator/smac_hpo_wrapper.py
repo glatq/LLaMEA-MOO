@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, Tuple
 
 import numpy as np
+from threadpoolctl import threadpool_limits
 
 from .PymooMOProvider import PymooMOProvider
 from .exec_utils import default_exec
@@ -42,7 +43,13 @@ class SMACHPOConfig:
     n_trials: int = 500
     min_budget: int = 50
     max_budget: int = 200
-    walltime_limit: int = 3600  # 1 hour
+    walltime_limit: int = 3600  # 1 hour (total budget, checked BETWEEN trials)
+    # Per-trial wall-clock cap (seconds). SMAC's walltime_limit never interrupts
+    # a running trial, so a single pathological config can run for hours. This
+    # caps EACH evaluation via pynisher: an over-running trial is killed and
+    # recorded as a crash, so SMAC learns to avoid slow configs. None = no cap
+    # (legacy behaviour).
+    trial_walltime_limit: Optional[float] = None
     n_workers: int = 1
     deterministic: bool = False
     # Weight on the infeasibility-rate penalty added to the constrained SMAC
@@ -156,8 +163,24 @@ def run_smac_hpo_moo(
         y_hist = []
         g_hist = []
 
+        # Soft per-trial wall-clock cap, checked per evaluation. We enforce it
+        # here rather than via SMAC's trial_walltime_limit because the latter
+        # runs the target under pynisher in a spawned subprocess, which must
+        # pickle this closure -- and nested functions are not picklable, so it
+        # crashes every trial. On exceed, func raises and the trial scores worst.
+        _trial_deadline = (
+            time.time() + hpo_config.trial_walltime_limit
+            if hpo_config.trial_walltime_limit
+            else None
+        )
+
         def func(x):
             """Evaluation function that tracks history (and constraints if any)."""
+            if _trial_deadline is not None and time.time() > _trial_deadline:
+                raise TimeoutError(
+                    f"trial exceeded hpo_trial_walltime "
+                    f"({hpo_config.trial_walltime_limit}s)"
+                )
             if len(y_hist) >= budget:
                 if n_constr > 0:
                     return np.zeros(wrapper.n_obj), np.zeros(n_constr)
@@ -183,16 +206,23 @@ def run_smac_hpo_moo(
             **dict(config),  # Unpack hyperparameters from SMAC config
         }
 
-        # Execute algorithm
+        # Execute algorithm. Cap BLAS to 1 thread: each SMAC worker is its own
+        # process, so without this every one of the hpo_n_workers processes
+        # lets numpy/sklearn BLAS grab all cores -> n_workers x n_cores threads
+        # oversubscribe the machine (16x16 = 256 on a 16-core box), pegging CPU
+        # at 100% while wall-clock crawls and every HPO slams into the walltime.
+        # 1 thread/worker => n_workers threads == clean parallelism. Mirrors the
+        # final-eval path (multiobj_evaluator._run_single_moo_rep).
         try:
-            _, _, err, _ = default_exec(
-                code=code,
-                cls_name=cls_name,
-                cls=None,
-                init_kwargs=init_kwargs,
-                call_kwargs={"func": func},
-                injector=injector,
-            )
+            with threadpool_limits(limits=1, user_api="blas"):
+                _, _, err, _ = default_exec(
+                    code=code,
+                    cls_name=cls_name,
+                    cls=None,
+                    init_kwargs=init_kwargs,
+                    call_kwargs={"func": func},
+                    injector=injector,
+                )
 
             if err:
                 logging.debug(f"Algorithm failed on {problem_spec.name}: {err}")
@@ -232,7 +262,19 @@ def run_smac_hpo_moo(
                 f"evals={len(y_hist)}, config={dict(config)}"
             )
 
-            return float(score)
+            # A pathological config can emit huge/inf objective values, which
+            # overflow the HV and yield a non-finite cost. SMAC fits its
+            # surrogate on the costs, so a single inf/nan would crash the whole
+            # HPO ("Input y contains infinity"). Treat non-finite as the worst
+            # finite cost (same sentinel as the failure guards above) so one bad
+            # config is just ranked worst rather than killing the run.
+            cost = float(score)
+            if not np.isfinite(cost):
+                _logger.warning(
+                    f"Non-finite cost ({score}) on {problem_spec.name}; clamping to 1.0"
+                )
+                return 1.0
+            return cost
 
         except Exception as e:
             _logger.error(f"Score calculation error on {problem_spec.name}: {e}")
@@ -256,6 +298,14 @@ def run_smac_hpo_moo(
         max_budget=hpo_config.max_budget,
         n_trials=hpo_config.n_trials,
         walltime_limit=hpo_config.walltime_limit,
+        # NOTE: we deliberately do NOT set trial_walltime_limit here. SMAC would
+        # enforce it via pynisher in a spawned subprocess, which must pickle the
+        # (nested, unpicklable) target function and crashes every trial. The
+        # per-trial cap is enforced in-process in objective_function instead.
+        # Finite cost for any crashed trial -- SMAC's default is inf, which the
+        # surrogate cannot fit. 1.0 == the worst normal cost (matches the
+        # objective's failure sentinel).
+        crash_cost=1.0,
         instances=instances,
         instance_features=instance_features,
         n_workers=hpo_config.n_workers,

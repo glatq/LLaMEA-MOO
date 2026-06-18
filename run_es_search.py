@@ -62,6 +62,7 @@ def get_MOOEvaluator(cfg):
     hpo_min_budget = cfg.mo_search.get("hpo_min_budget", 50)
     hpo_max_budget = cfg.mo_search.get("hpo_max_budget", 200)
     hpo_walltime = cfg.mo_search.get("hpo_walltime", 3600)
+    hpo_trial_walltime = cfg.mo_search.get("hpo_trial_walltime", None)
     hpo_validation_budget = cfg.mo_search.get("hpo_validation_budget", 20)
     hpo_n_problems = cfg.mo_search.get("hpo_n_problems", None)
     hpo_n_workers = cfg.mo_search.get("hpo_n_workers", 1)
@@ -96,6 +97,7 @@ def get_MOOEvaluator(cfg):
         hpo_min_budget=hpo_min_budget,
         hpo_max_budget=hpo_max_budget,
         hpo_walltime=hpo_walltime,
+        hpo_trial_walltime=hpo_trial_walltime,
         hpo_validation_budget=hpo_validation_budget,
         hpo_n_problems=hpo_n_problems,
         hpo_n_workers=hpo_n_workers,
