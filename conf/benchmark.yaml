@@ -2,13 +2,16 @@ budget: 100
 repeat: 5
 output_dir: benchmark_results
 
-# Benchmark mode. Run the unconstrained and constrained suites as two SEPARATE
+# Benchmark mode. Run the unconstrained and constrained suites as SEPARATE
 # experiments so constrained problems are never mixed with unconstrained ones:
-#   python benchmark_best_codes.py                    # unconstrained (problems + algorithms)
-#   python benchmark_best_codes.py constrained=true   # constrained (constrained_problems + constrained_algorithms)
+#   python benchmark_best_codes.py                                                # unconstrained
+#   python benchmark_best_codes.py constrained=true constrained_suite=synthetic   # pymoo ctp/bnh/c3dtlz4
+#   python benchmark_best_codes.py constrained=true constrained_suite=real        # CRE engineering problems
+#   python benchmark_best_codes.py constrained=true constrained_suite=both        # synthetic + real
 # Override output_dir per experiment to keep the CSVs/figures apart, e.g.
-#   python benchmark_best_codes.py constrained=true output_dir=benchmark_results_constrained
+#   python benchmark_best_codes.py constrained=true constrained_suite=real output_dir=benchmark_results_constrained_real
 constrained: false
+constrained_suite: synthetic  # synthetic | real | both (only used when constrained=true)
 
 plotting:
   save_figures: true
@@ -78,10 +81,34 @@ constrained_problems:
   - { name: "mw3",     dim: 6,  n_obj: 2, ref_point: [ 1.0, 7.0 ] }
   - { name: "mw11",    dim: 6,  n_obj: 2, ref_point: [ 30.0, 30.0 ] }
 
+# Real-world constrained suite (CRE, Tanabe & Ishibuchi 2020), served locally
+# from llamevol/evaluator/re_problems.py. dim is FIXED per problem (not tunable).
+# Ref points = feasible-nadir + margin from a 50k random-sample scan; for the
+# tight cre21 (0% random-feasible) the ref point is the overall objective max,
+# which still dominates the feasible front. Feasibility rates (random):
+# cre21 ~0% (tight), cre22 35%, cre23 65%, cre24 0.4% (tight), cre25 7%,
+# cre31 18%, cre51 92%. cre32 is omitted: it has a NEGATIVE objective (f1),
+# which breaks the HV/prod(ref) normalization (like osy/srn) -- add it back
+# only if you analyze its per-problem HV separately, not the mean.
+constrained_re_problems:
+  - { name: "cre21", dim: 3, n_obj: 2, ref_point: [ 850.0, 8000.0 ] }     # tight (~0% feasible)
+  - { name: "cre22", dim: 4, n_obj: 2, ref_point: [ 310.0, 0.08 ] }
+  - { name: "cre23", dim: 4, n_obj: 2, ref_point: [ 9.0, 9.0 ] }
+  - { name: "cre24", dim: 7, n_obj: 2, ref_point: [ 6500.0, 1450.0 ] }    # tight (~0.4% feasible)
+  - { name: "cre25", dim: 4, n_obj: 2, ref_point: [ 4.0, 66.0 ] }
+  - { name: "cre31", dim: 7, n_obj: 3, ref_point: [ 43.0, 4.3, 14.0 ] }
+  - { name: "cre51", dim: 3, n_obj: 5, ref_point: [ 85000.0, 1400.0, 2900000.0, 16000000.0, 28000.0 ] }
+  # - { name: "cre32", dim: 6, n_obj: 3, ref_point: [ -300.0, 13000.0, 26000.0 ] }  # negative f1; analyze per-problem only
+
 constrained_algorithms:
   # Constraint-aware baselines.
   - path: "MO bench/NSGA-II.py"
     cls_name: NSGA2Wrapper
+
+  # NSGA-III (reference-direction based) -- better suited to the 3-obj
+  # (c3dtlz4, cre31) and 5-obj (cre51) problems than NSGA-II.
+  - path: "MO bench/NSGA-III.py"
+    cls_name: NSGA3Wrapper
 
   - path: "MO bench/ioc_samo_cobra.py"
     cls_name: IOCSAMOCOBRAWrapper

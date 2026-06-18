@@ -64,12 +64,31 @@ def benchmark_and_plot(cfg):
     # Pick the suite by mode so constrained and unconstrained run as two separate
     # experiments (constrained problems return (F, G) and must not be fed to
     # unconstrained algorithms, and vice versa). constrained=true uses the
-    # constrained_problems / constrained_algorithms sections of benchmark.yaml.
+    # constrained_* sections of benchmark.yaml; constrained_suite then chooses
+    # the problem class.
     constrained = bool(cfg.get("constrained", False))
-    problem_cfg = cfg.constrained_problems if constrained else cfg.problems
-    algorithm_cfg = cfg.constrained_algorithms if constrained else cfg.algorithms
+    if constrained:
+        # constrained_suite: "synthetic" (pymoo ctp/bnh/c3dtlz4), "real" (CRE
+        # engineering problems), or "both".
+        suite = str(cfg.get("constrained_suite", "synthetic")).lower()
+        if suite == "real":
+            problem_cfg = cfg.constrained_re_problems
+        elif suite == "both":
+            problem_cfg = list(cfg.constrained_problems) + list(cfg.constrained_re_problems)
+        elif suite == "synthetic":
+            problem_cfg = cfg.constrained_problems
+        else:
+            raise ValueError(
+                f"constrained_suite must be synthetic|real|both, got {suite!r}"
+            )
+        algorithm_cfg = cfg.constrained_algorithms
+        mode_str = f"CONSTRAINED/{suite}"
+    else:
+        problem_cfg = cfg.problems
+        algorithm_cfg = cfg.algorithms
+        mode_str = "unconstrained"
     print(
-        f"Benchmark mode: {'CONSTRAINED' if constrained else 'unconstrained'} "
+        f"Benchmark mode: {mode_str} "
         f"({len(problem_cfg)} problems, {len(algorithm_cfg)} algorithms)"
     )
 
