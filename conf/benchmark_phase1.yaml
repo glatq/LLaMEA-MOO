@@ -1,0 +1,159 @@
+# Phase 1 -- rank the nine best-of-run LLaMEA-generated algorithms
+#
+# Reproduces paper_data/benchmark_stage1 (Fig. 3, supplementary Fig. 8, and the
+# Phase-1 ranking quoted in Section V-D: 0.855 / 0.795 / 0.756 for the top three).
+#
+# NOTE: MOBORobustLCBFPS and MOBOEnsembleRidge_MPFDUWS call
+# BaggingRegressor(base_estimator=...), removed in scikit-learn 1.4. They need a
+# side environment with scikit-learn<1.4 (use 1.3.2+ for Python 3.12 wheels); the
+# other seven run on the committed lock file.
+# Problems, dimensions and reference points are exactly Table I of the paper.
+# Budget 400 evaluations, 5 independent repeats, as in Section V-B.
+#
+# Run from the repo root:
+#     python benchmark_best_codes.py config=conf/benchmark_phase1.yaml
+# Any field can be overridden on the command line, e.g. `repeat=1 budget=100`.
+#
+# `timeout` is the wall-clock cap for ONE algorithm across all problem x repeat
+# tasks, which run in a process pool sized to os.cpu_count(). The reference runs
+# used a many-core machine; raise it on a smaller host or qParEGO (~3 h per run on
+# the synthetic suite) will be cut short.
+budget: 400
+repeat: 5
+output_dir: benchmark_results/phase1
+timeout: 86400
+constrained: false
+constrained_suite: synthetic
+
+plotting:
+  save_figures: false
+  show_figures: false
+  convergence_dpi: 150
+  pareto_dpi: 300
+
+export:
+  objectives: false   # ~16 MB per stage and unused by every paper figure/table
+  pareto: false
+
+problems:
+  - { name: zdt1, dim: 30, n_obj: 2, ref_point: [1.1, 7.2] }
+  - { name: zdt2, dim: 30, n_obj: 2, ref_point: [1.1, 8.0] }
+  - { name: zdt3, dim: 30, n_obj: 2, ref_point: [1.1, 7.2] }
+  - { name: zdt4, dim: 10, n_obj: 2, ref_point: [1.1, 300.0] }
+  - { name: zdt6, dim: 10, n_obj: 2, ref_point: [1.1, 11.0] }
+  - { name: dtlz1, dim: 5, n_obj: 3, ref_point: [10.0, 10.0, 10.0] }
+  - { name: dtlz2, dim: 20, n_obj: 3, ref_point: [3.0, 3.0, 3.0] }
+  - { name: dtlz4, dim: 5, n_obj: 3, ref_point: [1.1, 1.1, 1.1] }
+  - { name: dtlz7, dim: 20, n_obj: 3, ref_point: [1.1, 1.1, 28.0] }
+  - { name: wfg4, dim: 6, n_obj: 2, ref_point: [2.2, 4.4] }
+  - { name: wfg7, dim: 10, n_obj: 3, ref_point: [2.2, 4.4, 6.6] }
+  - { name: wfg9, dim: 6, n_obj: 2, ref_point: [2.2, 4.4] }
+
+algorithms:
+  # (4+16)-ES  exp_mo_4plus16_run2  generation 4, offspring #58  (search fitness 0.6981)
+  - path: "generated_algorithms/MOBOImprovedScalarizedEI.py"
+    cls_name: MOBOImprovedScalarizedEI
+    init_kwargs:
+      ea_crossover_rate: 0.8069829779829
+      ea_generations: 39
+      ea_mutation_rate: 0.4022169454306
+      ea_pop_size: 85
+      gp_restarts_optimizer: 1
+      model_window_size: 91
+      n_uniform_weights: 48
+
+  # (4+16)-ES  exp_mo_4plus16_run3  generation 3, offspring #52  (search fitness 0.5295)
+  - path: "generated_algorithms/MOBORandomForestLCBPBI_CD.py"
+    cls_name: MOBORandomForestLCBPBI_CD
+    init_kwargs:
+      kappa_cd: 0.0020236454844
+      kappa_ucb: 0.0250571872575
+      model_window_size: 99
+      n_candidates_acquisition: 195
+      n_weights_acquisition: 41
+      pbi_theta: 5.5866193904791
+      rf_n_estimators: 53
+
+  # (4+16)-ES  exp_mo_4plus16_run1  generation 6, offspring #92  (search fitness 0.5158)
+  - path: "generated_algorithms/MOBORandomForestParEGO_Batch_Refined.py"
+    cls_name: MOBORandomForestParEGO_Batch_Refined
+    init_kwargs:
+      batch_size: 4
+      exploration_beta: 0.1017420629503
+      max_features: 0.75
+      min_samples_leaf: 2
+      n_candidates: 133
+      n_estimators: 10
+      sliding_window_size: 130
+
+  # (1+1)-ES  exp_mo_1plus1_run2  generation 36, offspring #37  (search fitness 0.5087)
+  - path: "generated_algorithms/MOBOESILimitedGP.py"
+    cls_name: MOBOESILimitedGP
+    init_kwargs:
+      gp_alpha: 8.25587728e-05
+      model_window_size: 31
+      n_acquisition_weights: 34
+      n_candidates_acquisition: 238
+      n_initial_design: 24
+
+  # (1+1)-ES  exp_mo_1plus1_run1  generation 68, offspring #69  (search fitness 0.5317)
+  - path: "generated_algorithms/MOBO_GP_Tchebycheff_Refined.py"
+    cls_name: MOBO_GP_Tchebycheff_Refined
+    init_kwargs:
+      alpha_noise: 6.9529602e-06
+      batch_size: 20
+      kappa: 3.0653172894207
+      model_restarts: 4
+      n_candidates_per_iteration: 153
+      n_initial_design_points: 9
+      num_weights: 72
+      sliding_window_size: 73
+
+  # (8,16)-ES  exp_mo_8comma16_run3  generation 5, offspring #79  (search fitness 0.4559)
+  - path: "generated_algorithms/MOBORobustLCBFPS.py"
+    cls_name: MOBORobustLCBFPS
+    init_kwargs:
+      bag_max_features_str: '1.0'
+      bag_min_samples_leaf: 8
+      bag_n_estimators: 18
+      beta: 0.2117916589138
+      model_window_size: 135
+      n_candidates_per_batch: 281
+      n_selection_pool: 40
+
+  # (8,16)-ES  exp_mo_8comma16_run1  generation 4, offspring #64  (search fitness 0.4811)
+  - path: "generated_algorithms/MOBORefinedTchebyLCBGP.py"
+    cls_name: MOBORefinedTchebyLCBGP
+    init_kwargs:
+      batch_size: 10
+      jitter: 3.08181627e-05
+      kappa: 2.9059088021993
+      max_train_size: 28
+      n_candidates_acq: 158
+      n_init: 24
+      n_weight_vectors: 31
+
+  # (8,16)-ES  exp_mo_8comma16_run2  generation 1, offspring #22  (search fitness 0.5334)
+  - path: "generated_algorithms/MOBOEnsembleRidge_MPFDUWS.py"
+    cls_name: MOBOEnsembleRidge_MPFDUWS
+    init_kwargs:
+      acquisition_kappa: 3.2005404471621
+      alpha_ridge: 0.4421374364516
+      batch_size: 5
+      lambda_param: 1.0368622161798
+      max_samples_ratio: 0.9801283921875
+      n_candidates_per_iteration: 267
+      n_estimators_ridge: 34
+      ridge_window_size: 122
+
+  # (1+1)-ES  exp_mo_1plus1_run3  generation 96, offspring #97  (search fitness 0.4775)
+  - path: "generated_algorithms/MOBO_GP_WeightedUCB.py"
+    cls_name: MOBO_GP_WeightedUCB
+    init_kwargs:
+      beta: 2.4295807512421
+      length_scale: 0.0247266734632
+      n_candidates: 121
+      n_init: 47
+      n_model_train: 110
+      n_weights: 17
+      noise_std: 7.263644e-07

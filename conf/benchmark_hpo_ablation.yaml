@@ -1,0 +1,65 @@
+# Table III -- the 'LLM defaults' half of the SMAC-HPO ablation
+#
+# Reproduces paper_data/benchmark_hpo_default. Identical to Phases 2-3 except that the
+# three systematically-generated algorithms carry NO init_kwargs, so each runs with
+# its own __init__ defaults (the hyperparameters the LLM proposed). The 'tuned' half
+# is already in benchmark_stage2/stage3. MOEAD-EI Hybrid is excluded here: its SMAC
+# HPO crashed during generation, so it was never tuned -- run_moead_hpo.py handles it
+# separately and writes paper_data/benchmark_moead_tuned.
+# Problems, dimensions and reference points are exactly Table I of the paper.
+# Budget 400 evaluations, 5 independent repeats, as in Section V-B.
+#
+# Run from the repo root:
+#     python benchmark_best_codes.py config=conf/benchmark_hpo_ablation.yaml
+# Any field can be overridden on the command line, e.g. `repeat=1 budget=100`.
+#
+# `timeout` is the wall-clock cap for ONE algorithm across all problem x repeat
+# tasks, which run in a process pool sized to os.cpu_count(). The reference runs
+# used a many-core machine; raise it on a smaller host or qParEGO (~3 h per run on
+# the synthetic suite) will be cut short.
+budget: 400
+repeat: 5
+output_dir: benchmark_results/hpo_default
+timeout: 86400
+constrained: false
+constrained_suite: synthetic
+
+plotting:
+  save_figures: false
+  show_figures: false
+  convergence_dpi: 150
+  pareto_dpi: 300
+
+export:
+  objectives: false   # ~16 MB per stage and unused by every paper figure/table
+  pareto: false
+
+problems:
+  - { name: zdt1, dim: 30, n_obj: 2, ref_point: [1.1, 7.2] }
+  - { name: zdt2, dim: 30, n_obj: 2, ref_point: [1.1, 8.0] }
+  - { name: zdt3, dim: 30, n_obj: 2, ref_point: [1.1, 7.2] }
+  - { name: zdt4, dim: 10, n_obj: 2, ref_point: [1.1, 300.0] }
+  - { name: zdt6, dim: 10, n_obj: 2, ref_point: [1.1, 11.0] }
+  - { name: dtlz1, dim: 5, n_obj: 3, ref_point: [10.0, 10.0, 10.0] }
+  - { name: dtlz2, dim: 20, n_obj: 3, ref_point: [3.0, 3.0, 3.0] }
+  - { name: dtlz4, dim: 5, n_obj: 3, ref_point: [1.1, 1.1, 1.1] }
+  - { name: dtlz7, dim: 20, n_obj: 3, ref_point: [1.1, 1.1, 28.0] }
+  - { name: wfg4, dim: 6, n_obj: 2, ref_point: [2.2, 4.4] }
+  - { name: wfg7, dim: 10, n_obj: 3, ref_point: [2.2, 4.4, 6.6] }
+  - { name: wfg9, dim: 6, n_obj: 2, ref_point: [2.2, 4.4] }
+  - { name: re21, dim: 4, n_obj: 2, ref_point: [2851.9, 0.037] }
+  - { name: re34, dim: 5, n_obj: 3, ref_point: [1862.3, 12.17, 0.196] }
+  - { name: re37, dim: 4, n_obj: 3, ref_point: [0.887, 0.913, 1.012] }
+
+algorithms:
+  # LLM default hyperparameters -- deliberately no init_kwargs
+  - path: "generated_algorithms/MOBOImprovedScalarizedEI.py"
+    cls_name: MOBOImprovedScalarizedEI
+
+  # LLM default hyperparameters -- deliberately no init_kwargs
+  - path: "generated_algorithms/MOBORandomForestLCBPBI_CD.py"
+    cls_name: MOBORandomForestLCBPBI_CD
+
+  # LLM default hyperparameters -- deliberately no init_kwargs
+  - path: "generated_algorithms/MOBORandomForestParEGO_Batch_Refined.py"
+    cls_name: MOBORandomForestParEGO_Batch_Refined

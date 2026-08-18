@@ -10,6 +10,11 @@ license = "MIT"
 python = "^3.10"
 numpy = "1.24.4"
 ioh = "^0.3.18"
+# NOTE: two Phase-1 algorithms (MOBORobustLCBFPS, MOBOEnsembleRidge_MPFDUWS) were
+# generated against scikit-learn 1.3.x and call BaggingRegressor(base_estimator=...),
+# an argument removed in scikit-learn 1.4. Reproducing their Phase-1 rows needs a
+# separate env with "scikit-learn<1.4" (1.3.2+ for Python 3.12 wheels). Phases 2-3 --
+# every headline result -- were produced with 1.7.2, as pinned in poetry.lock.
 scikit-learn = ">=1.3.0"
 pandas = "2.0.3"
 tqdm = "^4.66.4"
