@@ -15,13 +15,13 @@
 # Any field can be overridden on the command line, e.g. `repeat=1 budget=100`.
 #
 # `timeout` is the wall-clock cap for ONE algorithm across all problem x repeat
-# tasks, which run in a process pool sized to os.cpu_count(). The reference runs
-# used a many-core machine; raise it on a smaller host or qParEGO (~3 h per run on
-# the synthetic suite) will be cut short.
+# tasks, which run in a process pool sized to os.cpu_count(). 21600 s (6 h) is the
+# value used for the reported runs, on a many-core machine; raise it on a smaller
+# host or qParEGO (~3 h per run on the synthetic suite) will be cut short.
 budget: 400
 repeat: 5
 output_dir: benchmark_results/phase1
-timeout: 86400
+timeout: 21600
 constrained: false
 constrained_suite: synthetic
 

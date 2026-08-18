@@ -81,9 +81,20 @@ python benchmark_best_codes.py config=conf/benchmark_phase3.yaml        # the sa
 python benchmark_best_codes.py config=conf/benchmark_hpo_ablation.yaml  # LLM-default hyperparameters
 ```
 
-Any field can be overridden on the command line, e.g. `repeat=1 budget=100`. Output
-goes to `benchmark_results/` (gitignored) so re-runs never overwrite the reference logs
-in `paper_data/`.
+The reported runs were launched with equivalent command-line overrides rather than these
+files; the configs encode the same settings, and the problem sets and resulting numbers have
+been checked to match. Any field can be overridden on the command line, including whole lists, e.g.
+`repeat=1 budget=100` or `"problems=[{name: zdt1, dim: 30, n_obj: 2, ref_point: [1.1, 7.2]}]"`.
+The configs and equivalent command-line overrides are interchangeable — the config file is
+merged with the CLI arguments — so a subset of algorithms or problems can be run without
+editing anything.
+
+The script **appends** to the CSVs in `output_dir`, de-duplicating on
+(algorithm, problem, repeat, epoch). The reported logs were built this way, across several
+invocations per phase (for instance the generated algorithms in one run and the baselines in
+another), so a phase does not have to be produced in a single pass. Output goes to
+`benchmark_results/` (gitignored), so re-runs never overwrite the reference logs in
+`paper_data/`.
 
 The `timeout` field caps wall-clock for **one algorithm across all problem × repeat
 tasks**, which run in a process pool sized to `os.cpu_count()`. It is set generously;
