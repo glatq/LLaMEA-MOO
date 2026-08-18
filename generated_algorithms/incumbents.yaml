@@ -1,0 +1,143 @@
+# SMAC incumbent hyperparameters for the nine best-of-run LLaMEA-generated
+# algorithms, as recorded during the generation runs. Pass these to
+# benchmark_best_codes.py via `init_kwargs:` to reproduce the paper's
+# Phase 1-3 results; omit them to reproduce the Table III 'LLM defaults' half.
+#
+# run / generation / index / search_fitness identify the individual inside the
+# generation run (search fitness = mean ref-box-normalized HV on the 9-problem
+# training suite, budget 200, 3 repeats).
+
+MOBO_GP_Tchebycheff_Refined:
+  run: exp_mo_1plus1_run1
+  strategy: "(1+1)-ES"
+  generation: 68
+  index: 69
+  search_fitness: 0.5317
+  init_kwargs:
+    alpha_noise: 6.9529602e-06
+    batch_size: 20
+    kappa: 3.0653172894207
+    model_restarts: 4
+    n_candidates_per_iteration: 153
+    n_initial_design_points: 9
+    num_weights: 72
+    sliding_window_size: 73
+
+MOBOESILimitedGP:
+  run: exp_mo_1plus1_run2
+  strategy: "(1+1)-ES"
+  generation: 36
+  index: 37
+  search_fitness: 0.5087
+  init_kwargs:
+    gp_alpha: 8.25587728e-05
+    model_window_size: 31
+    n_acquisition_weights: 34
+    n_candidates_acquisition: 238
+    n_initial_design: 24
+
+MOBO_GP_WeightedUCB:
+  run: exp_mo_1plus1_run3
+  strategy: "(1+1)-ES"
+  generation: 96
+  index: 97
+  search_fitness: 0.4775
+  init_kwargs:
+    beta: 2.4295807512421
+    length_scale: 0.0247266734632
+    n_candidates: 121
+    n_init: 47
+    n_model_train: 110
+    n_weights: 17
+    noise_std: 7.263644e-07
+
+MOBORandomForestParEGO_Batch_Refined:
+  run: exp_mo_4plus16_run1
+  strategy: "(4+16)-ES"
+  generation: 6
+  index: 92
+  search_fitness: 0.5158
+  init_kwargs:
+    batch_size: 4
+    exploration_beta: 0.1017420629503
+    max_features: 0.75
+    min_samples_leaf: 2
+    n_candidates: 133
+    n_estimators: 10
+    sliding_window_size: 130
+
+MOBOImprovedScalarizedEI:
+  run: exp_mo_4plus16_run2
+  strategy: "(4+16)-ES"
+  generation: 4
+  index: 58
+  search_fitness: 0.6981
+  init_kwargs:
+    ea_crossover_rate: 0.8069829779829
+    ea_generations: 39
+    ea_mutation_rate: 0.4022169454306
+    ea_pop_size: 85
+    gp_restarts_optimizer: 1
+    model_window_size: 91
+    n_uniform_weights: 48
+
+MOBORandomForestLCBPBI_CD:
+  run: exp_mo_4plus16_run3
+  strategy: "(4+16)-ES"
+  generation: 3
+  index: 52
+  search_fitness: 0.5295
+  init_kwargs:
+    kappa_cd: 0.0020236454844
+    kappa_ucb: 0.0250571872575
+    model_window_size: 99
+    n_candidates_acquisition: 195
+    n_weights_acquisition: 41
+    pbi_theta: 5.5866193904791
+    rf_n_estimators: 53
+
+MOBORefinedTchebyLCBGP:
+  run: exp_mo_8comma16_run1
+  strategy: "(8,16)-ES"
+  generation: 4
+  index: 64
+  search_fitness: 0.4811
+  init_kwargs:
+    batch_size: 10
+    jitter: 3.08181627e-05
+    kappa: 2.9059088021993
+    max_train_size: 28
+    n_candidates_acq: 158
+    n_init: 24
+    n_weight_vectors: 31
+
+MOBOEnsembleRidge_MPFDUWS:
+  run: exp_mo_8comma16_run2
+  strategy: "(8,16)-ES"
+  generation: 1
+  index: 22
+  search_fitness: 0.5334
+  init_kwargs:
+    acquisition_kappa: 3.2005404471621
+    alpha_ridge: 0.4421374364516
+    batch_size: 5
+    lambda_param: 1.0368622161798
+    max_samples_ratio: 0.9801283921875
+    n_candidates_per_iteration: 267
+    n_estimators_ridge: 34
+    ridge_window_size: 122
+
+MOBORobustLCBFPS:
+  run: exp_mo_8comma16_run3
+  strategy: "(8,16)-ES"
+  generation: 5
+  index: 79
+  search_fitness: 0.4559
+  init_kwargs:
+    bag_max_features_str: '1.0'
+    bag_min_samples_leaf: 8
+    bag_n_estimators: 18
+    beta: 0.2117916589138
+    model_window_size: 135
+    n_candidates_per_batch: 281
+    n_selection_pool: 40
