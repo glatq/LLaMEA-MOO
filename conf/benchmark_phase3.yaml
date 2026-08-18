@@ -1,0 +1,97 @@
+# Phase 3 -- the same nine algorithms on the unseen real-world RE problems
+#
+# Reproduces paper_data/benchmark_stage3 (Table II real-world column, Fig. 5, Fig. 6b,
+# supplementary Fig. 11 and supplementary Table III).
+# Problems, dimensions and reference points are exactly Table I of the paper.
+# Budget 400 evaluations, 5 independent repeats, as in Section V-B.
+#
+# Run from the repo root:
+#     python benchmark_best_codes.py config=conf/benchmark_phase3.yaml
+# Any field can be overridden on the command line, e.g. `repeat=1 budget=100`.
+#
+# `timeout` is the wall-clock cap for ONE algorithm across all problem x repeat
+# tasks, which run in a process pool sized to os.cpu_count(). 21600 s (6 h) is the
+# value used for the reported runs, on a many-core machine; raise it on a smaller
+# host or qParEGO (~3 h per run on the synthetic suite) will be cut short.
+budget: 400
+repeat: 5
+output_dir: benchmark_results/phase3
+timeout: 21600
+constrained: false
+constrained_suite: synthetic
+
+plotting:
+  save_figures: false
+  show_figures: false
+  convergence_dpi: 150
+  pareto_dpi: 300
+
+export:
+  objectives: false   # ~16 MB per stage and unused by every paper figure/table
+  pareto: true
+
+problems:
+  - { name: re21, dim: 4, n_obj: 2, ref_point: [2851.9, 0.037] }
+  - { name: re34, dim: 5, n_obj: 3, ref_point: [1862.3, 12.17, 0.196] }
+  - { name: re37, dim: 4, n_obj: 3, ref_point: [0.887, 0.913, 1.012] }
+
+algorithms:
+  # (4+16)-ES  exp_mo_4plus16_run2  generation 4, offspring #58  (search fitness 0.6981)
+  - path: "generated_algorithms/MOBOImprovedScalarizedEI.py"
+    cls_name: MOBOImprovedScalarizedEI
+    init_kwargs:
+      ea_crossover_rate: 0.8069829779829
+      ea_generations: 39
+      ea_mutation_rate: 0.4022169454306
+      ea_pop_size: 85
+      gp_restarts_optimizer: 1
+      model_window_size: 91
+      n_uniform_weights: 48
+
+  # (4+16)-ES  exp_mo_4plus16_run3  generation 3, offspring #52  (search fitness 0.5295)
+  - path: "generated_algorithms/MOBORandomForestLCBPBI_CD.py"
+    cls_name: MOBORandomForestLCBPBI_CD
+    init_kwargs:
+      kappa_cd: 0.0020236454844
+      kappa_ucb: 0.0250571872575
+      model_window_size: 99
+      n_candidates_acquisition: 195
+      n_weights_acquisition: 41
+      pbi_theta: 5.5866193904791
+      rf_n_estimators: 53
+
+  # (4+16)-ES  exp_mo_4plus16_run1  generation 6, offspring #92  (search fitness 0.5158)
+  - path: "generated_algorithms/MOBORandomForestParEGO_Batch_Refined.py"
+    cls_name: MOBORandomForestParEGO_Batch_Refined
+    init_kwargs:
+      batch_size: 4
+      exploration_beta: 0.1017420629503
+      max_features: 0.75
+      min_samples_leaf: 2
+      n_candidates: 133
+      n_estimators: 10
+      sliding_window_size: 130
+
+  # development-found generated algorithm; LLM default hyperparameters (its SMAC HPO crashed during generation)
+  - path: "MO bench/MOBO_MOEAD_EI_Hybrid_fixed.py"
+    cls_name: MOBO_MOEAD_EI_Hybrid_Fixed
+
+  # SOTA Bayesian baseline (BoFire QparegoStrategy, on BoTorch)
+  - path: "MO bench/bofire_baseline.py"
+    cls_name: BoFireQparEGOWrapper
+
+  # surrogate-assisted baseline
+  - path: "MO bench/ioc_samo_cobra.py"
+    cls_name: IOCSAMOCOBRAWrapper
+
+  # classical evolutionary baseline
+  - path: "MO bench/NSGA-II.py"
+    cls_name: NSGA2Wrapper
+
+  # classical evolutionary baseline (reference-direction based)
+  - path: "MO bench/NSGA-III.py"
+    cls_name: NSGA3Wrapper
+
+  # multi-objective Random Search (lower bound)
+  - path: "MO bench/MORS_baseline.py"
+    cls_name: RandomSearchMO

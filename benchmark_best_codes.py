@@ -141,9 +141,17 @@ def benchmark_and_plot(cfg):
         with open(path, "r") as f:
             code_content = f.read()
 
-        # Load incumbent from handler pkl if specified
+        # Hyperparameters come from one of three places, in order of precedence:
+        #   1. `init_kwargs:` in the config -- the SMAC incumbents recorded in
+        #      generated_algorithms/incumbents.yaml, used by conf/benchmark_phase*.yaml;
+        #   2. `handler_pkl:` -- read the incumbent out of a generation run's pickle;
+        #   3. neither -- the algorithm's own __init__ defaults, i.e. the
+        #      hyperparameters the LLM proposed (the "before" half of Table III).
         init_kwargs = None
-        if "handler_pkl" in algo_cfg and algo_cfg.handler_pkl:
+        if "init_kwargs" in algo_cfg and algo_cfg.init_kwargs:
+            init_kwargs = OmegaConf.to_container(algo_cfg.init_kwargs, resolve=True)
+            print(f"    Using config-supplied hyperparameters: {init_kwargs}")
+        elif "handler_pkl" in algo_cfg and algo_cfg.handler_pkl:
             init_kwargs = load_incumbent(algo_cfg.handler_pkl)
 
         print(f"--- Benchmarking Algorithm: {cls_name} ---")
@@ -405,11 +413,14 @@ def benchmark_and_plot(cfg):
 
 
 if __name__ == "__main__":
-    # Load config: conf/benchmark.yaml + optional CLI overrides
-    base_cfg = OmegaConf.load("conf/benchmark.yaml")
-
-    # Support CLI overrides: python benchmark_best_codes.py budget=200 repeat=10
+    # Load config: conf/benchmark.yaml by default, or an explicit file via
+    # `config=<path>` so the paper's per-phase configs can be run directly:
+    #     python benchmark_best_codes.py config=conf/benchmark_phase2.yaml
     cli_cfg = OmegaConf.from_cli(sys.argv[1:])
+    config_path = cli_cfg.pop("config", "conf/benchmark.yaml")
+
+    # Remaining CLI entries stay overrides: ... config=<path> budget=200 repeat=10
+    base_cfg = OmegaConf.load(config_path)
     cfg = OmegaConf.merge(base_cfg, cli_cfg)
 
     print("Benchmark config:")

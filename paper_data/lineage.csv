@@ -1,0 +1,14 @@
+algorithm,run,step,generation,ancestor,fitness,n_parents
+MOBOImprovedScalarizedEI,exp_mo_4plus16_run2,0,0,MOBOEvolutionaryAcquisition,0.484602,0
+MOBOImprovedScalarizedEI,exp_mo_4plus16_run2,1,1,MOBOEvolutionaryESI,0.585083,2
+MOBOImprovedScalarizedEI,exp_mo_4plus16_run2,2,2,MOBOEvolutionaryESIVec,0.618773,1
+MOBOImprovedScalarizedEI,exp_mo_4plus16_run2,3,3,MOBOEvolutionaryESIImprovedEA,0.664194,1
+MOBOImprovedScalarizedEI,exp_mo_4plus16_run2,4,4,MOBOImprovedScalarizedEI,0.698114,2
+MOBORandomForestLCBPBI_CD,exp_mo_4plus16_run3,0,0,MOBOKNN_PBI_CD,0.488503,0
+MOBORandomForestLCBPBI_CD,exp_mo_4plus16_run3,1,1,MOBORandomForestPBI_CD,0.487675,2
+MOBORandomForestLCBPBI_CD,exp_mo_4plus16_run3,2,2,MOBORandomForestPBI_CD,0.489093,1
+MOBORandomForestLCBPBI_CD,exp_mo_4plus16_run3,3,3,MOBORandomForestLCBPBI_CD,0.529461,2
+MOBORandomForestParEGO_Batch_Refined,exp_mo_4plus16_run1,0,0,MOBORandomForestMOLCB,0.464257,0
+MOBORandomForestParEGO_Batch_Refined,exp_mo_4plus16_run1,1,1,MOBORandomForestParEGO,0.501628,1
+MOBORandomForestParEGO_Batch_Refined,exp_mo_4plus16_run1,2,5,MOBORandomForestParEGO_Batch,0.490080,2
+MOBORandomForestParEGO_Batch_Refined,exp_mo_4plus16_run1,3,6,MOBORandomForestParEGO_Batch_Refined,0.515780,1

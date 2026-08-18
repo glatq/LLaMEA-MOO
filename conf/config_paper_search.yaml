@@ -1,0 +1,98 @@
+# Generation-phase (LLaMEA search) configuration for the nine runs reported in the
+# paper. This is NOT the same setup as the benchmark: the search evaluates each
+# candidate on a 9-problem TRAINING suite at a 200-evaluation budget, while the
+# benchmark (conf/benchmark_phase*.yaml) uses 12 synthetic + 3 real-world problems
+# at 400 evaluations. The two suites also use different dimensions and reference
+# points, so search fitness is not comparable to benchmark hypervolume.
+#
+# Reconstructed from the Hydra snapshot of exp_mo_4plus16_run3
+# (outputs/2026-06-20/10-05-55/.hydra/config.yaml). Verified against the saved
+# population checkpoints of ALL NINE runs: every run used budget 200, repeat 3, the
+# 9 problems below, cross_over_rate 0.6, preorder_aware_init true, and
+# n_parent_per_offspring 1 for (1+1) / 2 otherwise.
+#
+# Run from the repo root (requires Vertex AI credentials for Gemini):
+#     python run_es_search.py --config-name config_paper_search
+#
+# Switch evolution strategy on the command line:
+#     ... mo_search.n_parent=1 mo_search.n_offspring=1                        # (1+1)-ES, n_population=100
+#     ... mo_search.n_parent=4 mo_search.n_offspring=16                       # (4+16)-ES, n_population=100
+#     ... mo_search.n_parent=8 mo_search.n_offspring=16 \
+#         mo_search.is_elitist=false mo_search.n_population=104               # (8,16)-ES
+#
+# ENVIRONMENT: the generation runs (2026-06-16 to 2026-06-21) ran on Python 3.10
+# with scikit-learn 1.3.0, the version pinned in pyproject.toml at that time. That
+# is why some generated algorithms call BaggingRegressor(base_estimator=...), an
+# argument removed in scikit-learn 1.4. See the note in pyproject.toml.
+defaults:
+  - hardware: cpu
+  - prompts: moo_bo
+  - _self_
+
+mode: "mo"
+
+mo_search:
+  # Shared dimension for the tri-objective DTLZ training problems.
+  dtlz_dimension: 5
+
+  # Evaluation budget per problem, per repeat, during the SEARCH (the benchmark
+  # uses 400). SMAC therefore tuned hyperparameters at 200 evaluations and the
+  # incumbents were then deployed at 400 in the benchmark.
+  budget: 200
+  repeat: 3
+
+  # (4+16)-ES. n_population is the total number of algorithms evaluated, rounded up
+  # to at least 100: 4 initial parents + 6 generations x 16 offspring = 100.
+  n_parent: 4
+  n_offspring: 16
+  is_elitist: true
+  n_population: 100
+
+  evaluator_timeout: 1800
+  constrained: false   # true additionally requires mo_search.constrained_problems
+
+  # SMAC hyperparameter optimization, run inside the generation loop on an
+  # evenly-spaced subset of the TRAINING suite below: with hpo_n_problems=3 and 9
+  # problems that subset is indices 0/4/8, i.e. [zdt1, zdt6, dtlz4].
+  use_hpo: true
+  hpo_trials: 40
+  hpo_min_budget: 100
+  hpo_max_budget: 200
+  hpo_validation_budget: 50
+  hpo_n_problems: 3
+  # Wall-clock limits below are scheduling knobs and were the only settings that
+  # varied across the nine runs (they were tightened as the runs progressed):
+  # hpo_walltime 1800 on the earliest runs then 900; hpo_trial_walltime unset on
+  # the earliest runs then 1200; hpo_n_workers 8 or 16 depending on the host.
+  # They bound run time, not experiment semantics.
+  hpo_walltime: 900
+  hpo_trial_walltime: 1200
+  hpo_n_workers: 8
+
+  # TRAINING suite: nine problems. Eight of them (all but DTLZ3) reappear in the
+  # 12-problem benchmark suite, but with different dimensions and reference points;
+  # DTLZ3 is training-only and never benchmarked. DTLZ7, WFG4, WFG7, WFG9 and all
+  # three RE problems are held out and unseen during evolution.
+  problems:
+    - { name: "zdt1", dim: 30, n_obj: 2, ref_point: [ 1.1, 6.0 ] }
+    - { name: "zdt2", dim: 30, n_obj: 2, ref_point: [ 1.1, 7.0 ] }
+    - { name: "zdt3", dim: 30, n_obj: 2, ref_point: [ 1.1, 6.0 ] }
+    - { name: "zdt4", dim: 10, n_obj: 2, ref_point: [ 1.1, 160.0 ] }
+    - { name: "zdt6", dim: 10, n_obj: 2, ref_point: [ 1.1, 10.0 ] }
+    - { name: "dtlz1", dim: "${mo_search.dtlz_dimension}", n_obj: 3, ref_point: [ 10.0, 10.0, 30.0 ] }
+    - { name: "dtlz2", dim: "${mo_search.dtlz_dimension}", n_obj: 3, ref_point: [ 1.5, 1.5, 1.5 ] }
+    - { name: "dtlz3", dim: "${mo_search.dtlz_dimension}", n_obj: 3, ref_point: [ 20.0, 30.0, 100.0 ] }
+    - { name: "dtlz4", dim: "${mo_search.dtlz_dimension}", n_obj: 3, ref_point: [ 2.0, 1.2, 1.2 ] }
+
+  llm:
+    model_name: "gemini-2.5-flash"
+    base_url: null
+    client: "vertex"
+    api_key: null          # set via env / Vertex AI credentials
+    project: null
+    location: "us-central1"
+    temperature: 0.7
+    top_k: 60
+
+  log_dir: "exp_mo_search"
+  is_ploting: false

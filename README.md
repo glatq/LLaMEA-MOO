@@ -1,30 +1,187 @@
-# LLaMEA-BO
+# LLaMEA-MOO
 
-## Setup
-1. Clone the repository:
-   ```bash
-   git clone <repository_url> 
-   cd LLaMEA-BO
-   ```
-2. Install the required dependencies via Poetry:
-   ```bash
-   pip install poetry
-   poetry install
-   ```
+LLM-driven evolutionary generation of **multi-objective Bayesian optimization**
+algorithms. Large language models act as the mutation and crossover operators of an
+evolution strategy that writes complete MOBO algorithm implementations; each
+candidate is hyperparameter-tuned with SMAC inside the evolutionary loop and scored
+by normalized hypervolume on a suite of benchmark problems.
 
-## Reproducing Results
+This branch, `publication_llamea_moo_unconstrained`, is the snapshot accompanying the
+paper *"Large Language Model-Driven Evolutionary Generation of Multi-Objective
+Bayesian Optimization Algorithms"*. It contains the nine generated algorithms, the
+exact configurations used, the benchmark result logs, and the scripts that turn those
+logs into every figure and table in the paper and its supplementary material.
 
-### The Raw Data of results
-- The raw data files are stored in the [Zenodo](https://doi.org/10.5281/zenodo.15384610).
+> **Scope.** The branch also carries in-progress infrastructure for *constrained*
+> multi-objective optimization — a constrained problem suite (CTP/BNH/C3-DTLZ4 and the
+> real-world CRE problems), a feasibility-aware prompt generator, feasible-hypervolume
+> metrics, and constraint-aware baselines. None of it is used by, or evaluated in, the
+> paper above. Everything described in this README is unconstrained.
 
-### Run ES Search 
-1. Replace `GEMINI_API_KEY` in `run_es_search.sh` with your Gemini API key.
-2. Change `N_POPULATION` in `run_es_search.sh` as needed.
-3. Run the script:
-   ```bash
-   bash run_es_search.sh
-   ```
-4. The results will be saved in `exp_es_search/` directory.
+## Installation
+
+```bash
+conda env create -f environment.yml
+conda activate llamevol
+poetry install
+```
+
+Copy `.env.template` to `.env` and fill in the API keys you need. Only the
+*generation* phase talks to an LLM; reproducing the benchmarks and figures does not.
+
+### Environment note
+
+The experiments spanned a scikit-learn upgrade, and this matters for exactly two
+algorithms:
+
+* **Phases 2 and 3, the HPO ablation, and every figure and table** reproduce with the
+  committed `poetry.lock` (scikit-learn 1.7.2).
+* **Phase 1** additionally includes `MOBORobustLCBFPS` and `MOBOEnsembleRidge_MPFDUWS`,
+  which were generated against scikit-learn 1.3.x and call
+  `BaggingRegressor(base_estimator=...)`. That argument was removed in scikit-learn 1.4,
+  so those two crash on the committed lock file. To re-run them, use a separate
+  environment with `pip install "scikit-learn<1.4"` (use 1.3.2 or later for Python 3.12
+  wheels). The other seven Phase-1 algorithms run on any supported version.
+
+The generated algorithms are published **verbatim**, exactly as benchmarked, so the
+`base_estimator` call is left in place rather than modernized.
+
+## Reproducing the paper
+
+### 1. Figures and tables from the committed logs (no re-running, seconds)
+
+`paper_data/` holds the benchmark logs behind every reported number, so all figures and
+tables regenerate directly. Run everything from the repository root:
+
+```bash
+python paper_reproduction/emit_paper_numbers.py      # Table II + supplementary tables + in-text checklist
+python paper_reproduction/significance_tests.py      # Friedman, mean ranks, Holm-corrected Wilcoxon
+python paper_reproduction/cd_diagram.py              # critical-difference diagram
+python paper_reproduction/plot_search_progress.py    # search progress across the nine runs
+python paper_reproduction/plot_grid.py               # per-phase convergence grids
+python paper_reproduction/plot_time_accuracy.py      # time-accuracy trade-off
+python paper_reproduction/plot_pareto_grid.py        # non-dominated fronts
+python paper_reproduction/analyze_hpo_ablation.py    # SMAC-vs-defaults, three algorithms
+python paper_reproduction/analyze_moead_hpo.py       # SMAC-vs-defaults, MOEAD-EI Hybrid
+python paper_reproduction/trace_lineage.py           # recorded ancestry of the selected designs
+```
+
+Figures are written to `paper_figures/` (gitignored). `plot_from_csv.py` is a
+general-purpose plotter for arbitrary benchmark CSVs.
+
+### 2. Re-running the benchmarks
+
+Each phase has its own config; problems, dimensions and reference points are exactly
+those reported in the paper, at 400 evaluations and 5 independent repeats.
+
+```bash
+python benchmark_best_codes.py config=conf/benchmark_phase1.yaml        # nine generated algorithms, 12 synthetic
+python benchmark_best_codes.py config=conf/benchmark_phase2.yaml        # top three + MOEAD-EI + five baselines
+python benchmark_best_codes.py config=conf/benchmark_phase3.yaml        # the same nine, three real-world RE problems
+python benchmark_best_codes.py config=conf/benchmark_hpo_ablation.yaml  # LLM-default hyperparameters
+```
+
+The reported runs were launched with equivalent command-line overrides rather than these
+files; the configs encode the same settings, and the problem sets and resulting numbers have
+been checked to match. Any field can be overridden on the command line, including whole lists, e.g.
+`repeat=1 budget=100` or `"problems=[{name: zdt1, dim: 30, n_obj: 2, ref_point: [1.1, 7.2]}]"`.
+The configs and equivalent command-line overrides are interchangeable — the config file is
+merged with the CLI arguments — so a subset of algorithms or problems can be run without
+editing anything.
+
+The script **appends** to the CSVs in `output_dir`, de-duplicating on
+(algorithm, problem, repeat, epoch). The reported logs were built this way, across several
+invocations per phase (for instance the generated algorithms in one run and the baselines in
+another), so a phase does not have to be produced in a single pass. Output goes to
+`benchmark_results/` (gitignored), so re-runs never overwrite the reference logs in
+`paper_data/`.
+
+The `timeout` field caps wall-clock for **one algorithm across all problem × repeat
+tasks**, which run in a process pool sized to `os.cpu_count()`. It is set generously;
+raise it further on a small host, because qParEGO alone averages roughly three hours
+per run on the synthetic suite.
+
+Set BLAS threads to 1 when running these — several algorithms use `n_jobs=-1`
+internally, and nested parallelism otherwise oversubscribes the machine badly:
+
+```bash
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 LOKY_MAX_CPU_COUNT=1
+```
+
+### 3. Re-running the LLaMEA search
+
+This is the expensive part and it requires LLM credentials.
+`conf/config_paper_search.yaml` reproduces the generation phase: a nine-problem
+training suite at a 200-evaluation budget with 3 repeats, SMAC tuning on an
+evenly-spaced three-problem subset, and Gemini-2.5-Flash at temperature 0.7.
+
+```bash
+python run_es_search.py --config-name config_paper_search                    # (4+16)-ES
+python run_es_search.py --config-name config_paper_search \
+    mo_search.n_parent=1 mo_search.n_offspring=1                             # (1+1)-ES
+python run_es_search.py --config-name config_paper_search \
+    mo_search.n_parent=8 mo_search.n_offspring=16 \
+    mo_search.is_elitist=false mo_search.n_population=104                    # (8,16)-ES
+```
+
+Note that the training suite is **not** the benchmark suite: it uses different
+problems, dimensions and reference points, so search fitness is not comparable to
+benchmark hypervolume. Hyperparameters were tuned at 200 evaluations during the search
+and then deployed at 400 in the benchmark.
+
+## The generated algorithms
+
+`generated_algorithms/` holds the best algorithm from each of the nine evolutionary
+runs, as generated, together with `incumbents.yaml` — the SMAC incumbent
+hyperparameters recorded during the run, plus the run, generation, offspring index and
+search fitness that identify each individual. The benchmark configs read those
+hyperparameters directly, so no pickle files are needed.
+
+`MO bench/` holds the baselines (NSGA-II, NSGA-III, IOC-SAMO-COBRA, multi-objective
+Random Search, and the BoFire qParEGO / qLogNEHVI Bayesian baselines) alongside
+`MOBO_MOEAD_EI_Hybrid_fixed.py`, the development-found generated algorithm.
+
+Two of the benchmarked algorithms carry a one-line mechanical fix applied before
+benchmarking — an index/population-size bound that otherwise crashes on the final
+batch. Both are marked in the source. No algorithmic component was altered.
+
+## What is not reproducible from this repository
+
+* **The raw generation runs.** The nine run trees total roughly 24 GB (every
+  candidate's code, prompt, response and evaluation record, plus population
+  checkpoints of about 76 MB each) and are not committed. `paper_data/search_history.csv`
+  and `paper_data/lineage.csv` are compact exports of the parts the paper uses.
+  `trace_lineage.py` accepts `runs=<dir>` if you obtain the full trees.
+* **Per-evaluation objective vectors** (`objectives_log.csv`, roughly 37 MB across the
+  three phases). No reported figure or table reads them; the Pareto-front figures use
+  the much smaller `pareto_front_log.csv`.
+* **MOEAD-EI Hybrid's lineage.** It came from a separate development run rather than
+  the nine reported runs, and its population checkpoint can no longer be loaded by the
+  current code. Its benchmark results reproduce normally.
+
+## Data layout
+
+| Path | Contents |
+| --- | --- |
+| `generated_algorithms/` | the nine generated algorithms + `incumbents.yaml` |
+| `MO bench/` | baselines and the development-found MOEAD-EI Hybrid |
+| `conf/benchmark_phase{1,2,3}.yaml` | Phase 1–3 benchmark configurations |
+| `conf/benchmark_hpo_ablation.yaml` | LLM-default-hyperparameter benchmark |
+| `conf/config_paper_search.yaml` | generation-phase (LLaMEA search) configuration |
+| `paper_data/benchmark_stage{1,2,3}/` | Phase 1–3 hypervolume, runtime and Pareto logs |
+| `paper_data/benchmark_hpo_default/` | HPO ablation, LLM-default hyperparameters |
+| `paper_data/benchmark_moead_{tuned,untuned}/` | MOEAD-EI Hybrid, SMAC-tuned vs defaults |
+| `paper_data/search_history.csv` | per-run search trace for all nine runs |
+| `paper_data/lineage.csv` | recorded ancestry of the selected designs |
+| `paper_reproduction/` | analysis and plotting scripts |
+| `benchmark_results/`, `paper_figures/` | outputs of re-runs and plots (gitignored) |
+
+## Tests
+
+```bash
+make test
+```
+
 
 ## Development
 
@@ -38,7 +195,12 @@ The project follows a modular structure primarily located within the `llamevol/`
     - **`evaluator/`**: Includes code for executing and evaluating the performance of generated algorithms, often using benchmark suites like BBOB (via IOHprofiler). It handles code execution, error capture, and metric calculation.
     - **`population/`**: Manages the collection (population) of `Individual` algorithms, implementing selection strategies and diversity maintenance.
     - **`utils.py`**: Provides utility functions, including logging, serialization and plotting.
-- **`Experiments/`**: Holds scripts for running specific experiments and plotting results.
+- **`paper_reproduction/`**: Analysis and plotting scripts that regenerate the paper's
+  figures and tables from the logs in `paper_data/`.
+- **`generated_algorithms/`**: The nine LLaMEA-generated algorithms and their SMAC
+  incumbent hyperparameters.
+- **`MO bench/`**: Baseline algorithms and the development-found MOEAD-EI Hybrid.
+- **`conf/`**: Hydra/OmegaConf configurations for the search and the benchmark phases.
 
 ### Usage Example
 
@@ -104,7 +266,11 @@ population.save(suffix='final')
 print("Evolution finished. Results saved in:", population.log_dir)
 ```
 
-For a runnable script with command-line arguments, see `run_es_search.py`.
+The example above is single-objective. For the multi-objective path used in the paper,
+swap `IOHEvaluator` for `MultiObjEvaluator` (`llamevol/evaluator/multiobj_evaluator.py`)
+and `BaselinePromptGenerator` for `MultiObjectivePromptGenerator`; the runnable entry
+point is `run_es_search.py` with `mode=mo`, configured by
+`conf/config_paper_search.yaml` (see *Reproducing the paper* above).
 
 ### Parallelism in IOHEvaluator
 
@@ -190,7 +356,7 @@ This module (`llamevol/llm.py`) acts as a central manager for interacting with v
 **Usage:**
 1.  **Environment Variables(Optional):** Ensure the necessary API keys and base URLs for the desired LLMs are set as environment variables (e.g., `GEMINI_API_KEY`, `OPENAI_API_KEY`, etc.). Copy and rename `.env.template` to `.env` and fill in the required keys.
     ```bash
-    cp .env.example .env
+    cp .env.template .env
     # Edit .env to add your API keys
     ```
 2.  **Initialization:** Create an instance of `LLMmanager` by providing a `model_key` which corresponds to an entry in the `LLMS` dictionary within the script. Alternatively, you can manually specify `model_name`, `api_key`, `base_url`, and `client_str`. The mapping of `client_str` to the actual client class is handled in the `LLMmanager` constructor.
