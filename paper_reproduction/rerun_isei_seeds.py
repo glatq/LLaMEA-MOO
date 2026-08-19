@@ -1,6 +1,24 @@
-"""Re-run Improved-Scalarized-EI with 5 explicit seeds (42 + 4 others) so it gets
-genuine per-repeat variance. Reuses MultiObjEvaluator.evaluate (repeat=1 per seed)
-so HV is computed identically to the main benchmark. Emits standard CSVs."""
+"""Re-run Improved-Scalarized-EI with 5 explicit seeds so it gets genuine per-repeat
+variance (Section VI-B of the paper).
+
+Why this exists: Improved-Scalarized-EI is the only one of the nine generated algorithms
+with a `random_seed` parameter (default 42) feeding its own np.random.default_rng, so it
+is deterministic -- every repeat of the normal benchmark returns an identical
+hypervolume and reports zero variance. Passing five explicit seeds restores a fair
+variance estimate. Every Improved-Scalarized-EI number in the paper, in Phase 1, 2 and
+3 alike, comes from this script, not from conf/benchmark_phase*.yaml (which deliberately
+exclude it).
+
+Reuses MultiObjEvaluator.evaluate (repeat=1 per seed) so HV is computed identically to
+the main benchmark. Writes its own output dirs AND appends its rows into the matching
+phase dirs, so no manual merging is needed:
+
+    synthetic (12 problems) -> benchmark_results/phase1 and benchmark_results/phase2
+    real-world (3 problems) -> benchmark_results/phase3
+
+Run from the repo root, after the phase benchmarks:
+    python paper_reproduction/rerun_isei_seeds.py
+"""
 import os, numpy as np, pandas as pd
 from llamevol.evaluator.multiobj_evaluator import MultiObjEvaluator, MOOProblemSpec
 import yaml
@@ -19,7 +37,31 @@ code=open(ALGO).read()
 incumbent=yaml.safe_load(open(INCUMBENTS))["MOBOImprovedScalarizedEI"]["init_kwargs"] or {}
 nds=NonDominatedSorting()
 
-def run(specs, outdir):
+KEYS={"hv_benchmark_log":["Algorithm","Problem","Repeat","Epoch"],
+      "objectives_log":["Algorithm","Problem","Repeat","Eval"],
+      "runtime_log":["Algorithm","Problem","Repeat"],
+      "pareto_front_log":["Algorithm","Problem","PointIdx"]}
+
+def _append_into(path, df, name):
+    """Append df into an existing benchmark CSV, de-duplicating on that file's keys.
+
+    Mirrors benchmark_best_codes.py's append-and-dedup behaviour, so a phase dir can be
+    built from several invocations. Keeps the LAST occurrence, so re-running this script
+    replaces its own earlier rows rather than doubling them.
+    """
+    if df.empty:
+        return
+    if os.path.exists(path):
+        df = pd.concat([pd.read_csv(path), df], ignore_index=True)
+        keys=[k for k in KEYS[name] if k in df.columns]
+        if keys:
+            df = df.drop_duplicates(subset=keys, keep="last")
+        if set(KEYS[name][:3]).issubset(df.columns):
+            df = df.sort_values(by=[c for c in KEYS[name] if c in df.columns])
+    df.to_csv(path, index=False)
+
+
+def run(specs, outdir, targets=None):
     os.makedirs(outdir, exist_ok=True)
     problems=[MOOProblemSpec(name=n,dim=d,n_obj=o,ref_point=r) for (n,d,o,r) in specs]
     hv_rows,obj_rows,rt_rows=[],[],[]; raw_by_prob={}
@@ -51,10 +93,17 @@ def run(specs, outdir):
             row={"Algorithm":CLS,"Problem":prob,"PointIdx":pi}
             for j,val in enumerate(pt): row[f"f{j+1}"]=float(val)
             par_rows.append(row)
-    pd.DataFrame(hv_rows).to_csv(f"{outdir}/hv_benchmark_log.csv",index=False)
-    pd.DataFrame(obj_rows).to_csv(f"{outdir}/objectives_log.csv",index=False)
-    pd.DataFrame(rt_rows).to_csv(f"{outdir}/runtime_log.csv",index=False)
-    pd.DataFrame(par_rows).to_csv(f"{outdir}/pareto_front_log.csv",index=False)
+    frames={"hv_benchmark_log":pd.DataFrame(hv_rows),"objectives_log":pd.DataFrame(obj_rows),
+            "runtime_log":pd.DataFrame(rt_rows),"pareto_front_log":pd.DataFrame(par_rows)}
+    for name,df in frames.items():
+        df.to_csv(f"{outdir}/{name}.csv",index=False)
+    for tgt in (targets or []):
+        if not os.path.isdir(tgt):
+            print(f"  [skip] {tgt} does not exist (run the phase benchmark first)")
+            continue
+        for name,df in frames.items():
+            _append_into(os.path.join(tgt,f"{name}.csv"), df, name)
+        print(f"  [merged] Improved-Scalarized-EI rows appended into {tgt}")
     # quick determinism check vs seed 42
     f=pd.DataFrame(hv_rows); f=f[f.Epoch==400]
     print(f"  [{outdir}] final-HV spread per problem (seed order {SEEDS}):")
@@ -63,6 +112,10 @@ def run(specs, outdir):
         print(f"    {prob:7s} {vals}")
 
 if __name__ == "__main__":
-    print("=== SYNTHETIC ==="); run(SYN,"benchmark_results/isei_rerun_syn")
-    print("=== REAL ===");      run(RE,"benchmark_results/isei_rerun_real")
+    print("=== SYNTHETIC ===")
+    run(SYN, "benchmark_results/isei_rerun_syn",
+        targets=["benchmark_results/phase1", "benchmark_results/phase2"])
+    print("=== REAL ===")
+    run(RE, "benchmark_results/isei_rerun_real",
+        targets=["benchmark_results/phase3"])
     print("DONE")

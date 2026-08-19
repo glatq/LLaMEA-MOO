@@ -1,4 +1,4 @@
-# LLaMEA-MOO
+# LLaMEA-MOBO
 
 LLM-driven evolutionary generation of **multi-objective Bayesian optimization**
 algorithms. Large language models act as the mutation and crossover operators of an
@@ -16,7 +16,21 @@ logs into every figure and table in the paper and its supplementary material.
 > multi-objective optimization — a constrained problem suite (CTP/BNH/C3-DTLZ4 and the
 > real-world CRE problems), a feasibility-aware prompt generator, feasible-hypervolume
 > metrics, and constraint-aware baselines. None of it is used by, or evaluated in, the
-> paper above. Everything described in this README is unconstrained.
+> paper above. Everything described here is unconstrained.
+
+## Contents
+
+**Essential**
+1. [Installation](#installation)
+2. [Quick start](#quick-start) — use a generated algorithm, or run the search
+3. [Reproducing the paper](#reproducing-the-paper) — figures and tables, benchmarks, search
+4. [The generated algorithms](#the-generated-algorithms)
+5. [Repository layout](#repository-layout)
+
+**Reference** — framework internals, extension points, and customization, in
+[Part II](#part-ii-reference) below. Not needed to use the algorithms or reproduce the paper.
+
+---
 
 ## Installation
 
@@ -27,24 +41,78 @@ poetry install
 ```
 
 Copy `.env.template` to `.env` and fill in the API keys you need. Only the
-*generation* phase talks to an LLM; reproducing the benchmarks and figures does not.
+*generation* phase talks to an LLM; using a generated algorithm and reproducing the
+benchmarks and figures do not.
 
-### Environment note
+Several generated algorithms use `n_jobs=-1` internally. Pin the thread pools before
+running anything heavy, or nested parallelism will oversubscribe the machine:
 
-The experiments spanned a scikit-learn upgrade, and this matters for exactly two
-algorithms:
+```bash
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 LOKY_MAX_CPU_COUNT=1
+```
 
-* **Phases 2 and 3, the HPO ablation, and every figure and table** reproduce with the
-  committed `poetry.lock` (scikit-learn 1.7.2).
-* **Phase 1** additionally includes `MOBORobustLCBFPS` and `MOBOEnsembleRidge_MPFDUWS`,
-  which were generated against scikit-learn 1.3.x and call
-  `BaggingRegressor(base_estimator=...)`. That argument was removed in scikit-learn 1.4,
-  so those two crash on the committed lock file. To re-run them, use a separate
-  environment with `pip install "scikit-learn<1.4"` (use 1.3.2 or later for Python 3.12
-  wheels). The other seven Phase-1 algorithms run on any supported version.
+## Quick start
 
-The generated algorithms are published **verbatim**, exactly as benchmarked, so the
-`base_estimator` call is left in place rather than modernized.
+### Use a generated algorithm on your own problem
+
+Every generated algorithm is a self-contained class: construct it with a budget,
+dimension and bounds, then call it with your objective function. The function takes
+one point of shape `(dim,)` and returns one objective vector of shape `(M,)`; the
+number of objectives is inferred at runtime, so the same algorithm handles bi- and
+tri-objective problems unchanged. It returns the final non-dominated set.
+
+```python
+import numpy as np, yaml
+
+src = open("generated_algorithms/MOBOImprovedScalarizedEI.py").read()
+ns = {}; exec(src, ns)
+Algo = ns["MOBOImprovedScalarizedEI"]
+
+# the SMAC-tuned hyperparameters used in the paper (omit for the LLM's defaults)
+hp = yaml.safe_load(open("generated_algorithms/incumbents.yaml")) \
+         ["MOBOImprovedScalarizedEI"]["init_kwargs"]
+
+def my_objectives(x):                        # both objectives are minimized
+    return np.array([np.sum(x ** 2), np.sum((x - 1.0) ** 2)])
+
+bounds = np.array([[-5.0] * 3, [5.0] * 3])   # shape (2, dim): [lower; upper]
+algo = Algo(budget=60, dim=3, bounds=bounds, **hp)
+F, X = algo(my_objectives)                   # F: (K, M) objectives, X: (K, dim) points
+
+print("Pareto front:", F.shape, "| decision vectors:", X.shape)
+```
+
+Swap the filename for any of the nine algorithms in `generated_algorithms/`, or for
+`MO bench/MOBO_MOEAD_EI_Hybrid_fixed.py`. Two of the nine need an older scikit-learn —
+see [Environment note](#environment-note).
+
+### Run the evolutionary search
+
+This generates new algorithms and requires LLM credentials.
+`conf/config_paper_search.yaml` reproduces the generation phase used in the paper: a
+nine-problem training suite at a 200-evaluation budget with 3 repetitions, SMAC tuning
+on an evenly-spaced three-problem subset, and Gemini-2.5-Flash at temperature 0.7.
+
+```bash
+python run_es_search.py --config-name config_paper_search
+```
+
+Switch evolution strategy on the command line:
+
+```bash
+# (1+1)-ES
+python run_es_search.py --config-name config_paper_search \
+    mo_search.n_parent=1 mo_search.n_offspring=1
+# (8,16)-ES
+python run_es_search.py --config-name config_paper_search \
+    mo_search.n_parent=8 mo_search.n_offspring=16 \
+    mo_search.is_elitist=false mo_search.n_population=104
+```
+
+The training suite is **not** the benchmark suite: it uses different problems,
+dimensions and reference points, so search fitness is not comparable to benchmark
+hypervolume. Hyperparameters were tuned at 200 evaluations during the search and then
+deployed at 400 in the benchmark.
 
 ## Reproducing the paper
 
@@ -71,79 +139,89 @@ general-purpose plotter for arbitrary benchmark CSVs.
 
 ### 2. Re-running the benchmarks
 
-Each phase has its own config; problems, dimensions and reference points are exactly
+Three commands per suite, in order. Problems, dimensions and reference points are exactly
 those reported in the paper, at 400 evaluations and 5 independent repeats.
 
 ```bash
-python benchmark_best_codes.py config=conf/benchmark_phase1.yaml        # nine generated algorithms, 12 synthetic
-python benchmark_best_codes.py config=conf/benchmark_phase2.yaml        # top three + MOEAD-EI + five baselines
-python benchmark_best_codes.py config=conf/benchmark_phase3.yaml        # the same nine, three real-world RE problems
-python benchmark_best_codes.py config=conf/benchmark_hpo_ablation.yaml  # LLM-default hyperparameters
+# a. the eight stochastic algorithms of each phase
+python benchmark_best_codes.py config=conf/benchmark_phase1.yaml        # 12 synthetic, generated algorithms only
+python benchmark_best_codes.py config=conf/benchmark_phase2.yaml        # 12 synthetic, generated + baselines
+python benchmark_best_codes.py config=conf/benchmark_phase3.yaml        # 3 real-world RE problems
+
+# b. Improved-Scalarized-EI, which needs five explicit seeds (see below).
+#    Appends its rows into the phase output dirs, so no manual merging.
+python paper_reproduction/rerun_isei_seeds.py
+
+# c. the Table III "LLM defaults" half of the HPO ablation
+python benchmark_best_codes.py config=conf/benchmark_hpo_ablation.yaml
 ```
 
-The reported runs were launched with equivalent command-line overrides rather than these
-files; the configs encode the same settings, and the problem sets and resulting numbers have
-been checked to match. Any field can be overridden on the command line, including whole lists, e.g.
-`repeat=1 budget=100` or `"problems=[{name: zdt1, dim: 30, n_obj: 2, ref_point: [1.1, 7.2]}]"`.
-The configs and equivalent command-line overrides are interchangeable — the config file is
-merged with the CLI arguments — so a subset of algorithms or problems can be run without
-editing anything.
+**Why Improved-Scalarized-EI is separate.** It is the only one of the nine generated
+algorithms that takes a `random_seed` parameter (default 42) and drives its own
+`np.random.default_rng`, so it is deterministic: every repeat returns an identical
+hypervolume and reports zero variance. The paper's Improved-Scalarized-EI numbers — in
+Phase 1, 2 and 3 alike — come from five explicit seeds, which is what step (b) does and
+what Section VI-B of the paper describes. The phase configs therefore exclude it, both to
+avoid ~1.5 h of wasted compute and to avoid reporting a zero-variance result. The other
+eight algorithms have no seed parameter and vary normally across repeats.
 
-The script **appends** to the CSVs in `output_dir`, de-duplicating on
-(algorithm, problem, repeat, epoch). The reported logs were built this way, across several
-invocations per phase (for instance the generated algorithms in one run and the baselines in
-another), so a phase does not have to be produced in a single pass. Output goes to
-`benchmark_results/` (gitignored), so re-runs never overwrite the reference logs in
-`paper_data/`.
-
-The `timeout` field caps wall-clock for **one algorithm across all problem × repeat
-tasks**, which run in a process pool sized to `os.cpu_count()`. It is set generously;
-raise it further on a small host, because qParEGO alone averages roughly three hours
-per run on the synthetic suite.
-
-Set BLAS threads to 1 when running these — several algorithms use `n_jobs=-1`
-internally, and nested parallelism otherwise oversubscribes the machine badly:
+**Analysing your own re-run.** The scripts in step 1 default to the reference logs in
+`paper_data/`. To point them at your own output, pass the paths:
 
 ```bash
-export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 LOKY_MAX_CPU_COUNT=1
+python paper_reproduction/emit_paper_numbers.py \
+    stage1=benchmark_results/phase1 stage2=benchmark_results/phase2 stage3=benchmark_results/phase3
+python paper_reproduction/significance_tests.py csv=benchmark_results/phase2/hv_benchmark_log.csv
+python paper_reproduction/cd_diagram.py         csv=benchmark_results/phase2/hv_benchmark_log.csv
 ```
+
+The plotting scripts (`plot_grid.py`, `plot_time_accuracy.py`, `plot_pareto_grid.py`) read
+`paper_data/` paths written near the top of each file; edit those two or three lines to
+compare your own curves.
+
+**Appending.** `benchmark_best_codes.py` appends to the CSVs in `output_dir`,
+de-duplicating on (algorithm, problem, repeat, epoch), and `rerun_isei_seeds.py` does the
+same. A phase therefore does not have to be produced in one pass — the reported logs were
+built across several invocations. Output goes to `benchmark_results/` (gitignored), so
+re-runs never overwrite the reference logs in `paper_data/`.
+
+Any field can be overridden on the command line, including whole lists, e.g. `repeat=1
+budget=100` or `"problems=[{name: zdt1, dim: 30, n_obj: 2, ref_point: [1.1, 7.2]}]"`. The
+reported runs were launched with equivalent overrides rather than these files; the configs
+encode the same settings, and the problem sets and resulting numbers have been checked to
+match.
+
+**Runtime.** The `timeout` field caps wall-clock for *one algorithm across all problem ×
+repeat tasks*, which run in a process pool sized to `os.cpu_count()`. Raise it on a small
+host: qParEGO alone averages roughly three hours per run on the synthetic suite, so Phase 2
+is the better part of a day on ten cores.
 
 ### 3. Re-running the LLaMEA search
 
-This is the expensive part and it requires LLM credentials.
-`conf/config_paper_search.yaml` reproduces the generation phase: a nine-problem
-training suite at a 200-evaluation budget with 3 repeats, SMAC tuning on an
-evenly-spaced three-problem subset, and Gemini-2.5-Flash at temperature 0.7.
+The generation phase is the expensive part and needs LLM credentials; the commands are
+in [Quick start](#run-the-evolutionary-search). The paper's nine runs are three
+repetitions of each of the three evolution strategies listed there, all under
+`conf/config_paper_search.yaml`. Note that the training suite is **not** the benchmark
+suite — different problems, dimensions and reference points — so search fitness is not
+comparable to benchmark hypervolume, and hyperparameters tuned at the 200-evaluation
+search budget are deployed at 400 in the benchmark.
 
-```bash
-python run_es_search.py --config-name config_paper_search                    # (4+16)-ES
-python run_es_search.py --config-name config_paper_search \
-    mo_search.n_parent=1 mo_search.n_offspring=1                             # (1+1)-ES
-python run_es_search.py --config-name config_paper_search \
-    mo_search.n_parent=8 mo_search.n_offspring=16 \
-    mo_search.is_elitist=false mo_search.n_population=104                    # (8,16)-ES
-```
+### Environment note
 
-Note that the training suite is **not** the benchmark suite: it uses different
-problems, dimensions and reference points, so search fitness is not comparable to
-benchmark hypervolume. Hyperparameters were tuned at 200 evaluations during the search
-and then deployed at 400 in the benchmark.
+The experiments spanned a scikit-learn upgrade, and this matters for exactly two
+algorithms:
 
-## The generated algorithms
+* **Phases 2 and 3, the HPO ablation, and every figure and table** reproduce with the
+  committed `poetry.lock` (scikit-learn 1.7.2).
+* **Phase 1** additionally includes `MOBORobustLCBFPS` and `MOBOEnsembleRidge_MPFDUWS`,
+  which were generated against scikit-learn 1.3.x and call
+  `BaggingRegressor(base_estimator=...)`. That argument was removed in scikit-learn 1.4,
+  so those two crash on the committed lock file. To re-run them, use a separate
+  environment with `pip install "scikit-learn<1.4"` (use 1.3.2 or later for Python 3.12
+  wheels). The other seven Phase-1 algorithms run on any supported version.
 
-`generated_algorithms/` holds the best algorithm from each of the nine evolutionary
-runs, as generated, together with `incumbents.yaml` — the SMAC incumbent
-hyperparameters recorded during the run, plus the run, generation, offspring index and
-search fitness that identify each individual. The benchmark configs read those
-hyperparameters directly, so no pickle files are needed.
-
-`MO bench/` holds the baselines (NSGA-II, NSGA-III, IOC-SAMO-COBRA, multi-objective
-Random Search, and the BoFire qParEGO / qLogNEHVI Bayesian baselines) alongside
-`MOBO_MOEAD_EI_Hybrid_fixed.py`, the development-found generated algorithm.
-
-Two of the benchmarked algorithms carry a one-line mechanical fix applied before
-benchmarking — an index/population-size bound that otherwise crashes on the final
-batch. Both are marked in the source. No algorithmic component was altered.
+The generated algorithms are published **verbatim**, exactly as benchmarked, so the
+`base_estimator` call is left in place rather than modernized.
 
 ## What is not reproducible from this repository
 
@@ -159,7 +237,27 @@ batch. Both are marked in the source. No algorithmic component was altered.
   the nine reported runs, and its population checkpoint can no longer be loaded by the
   current code. Its benchmark results reproduce normally.
 
-## Data layout
+## The generated algorithms
+
+`generated_algorithms/` holds the best algorithm from each of the nine evolutionary
+runs, as generated, together with `incumbents.yaml` — the SMAC incumbent
+hyperparameters recorded during the run, plus the run, generation, offspring index and
+search fitness that identify each individual. The benchmark configs read those
+hyperparameters directly, so no pickle files are needed.
+
+`MO bench/` holds the baselines (NSGA-II, NSGA-III, IOC-SAMO-COBRA, multi-objective
+Random Search, and the BoFire qParEGO / qLogNEHVI Bayesian baselines) alongside
+`MOBO_MOEAD_EI_Hybrid_fixed.py`, the development-found generated algorithm. MOEAD-EI
+Hybrid is not one of the nine, so its SMAC incumbent is not in `incumbents.yaml`; it is
+written inline in `conf/benchmark_phase2.yaml` and `conf/benchmark_phase3.yaml`, which is
+what makes those configs reproduce the tuned Table II values (0.971 synthetic, 0.926
+real-world) rather than the Table III defaults (0.956, 0.859).
+
+Two of the benchmarked algorithms carry a one-line mechanical fix applied before
+benchmarking — an index/population-size bound that otherwise crashes on the final
+batch. Both are marked in the source. No algorithmic component was altered.
+
+## Repository layout
 
 | Path | Contents |
 | --- | --- |
@@ -176,14 +274,15 @@ batch. Both are marked in the source. No algorithmic component was altered.
 | `paper_reproduction/` | analysis and plotting scripts |
 | `benchmark_results/`, `paper_figures/` | outputs of re-runs and plots (gitignored) |
 
-## Tests
+---
 
-```bash
-make test
-```
+# Part II — Reference
 
+Everything below documents the framework internals and extension points. **None of it
+is needed to use the generated algorithms or to reproduce the paper** — those are
+covered in Part I above.
 
-## Development
+## Project structure
 
 The project follows a modular structure primarily located within the `llamevol/` directory.
 
@@ -202,7 +301,12 @@ The project follows a modular structure primarily located within the `llamevol/`
 - **`MO bench/`**: Baseline algorithms and the development-found MOEAD-EI Hybrid.
 - **`conf/`**: Hydra/OmegaConf configurations for the search and the benchmark phases.
 
-### Usage Example
+## Running the search programmatically
+
+The example below drives the loop directly instead of through `run_es_search.py`. It is
+written for the **single-objective** path (`IOHEvaluator`, `BaselinePromptGenerator`);
+for the multi-objective path used in the paper, substitute `MultiObjEvaluator`
+(`llamevol/evaluator/multiobj_evaluator.py`) and `MultiObjectivePromptGenerator`.
 
 Below is a simplified example demonstrating how to set up and run the LLaMEvol evolutionary process using the provided components. This example uses an `IOHEvaluator`, a `BaselinePromptGenerator`, a `gemini-2.0-flash` model via `LLMmanager`, and an `ESPopulation`.
 
@@ -272,34 +376,8 @@ and `BaselinePromptGenerator` for `MultiObjectivePromptGenerator`; the runnable 
 point is `run_es_search.py` with `mode=mo`, configured by
 `conf/config_paper_search.yaml` (see *Reproducing the paper* above).
 
-### Parallelism in IOHEvaluator
 
-The `IOHEvaluator` supports several modes for parallelizing the evaluation of algorithms across different IOH problems, instances, and repetitions:
-
-1.  **Sequential Execution:**
-    - **How:** This is the default mode if no parallel options are explicitly enabled (i.e., `max_eval_workers` is set to 0 or less, and `use_mpi` and `use_mpi_future` are `False`).
-    - **Description:** Each evaluation task (a specific problem/instance/repetition) is executed one after another in the main process.
-
-2.  **Thread Pool Execution:**
-    - **How:** Set `max_eval_workers` to a positive integer (e.g., `evaluator.max_eval_workers = 10`) and ensure `use_multi_process` is `False` (default).
-    - **Description:** Uses Python's `concurrent.futures.ThreadPoolExecutor` to run evaluation tasks concurrently in multiple threads within the same process. 
-
-3.  **Process Pool Execution:**
-    - **How:** Set `max_eval_workers` to a positive integer and set `use_multi_process = True` (e.g., `evaluator.max_eval_workers = 10; evaluator.use_multi_process = True`).
-    - **Description:** Uses Python's `concurrent.futures.ProcessPoolExecutor` to run evaluation tasks in separate processes. Suitable for the algorithm which don't use multiple cores effectively. 
-
-4.  **MPI (Custom Task Manager):**
-    - **How:** Set `use_mpi = True` (e.g., `evaluator.use_mpi = True`). Requires MPI environment, `mpi4py` installed and a specific command to run the script (e.g., `mpiexec python pyfile`).
-    - **Description:** Utilizes a custom master-worker implementation (`MPITaskManager`) built on top of `mpi4py`. The main node(rank 0) distributes tasks to worker nodes(rank > 0). Suitable for distributed systems.
-
-5.  **MPI (mpi4py.futures):**
-    - **How:** Set `use_mpi_future = True` (e.g., `evaluator.use_mpi_future = True`). Requires MPI environment, `mpi4py` installed and a specific command to run the script (e.g., `mpiexec -n numprocs python -m mpi4py.futures pyfile`). The details of the command can be found in [the documentation of `mpi4py.futures`](https://mpi4py.readthedocs.io/en/stable/mpi4py.futures.html#command-line). 
-    - **Description:** Leverages `mpi4py.futures.MPIPoolExecutor` for a higher-level interface to MPI-based parallelism. Similar to the process pool but designed specifically for MPI environments.
-
-**Configuration:**
-These options are typically set as attributes on the `IOHEvaluator` instance *before* calling the `evaluate` method.
-
-### LLaMEvol
+## LLaMEvol
 The `LLaMEvol` class (`llamevol/llamevol.py`) is the central orchestrator of the evolutionary algorithm. It coordinates the interactions between the LLM, Evaluator, Prompt Generator, and Population components to drive the search for optimal algorithms.
 
 **Structure & Features:**
@@ -343,7 +421,7 @@ The `LLaMEvol` class (`llamevol/llamevol.py`) is the central orchestrator of the
 - **Component Swapping:** The primary way to customize `LLaMEvol`'s behavior is by providing different implementations of its core components (LLM, Evaluator, Prompt Generator, Population). For example, using a different `Population` class changes the selection and generation strategy.
 - **Configuration:** Adjust parameters passed to `run_evolutions`, such as `n_population`, `n_retry`, `n_query_threads`, and LLM-specific settings within the `options` dictionary.
 
-### LLMmanager
+## LLMmanager
 This module (`llamevol/llm.py`) acts as a central manager for interacting with various Large Language Models (LLMs). 
 
 **Features:**
@@ -399,7 +477,7 @@ This module (`llamevol/llm.py`) acts as a central manager for interacting with v
     3. Add a branch in `_create_model()` for the new `client_str`.
     4. Add the supported kwargs to `_SUPPORTED_KWARGS`.
 
-### Prompt Generator
+## Prompt Generator
 This component constructs the prompts sent to the LLM for generating or modifying optimization algorithms.
 
 **Structure & Features:**
@@ -419,7 +497,7 @@ This component constructs the prompts sent to the LLM for generating or modifyin
 - **New Strategies:** Create new subclasses inheriting from `PromptGenerator` and `ResponseHandler`.
 - **Implement Methods:** Override methods like `get_prompt`, `task_description`, `task_instruction`, `response_format`, `evaluation_feedback_prompt` in your `PromptGenerator` subclass, and `extract_response` in your `ResponseHandler` subclass to define the new prompting logic and response parsing.
 
-### Evaluator
+## Evaluator
 The Evaluator component is responsible for executing the Python code generated by the LLM and assessing its performance on optimization tasks.
 
 **Structure & Features:**
@@ -449,7 +527,7 @@ The Evaluator component is responsible for executing the Python code generated b
 - **New Benchmarks:** Create a new class inheriting from `AbstractEvaluator`. Implement the required methods (`evaluate`, `problem_name`, etc.). You'll likely need a wrapper for your objective function (similar to `IOHObjectiveFn`) to manage budget and history tracking.
 - **New Metrics:** Extend `EvaluatorBasicResult` or `EvaluatorSearchResult` to store additional metrics. Modify the relevant evaluator or create/modify an `ExecInjector` subclass (`exec_utils.py`, `bo_injector.py`) to compute and record these metrics during or after code execution.
 
-### Population
+## Population
 The Population component (`llamevol/population/`) manages the collection of candidate algorithms (`Individual` objects) throughout the evolutionary process.
 
 **Structure & Features:**
@@ -487,3 +565,35 @@ The Population component (`llamevol/population/`) manages the collection of cand
 - **New Population Types:** Create a new class inheriting from `Population`. Implement all abstract methods (`get_population_size`, `add_individual`, `remove_individual`, `get_offspring_queryitems`, `get_current_generation`, `get_best_individual`, `all_individuals`) to define a completely new population management scheme.
 - **Diversity Metrics:** Add new diversity calculation functions in `population.py` or elsewhere and integrate them into selection or migration strategies.
 
+## Parallelism in IOHEvaluator
+
+The `IOHEvaluator` supports several modes for parallelizing the evaluation of algorithms across different IOH problems, instances, and repetitions:
+
+1.  **Sequential Execution:**
+    - **How:** This is the default mode if no parallel options are explicitly enabled (i.e., `max_eval_workers` is set to 0 or less, and `use_mpi` and `use_mpi_future` are `False`).
+    - **Description:** Each evaluation task (a specific problem/instance/repetition) is executed one after another in the main process.
+
+2.  **Thread Pool Execution:**
+    - **How:** Set `max_eval_workers` to a positive integer (e.g., `evaluator.max_eval_workers = 10`) and ensure `use_multi_process` is `False` (default).
+    - **Description:** Uses Python's `concurrent.futures.ThreadPoolExecutor` to run evaluation tasks concurrently in multiple threads within the same process. 
+
+3.  **Process Pool Execution:**
+    - **How:** Set `max_eval_workers` to a positive integer and set `use_multi_process = True` (e.g., `evaluator.max_eval_workers = 10; evaluator.use_multi_process = True`).
+    - **Description:** Uses Python's `concurrent.futures.ProcessPoolExecutor` to run evaluation tasks in separate processes. Suitable for the algorithm which don't use multiple cores effectively. 
+
+4.  **MPI (Custom Task Manager):**
+    - **How:** Set `use_mpi = True` (e.g., `evaluator.use_mpi = True`). Requires MPI environment, `mpi4py` installed and a specific command to run the script (e.g., `mpiexec python pyfile`).
+    - **Description:** Utilizes a custom master-worker implementation (`MPITaskManager`) built on top of `mpi4py`. The main node(rank 0) distributes tasks to worker nodes(rank > 0). Suitable for distributed systems.
+
+5.  **MPI (mpi4py.futures):**
+    - **How:** Set `use_mpi_future = True` (e.g., `evaluator.use_mpi_future = True`). Requires MPI environment, `mpi4py` installed and a specific command to run the script (e.g., `mpiexec -n numprocs python -m mpi4py.futures pyfile`). The details of the command can be found in [the documentation of `mpi4py.futures`](https://mpi4py.readthedocs.io/en/stable/mpi4py.futures.html#command-line). 
+    - **Description:** Leverages `mpi4py.futures.MPIPoolExecutor` for a higher-level interface to MPI-based parallelism. Similar to the process pool but designed specifically for MPI environments.
+
+**Configuration:**
+These options are typically set as attributes on the `IOHEvaluator` instance *before* calling the `evaluate` method.
+
+## Tests
+
+```bash
+make test
+```

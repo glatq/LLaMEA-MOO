@@ -50,17 +50,15 @@ problems:
   - { name: wfg9, dim: 6, n_obj: 2, ref_point: [2.2, 4.4] }
 
 algorithms:
-  # (4+16)-ES  exp_mo_4plus16_run2  generation 4, offspring #58  (search fitness 0.6981)
-  - path: "generated_algorithms/MOBOImprovedScalarizedEI.py"
-    cls_name: MOBOImprovedScalarizedEI
-    init_kwargs:
-      ea_crossover_rate: 0.8069829779829
-      ea_generations: 39
-      ea_mutation_rate: 0.4022169454306
-      ea_pop_size: 85
-      gp_restarts_optimizer: 1
-      model_window_size: 91
-      n_uniform_weights: 48
+  # NOTE: Improved-Scalarized-EI is deliberately ABSENT from this config.
+  # It is the only one of the nine generated algorithms with a `random_seed`
+  # parameter (default 42) feeding its own np.random.default_rng, so it is
+  # deterministic: every repeat returns an identical hypervolume. The paper's
+  # Improved-Scalarized-EI rows come from five explicit seeds instead, produced by
+  #     python paper_reproduction/rerun_isei_seeds.py
+  # which also appends its rows into this config's output_dir. Running it here with
+  # repeat=5 would waste ~1.5 h and report zero variance. See Section VI-B of the paper.
+
 
   # (4+16)-ES  exp_mo_4plus16_run3  generation 3, offspring #52  (search fitness 0.5295)
   - path: "generated_algorithms/MOBORandomForestLCBPBI_CD.py"
