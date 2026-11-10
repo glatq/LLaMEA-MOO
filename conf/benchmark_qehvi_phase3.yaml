@@ -1,0 +1,38 @@
+# Phase 3 add-on -- the BOFire qEHVI baseline on the 3 unseen RE problems
+#
+# Adds qEHVI (BOFire MoboStrategy, default settings) to paper_data/benchmark_stage3.
+# Problems, dimensions, reference points, budget and repeats are exactly those of
+# conf/benchmark_phase3.yaml, so the results can be merged with that stage.
+#
+# Run from the repo root:
+#     python benchmark_best_codes.py config=conf/benchmark_qehvi_phase3.yaml
+#
+# The run controls are explained in conf/benchmark_qehvi_phase2.yaml.
+budget: 400
+repeat: 5
+output_dir: benchmark_results/phase3_qehvi
+timeout: 259200
+run_timeout: 21600
+max_workers: null
+threads_per_run: 1
+constrained: false
+constrained_suite: synthetic
+
+plotting:
+  save_figures: false
+  show_figures: false
+  convergence_dpi: 150
+  pareto_dpi: 300
+
+export:
+  objectives: false
+  pareto: true
+
+problems:
+  - { name: re21, dim: 4, n_obj: 2, ref_point: [2851.9, 0.037] }
+  - { name: re34, dim: 5, n_obj: 3, ref_point: [1862.3, 12.17, 0.196] }
+  - { name: re37, dim: 4, n_obj: 3, ref_point: [0.887, 0.913, 1.012] }
+
+algorithms:
+  - path: "MO bench/bofire_baseline.py"
+    cls_name: BoFireQEHVIWrapper
