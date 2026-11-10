@@ -1,6 +1,11 @@
 import os
+import json
 import pickle
+import platform
+import socket
+import subprocess
 import sys
+import time
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -24,6 +29,67 @@ def load_incumbent(handler_pkl_path):
     except Exception as e:
         print(f"    Warning: Could not load incumbent from {handler_pkl_path}: {e}")
         return None
+
+
+def _cpu_model():
+    """CPU model name, best effort (Linux /proc/cpuinfo, else platform)."""
+    try:
+        with open("/proc/cpuinfo") as f:
+            for line in f:
+                if line.startswith("model name"):
+                    return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return platform.processor() or platform.machine()
+
+
+def write_environment(path, evaluator, cfg):
+    """Record the machine, run controls and package versions of a benchmark.
+
+    Run times are only comparable across algorithms measured under the same
+    controls, so each benchmark writes them next to its logs.
+    """
+    from importlib import metadata
+
+    from llamevol.evaluator.multiobj_evaluator import physical_core_count
+
+    versions = {}
+    for pkg in ("numpy", "scipy", "scikit-learn", "torch", "botorch", "gpytorch",
+                "bofire", "pymoo", "threadpoolctl"):
+        try:
+            versions[pkg] = metadata.version(pkg)
+        except metadata.PackageNotFoundError:
+            versions[pkg] = None
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True,
+            cwd=os.path.dirname(os.path.abspath(__file__)), check=False,
+        ).stdout.strip() or None
+    except OSError:
+        commit = None
+    env = {
+        "started": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "host": socket.gethostname(),
+        "cpu_model": _cpu_model(),
+        "physical_cores": physical_core_count(),
+        "logical_cores": os.cpu_count(),
+        "python": platform.python_version(),
+        "git_commit": commit,
+        "max_workers": evaluator.max_workers,
+        "threads_per_run": evaluator.threads_per_run,
+        "run_timeout_s": evaluator.run_timeout,
+        "timeout_s": evaluator.timeout,
+        "budget": int(cfg.budget),
+        "repeat": int(cfg.repeat),
+        "packages": versions,
+    }
+    with open(path, "w") as f:
+        json.dump(env, f, indent=2)
+    print(
+        f"Run controls: {env['max_workers']} parallel runs x "
+        f"{env['threads_per_run']} thread(s) on {env['physical_cores']} physical "
+        f"cores ({env['cpu_model']}); per-run limit {env['run_timeout_s']} s"
+    )
 
 
 def _append_rows_to_csv(path, rows):
@@ -100,7 +166,9 @@ def benchmark_and_plot(cfg):
         for p in problem_cfg
     ]
 
-    # Initialize evaluator
+    # Initialize evaluator. ``timeout`` bounds one algorithm's whole final
+    # evaluation; ``run_timeout`` (optional) bounds each single run, which then
+    # keeps its partial history and is flagged in run_status_log.csv.
     timeout = cfg.get("timeout", 1800)
     evaluator = MultiObjEvaluator(
         budget=budget,
@@ -108,13 +176,19 @@ def benchmark_and_plot(cfg):
         repeat=repeat,
         calculate_hv_history=True,
         timeout=timeout,
+        max_workers=cfg.get("max_workers", None),
+        threads_per_run=cfg.get("threads_per_run", 1),
+        run_timeout=cfg.get("run_timeout", None),
     )
+    write_environment(os.path.join(output_dir, "environment.json"), evaluator, cfg)
 
     all_results = {}
     log_file = os.path.join(output_dir, "hv_benchmark_log.csv")
     obj_file = os.path.join(output_dir, "objectives_log.csv")
     pareto_file = os.path.join(output_dir, "pareto_front_log.csv")
     runtime_file = os.path.join(output_dir, "runtime_log.csv")
+    # Per-run status: evaluations reached, time-limit hits, BOFire fallbacks.
+    status_file = os.path.join(output_dir, "run_status_log.csv")
     # Constraint-aware logs (written only for constrained problems, where the
     # evaluator populated per-evaluation cv_history / feasibility_rate).
     feas_file = os.path.join(output_dir, "feasibility_log.csv")
@@ -166,6 +240,7 @@ def benchmark_and_plot(cfg):
         rows = []
         obj_rows = []
         runtime_rows = []
+        status_rows = []
         feas_rows = []
         feas_summary_rows = []
         raw_y_by_problem = {}
@@ -187,6 +262,23 @@ def benchmark_and_plot(cfg):
                         "ExecutionTime": float(exec_time),
                     }
                 )
+
+            diag = getattr(run, "diagnostics", None) or {}
+            status_rows.append(
+                {
+                    "Algorithm": cls_name,
+                    "Problem": prob_name,
+                    "Repeat": rep_val,
+                    "Evaluations": getattr(run, "n_evals", None),
+                    "TimedOut": bool(getattr(run, "timed_out", False)),
+                    "AskFallbacks": diag.get("ask_fallbacks"),
+                    "TellFailures": diag.get("tell_failures"),
+                    "TorchThreads": getattr(run, "torch_threads", None),
+                    "ErrorType": run.error_type,
+                    "Error": (str(run.error)[:300] if run.error else None),
+                    "FirstFallbackError": diag.get("first_error"),
+                }
+            )
 
             if hasattr(run, "hv_hist") and run.hv_hist is not None:
                 for epoch, hv_value in enumerate(run.hv_hist):
@@ -292,6 +384,17 @@ def benchmark_and_plot(cfg):
         _append_rows_to_csv(runtime_file, runtime_rows)
         if runtime_rows:
             print(f"Updated {runtime_file} with runtimes for {cls_name}")
+        _append_rows_to_csv(status_file, status_rows)
+        n_limit = sum(r["TimedOut"] for r in status_rows)
+        n_fb = sum(r["AskFallbacks"] or 0 for r in status_rows)
+        if n_limit or n_fb:
+            print(
+                f"WARNING {cls_name}: {n_limit} run(s) hit the per-run time limit, "
+                f"{n_fb} BOFire ask fallback(s) -- see {status_file}"
+            )
+        if res.error:
+            # The whole-evaluation timeout drops every run still in flight.
+            print(f"WARNING {cls_name}: {res.error_type}: {res.error}")
 
         # Write constraint feasibility logs (only for constrained problems)
         _append_rows_to_csv(feas_file, feas_rows)

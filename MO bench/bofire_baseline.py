@@ -10,16 +10,30 @@ We use BOFire (a maintained, external MOBO framework that wraps BoTorch) for
 the state-of-the-art Bayesian baselines instead of in-house wrappers, so the
 SOTA comparison rests on a trusted third-party implementation:
 
-  * ``BoFireQparEGOWrapper``              -> BOFire ``QparegoStrategy`` (qParEGO)
+  * ``BoFireQparEGOWrapper``              -> BOFire ``QparegoStrategy``. With
+    BOFire's defaults its acquisition is qNEI, so this baseline is qNParEGO
+    (the noisy ParEGO variant); the class name is kept so existing logs match.
+  * ``BoFireQEHVIWrapper``                -> BOFire ``MoboStrategy`` with qEHVI
   * ``BoFireQLogNEHVIWrapper``            -> BOFire ``MoboStrategy`` with qLogNEHVI
   * ``BoFireConstrainedQLogNEHVIWrapper`` -> the qLogNEHVI strategy above plus
     black-box inequality constraints (the constrained successor to qParEGO)
 
+All wrappers use BOFire's default strategy settings (acquisition Monte Carlo
+samples, optimizer restarts, raw samples, iterations) and BOFire's default
+reference point (the worst value seen so far for each objective), so no
+baseline is given the benchmark's hypervolume reference point.
+
 The number of objectives is inferred at runtime from the first evaluation
 (consistent with the other wrappers), so the same class handles bi- and
 many-objective problems without reconfiguration.
+
+If a BOFire ``ask`` fails, the run falls back to random candidates so it still
+uses its full budget; if a ``tell`` fails, the new points are not added to the
+model. Both events are counted in ``self.diagnostics``, which the benchmark
+writes to ``run_status_log.csv``.
 """
 
+import logging
 import warnings
 from abc import ABC, abstractmethod
 
@@ -27,7 +41,7 @@ import numpy as np
 import pandas as pd
 
 import bofire.strategies.api as fstrat
-from bofire.data_models.acquisition_functions.api import qLogNEHVI
+from bofire.data_models.acquisition_functions.api import qEHVI, qLogNEHVI
 from bofire.data_models.domain.api import Domain, Inputs, Outputs
 from bofire.data_models.features.api import ContinuousInput, ContinuousOutput
 from bofire.data_models.objectives.api import (
@@ -37,6 +51,22 @@ from bofire.data_models.objectives.api import (
 from bofire.data_models.strategies.api import MoboStrategy, QparegoStrategy
 
 warnings.filterwarnings("ignore")
+
+_log = logging.getLogger(__name__)
+
+
+def _new_diagnostics():
+    """Counters for the robustness fallbacks of one run."""
+    return {"ask_fallbacks": 0, "tell_failures": 0, "first_error": None}
+
+
+def _record_failure(diagnostics, kind, exc):
+    """Count one failed ask/tell and keep the first error message."""
+    key = "ask_fallbacks" if kind == "ask" else "tell_failures"
+    diagnostics[key] += 1
+    if diagnostics["first_error"] is None:
+        diagnostics["first_error"] = f"{kind}: {type(exc).__name__}: {exc}"
+        _log.warning("BOFire %s failed (counted in diagnostics): %r", kind, exc)
 
 
 class _BoFireMOBOBase(ABC):
@@ -60,6 +90,7 @@ class _BoFireMOBOBase(ABC):
             n_init = min(2 * self.dim, self.budget // 2)
         self.n_init = max(2, min(int(n_init), self.budget))
         self.seed = seed
+        self.diagnostics = _new_diagnostics()
 
     @abstractmethod
     def _make_data_model(self, domain):
@@ -134,9 +165,10 @@ class _BoFireMOBOBase(ABC):
                     cand.iloc[r][in_keys].to_numpy(dtype=float)
                     for r in range(len(cand))
                 ]
-            except Exception:
+            except Exception as e:
                 # Robustness: if the surrogate/acqf step fails, fall back to
                 # random candidates so the run still uses its full budget.
+                _record_failure(self.diagnostics, "ask", e)
                 new_x = list(sample(q))
 
             new_x_used, new_y = [], []
@@ -153,20 +185,38 @@ class _BoFireMOBOBase(ABC):
             if new_x_used:
                 try:
                     strategy.tell(make_df(new_x_used, new_y))
-                except Exception:
-                    pass
+                except Exception as e:
+                    _record_failure(self.diagnostics, "tell", e)
 
         return np.vstack(Y), np.vstack(X)
 
 
 class BoFireQparEGOWrapper(_BoFireMOBOBase):
-    """BOFire qParEGO (random Tchebycheff scalarization + EI)."""
+    """BOFire ``QparegoStrategy`` with its defaults, i.e. qNParEGO.
+
+    Random Chebyshev scalarization + qNEI (BOFire's default acquisition for
+    this strategy, the noisy variant of the qEI used by the original qParEGO).
+    """
 
     def _make_data_model(self, domain):
         kwargs = {"domain": domain}
         if self.seed is not None:
             kwargs["seed"] = int(self.seed)
         return QparegoStrategy(**kwargs)
+
+
+class BoFireQEHVIWrapper(_BoFireMOBOBase):
+    """BOFire MOBO with the qEHVI acquisition function and BOFire defaults.
+
+    qEHVI is the noise-free expected hypervolume improvement, the hypervolume
+    counterpart of qParEGO for the noise-free benchmark problems used here.
+    """
+
+    def _make_data_model(self, domain):
+        kwargs = {"domain": domain, "acquisition_function": qEHVI()}
+        if self.seed is not None:
+            kwargs["seed"] = int(self.seed)
+        return MoboStrategy(**kwargs)
 
 
 class BoFireQLogNEHVIWrapper(_BoFireMOBOBase):
@@ -307,9 +357,10 @@ class BoFireConstrainedQLogNEHVIWrapper(BoFireQLogNEHVIWrapper):
                     cand.iloc[r][in_keys].to_numpy(dtype=float)
                     for r in range(len(cand))
                 ]
-            except Exception:
+            except Exception as e:
                 # Same robustness contract as the parent: fall back to random
                 # candidates so the run always consumes its full budget.
+                _record_failure(self.diagnostics, "ask", e)
                 new_x = list(sample(q))
 
             nx, nf, ng = [], [], []
@@ -330,7 +381,7 @@ class BoFireConstrainedQLogNEHVIWrapper(BoFireQLogNEHVIWrapper):
             if nx:
                 try:
                     strategy.tell(make_df(nx, nf, ng))
-                except Exception:
-                    pass
+                except Exception as e:
+                    _record_failure(self.diagnostics, "tell", e)
 
         return np.vstack(F), np.vstack(X)

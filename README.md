@@ -192,9 +192,31 @@ encode the same settings, and the problem sets and resulting numbers have been c
 match.
 
 **Runtime.** The `timeout` field caps wall-clock for *one algorithm across all problem ×
-repeat tasks*, which run in a process pool sized to `os.cpu_count()`. Raise it on a small
-host: qParEGO alone averages roughly three hours per run on the synthetic suite, so Phase 2
-is the better part of a day on ten cores.
+repeat tasks*. Raise it on a small host: qNParEGO alone averages roughly three hours per
+run on the synthetic suite, so Phase 2 is the better part of a day on ten cores.
+
+**Run controls and timing.** Run times are only comparable between algorithms measured
+under the same controls, so each benchmark writes them to `<output_dir>/environment.json`
+together with the host, CPU model and package versions:
+
+| Config field | Default | Meaning |
+|---|---|---|
+| `max_workers` | one per physical core | runs executed in parallel |
+| `threads_per_run` | 1 | thread cap for BLAS, OpenMP **and torch** inside each run |
+| `run_timeout` | none | per-run wall-clock limit in seconds |
+
+The torch cap matters for the BoFire/BoTorch baselines: torch keeps its own thread pool
+(one thread per core by default), which `threadpoolctl` does not reach, so without it
+every parallel run starts one thread per core and the machine is oversubscribed. The
+reported runs used a pool sized to `os.cpu_count()` and no torch cap. A run that reaches
+`run_timeout` stops, keeps the evaluations it made, and is flagged in
+`<output_dir>/run_status_log.csv`. That file also counts, per run, how often a BoFire
+baseline fell back to random candidates because a BoFire `ask` failed.
+
+**The qEHVI baseline.** `conf/benchmark_qehvi_phase2.yaml` and
+`conf/benchmark_qehvi_phase3.yaml` add the BoFire qEHVI baseline (`BoFireQEHVIWrapper`,
+BoFire default settings) on the Phase 2 and Phase 3 problems, with one run per physical
+core, one thread per run and a 6 h per-run limit.
 
 ### 3. Re-running the LLaMEA search
 
@@ -246,7 +268,9 @@ search fitness that identify each individual. The benchmark configs read those
 hyperparameters directly, so no pickle files are needed.
 
 `MO bench/` holds the baselines (NSGA-II, NSGA-III, IOC-SAMO-COBRA, multi-objective
-Random Search, and the BoFire qParEGO / qLogNEHVI Bayesian baselines) alongside
+Random Search, and the BoFire qNParEGO / qEHVI / qLogNEHVI Bayesian baselines; the
+qNParEGO baseline is `BoFireQparEGOWrapper`, BoFire's `QparegoStrategy`, whose default
+acquisition is the noisy qNEI) alongside
 `MOBO_MOEAD_EI_Hybrid_fixed.py`, the development-found generated algorithm. MOEAD-EI
 Hybrid is not one of the nine, so its SMAC incumbent is not in `incumbents.yaml`; it is
 written inline in `conf/benchmark_phase2.yaml` and `conf/benchmark_phase3.yaml`, which is

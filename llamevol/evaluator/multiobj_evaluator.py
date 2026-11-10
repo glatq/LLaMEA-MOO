@@ -2,6 +2,7 @@ import os
 import gc
 import time
 import logging
+import contextlib
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence, List, Dict
 from threadpoolctl import threadpool_limits
@@ -11,7 +12,7 @@ import concurrent.futures
 import multiprocessing
 from .evaluator import AbstractEvaluator
 from .evaluator_result import EvaluatorResult, EvaluatorBasicResult
-from .exec_utils import default_exec
+from .exec_utils import ExecInjector, default_exec
 from .moo_metrics import score_moo_run, raw_hv
 from .PymooMOProvider import PymooMOProvider
 from ..configspace_ext.configspace_utils import extract_configspace_from_response
@@ -41,6 +42,63 @@ class MOOProblemSpec:
     ref_point: Optional[Sequence[float]] = None
 
 
+class RunTimeLimitReached(Exception):
+    """Raised by the evaluation function once a run exceeds its time limit."""
+
+
+def physical_core_count() -> int:
+    """Number of physical CPU cores (falls back to logical cores)."""
+    try:
+        import psutil
+
+        n = psutil.cpu_count(logical=False)
+        if n:
+            return int(n)
+    except Exception:
+        pass
+    return os.cpu_count() or 1
+
+
+def _torch_threads(n: Optional[int] = None) -> Optional[int]:
+    """Return torch's intra-op thread count, setting it to ``n`` first if given."""
+    try:
+        import torch
+    except Exception:
+        return None
+    if n is not None:
+        torch.set_num_threads(int(n))
+    return torch.get_num_threads()
+
+
+@contextlib.contextmanager
+def _limit_threads(n: int):
+    """Cap every thread pool of one run at ``n`` threads.
+
+    threadpoolctl covers BLAS and OpenMP, but torch keeps its own intra-op
+    pool (one thread per core by default), so it is set separately. Without
+    this, parallel torch-based runs oversubscribe the CPU.
+    """
+    prev = _torch_threads()
+    _torch_threads(n)
+    try:
+        with threadpool_limits(limits=n):
+            yield
+    finally:
+        if prev is not None:
+            _torch_threads(prev)
+
+
+class _InstanceRecorder(ExecInjector):
+    """Keeps the algorithm instance so the run can read its ``diagnostics``."""
+
+    def __init__(self):
+        self.instance = None
+
+    def inject_instance(self, cls_instance, code, init_kwargs, call_kwargs):
+        self.instance = cls_instance
+        return cls_instance
+
+
 def _run_single_moo_rep(
     spec,
     rep,
@@ -53,8 +111,10 @@ def _run_single_moo_rep(
     injector,
     stop_event=None,
     calculate_hv_history=False,  # New Flag
+    threads_per_run=1,
+    run_timeout=None,
 ):
-    with threadpool_limits(limits=1, user_api="blas"):
+    with _limit_threads(threads_per_run):
         provider = PymooMOProvider()
         wrapper = provider.get(
             problem_id=spec.name,
@@ -73,10 +133,26 @@ def _run_single_moo_rep(
 
         x_hist, y_hist, g_hist = [], [], []
         pbar = tqdm(total=budget, desc=f"Run {spec.name}", leave=False)
+        hit_time_limit = []  # set once the per-run time limit is reached
+
+        # Record the algorithm instance so its optional ``diagnostics`` dict
+        # (e.g. the BOFire fallback counters) reaches the run result. A
+        # caller-supplied injector is left untouched.
+        recorder = None
+        if injector is None:
+            recorder = injector = _InstanceRecorder()
 
         def func(x):
             if stop_event and stop_event.is_set():
                 raise StopIteration("Timeout requested by parent")
+            # Per-run time limit: checked before each evaluation, so a run
+            # stops at most one optimizer iteration after the limit.
+            if run_timeout is not None and time.time() - run_t0 > run_timeout:
+                hit_time_limit.append(True)
+                raise RunTimeLimitReached(
+                    f"Per-run time limit ({run_timeout:g}s) reached after "
+                    f"{len(y_hist)} evaluations"
+                )
             if len(y_hist) >= budget:
                 if n_constr > 0:
                     return np.zeros(wrapper.n_obj), np.zeros(n_constr)
@@ -116,6 +192,23 @@ def _run_single_moo_rep(
 
         pbar.close()
         basic.execution_time = time.time() - run_t0
+        basic.n_evals = len(y_hist)
+        basic.timed_out = bool(hit_time_limit)
+        basic.threads_per_run = threads_per_run
+        basic.torch_threads = _torch_threads()
+        instance = recorder.instance if recorder is not None else None
+        basic.diagnostics = dict(getattr(instance, "diagnostics", None) or {})
+
+        if basic.timed_out:
+            # A run stopped by its time limit keeps the evaluations it made
+            # (scored below on the partial history) and is flagged instead of
+            # being dropped as an execution error.
+            basic.error = (
+                f"Per-run time limit ({run_timeout:g}s) reached after "
+                f"{basic.n_evals} of {budget} evaluations"
+            )
+            basic.error_type = "RunTimeLimit"
+            err = None
 
         if err:
             basic.error, basic.error_type = str(err), "ExecError"
@@ -179,12 +272,22 @@ class MultiObjEvaluator(AbstractEvaluator):
         hpo_n_workers: int = 1,  # Parallel SMAC workers
         hpo_infeasibility_penalty: float = 0.1,  # lambda for the constrained SMAC objective
         use_multiprocessing: bool = True,  # Use ProcessPoolExecutor (False for fast tests)
+        max_workers: Optional[int] = None,  # Parallel runs; None = physical cores
+        threads_per_run: int = 1,  # Thread cap for BLAS/OpenMP/torch in each run
+        run_timeout: Optional[float] = None,  # Per-run time limit (s); None = no limit
     ):
         super().__init__()
         self.budget = int(budget)
         self.repeat = int(repeat)
+        # ``timeout`` bounds the whole final evaluation (all problems x repeats);
+        # ``run_timeout`` bounds each single run and keeps its partial history.
         self.timeout = int(timeout)
         self.use_multiprocessing = use_multiprocessing
+        self.max_workers = (
+            int(max_workers) if max_workers else physical_core_count()
+        )
+        self.threads_per_run = max(1, int(threads_per_run))
+        self.run_timeout = float(run_timeout) if run_timeout else None
         self.problem_specs = list(problems) if problems else []
         self.calculate_hv_history = calculate_hv_history
 
@@ -342,13 +445,19 @@ class MultiObjEvaluator(AbstractEvaluator):
         tasks = [
             (spec, rep) for spec in self.problem_specs for rep in range(self.repeat)
         ]
+        eval_res.metadata["run_controls"] = {
+            "max_workers": self.max_workers if self.use_multiprocessing else 1,
+            "threads_per_run": self.threads_per_run,
+            "run_timeout": self.run_timeout,
+            "timeout": self.timeout,
+        }
 
         if self.use_multiprocessing:
             manager = multiprocessing.Manager()
             stop_event = manager.Event()
 
             with concurrent.futures.ProcessPoolExecutor(
-                max_workers=os.cpu_count()
+                max_workers=self.max_workers
             ) as executor:
                 future_to_task = {
                     executor.submit(
@@ -364,6 +473,8 @@ class MultiObjEvaluator(AbstractEvaluator):
                         injector,
                         stop_event,
                         self.calculate_hv_history,
+                        self.threads_per_run,
+                        self.run_timeout,
                     ): (spec, rep)
                     for spec, rep in tasks
                 }
@@ -399,6 +510,8 @@ class MultiObjEvaluator(AbstractEvaluator):
                         injector,
                         None,
                         self.calculate_hv_history,
+                        self.threads_per_run,
+                        self.run_timeout,
                     )
                     eval_res.result.append(basic)
                 except Exception as e:
