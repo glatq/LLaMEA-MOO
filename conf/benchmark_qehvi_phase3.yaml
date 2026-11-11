@@ -12,7 +12,7 @@ budget: 400
 repeat: 5
 output_dir: benchmark_results/phase3_qehvi
 timeout: 259200
-run_timeout: 21600
+run_timeout: 36000
 max_workers: null
 threads_per_run: 1
 constrained: false
