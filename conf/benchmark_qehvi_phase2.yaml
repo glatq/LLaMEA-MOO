@@ -12,14 +12,18 @@
 #   threads_per_run  thread cap for BLAS/OpenMP/torch inside each run
 #   run_timeout      per-run wall-clock limit (s). A run that reaches it stops,
 #                    keeps the evaluations it made and is flagged TimedOut in
-#                    run_status_log.csv. 21600 s = 6 h.
+#                    run_status_log.csv. 36000 s = 10 h: every Phase 2/3 run of
+#                    the other methods finished within it (the longest, qNParEGO
+#                    on DTLZ4, took 9.0 h). The first qEHVI pass used 21600 s
+#                    (6 h); its stopped DTLZ4 runs are redone with the 10 h limit
+#                    by conf/benchmark_qehvi_rerun.yaml.
 #   timeout          cap for the whole stage (all problems x repeats), set well
 #                    above run_timeout so it never cuts runs short.
 budget: 400
 repeat: 5
 output_dir: benchmark_results/phase2_qehvi
 timeout: 259200
-run_timeout: 21600
+run_timeout: 36000
 max_workers: null
 threads_per_run: 1
 constrained: false

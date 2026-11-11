@@ -216,7 +216,9 @@ baseline fell back to random candidates because a BoFire `ask` failed.
 **The qEHVI baseline.** `conf/benchmark_qehvi_phase2.yaml` and
 `conf/benchmark_qehvi_phase3.yaml` add the BoFire qEHVI baseline (`BoFireQEHVIWrapper`,
 BoFire default settings) on the Phase 2 and Phase 3 problems, with one run per physical
-core, one thread per run and a 6 h per-run limit.
+core, one thread per run and a 10 h per-run limit, which every run of the other methods
+stayed within. `conf/benchmark_qehvi_rerun.yaml` redoes DTLZ4, whose runs first went
+through with a 6 h limit.
 
 ### 3. Re-running the LLaMEA search
 

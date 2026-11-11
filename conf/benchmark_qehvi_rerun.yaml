@@ -1,0 +1,39 @@
+# Phase 2 add-on -- qEHVI on DTLZ4 again, with the 10 h per-run limit
+#
+# The first qEHVI pass (conf/benchmark_qehvi_phase2.yaml) ran with a 6 h per-run
+# limit, which stopped one DTLZ4 run at 340 of 400 evaluations. The limit is now
+# 10 h, the per-run budget every other method stayed within, and all five DTLZ4
+# repeats are redone: repeats are not seeded, so redoing only the stopped one
+# would bias the sample towards fast runs. These results replace the DTLZ4 rows of
+# the first pass.
+#
+# Run from the repo root:
+#     python benchmark_best_codes.py config=conf/benchmark_qehvi_rerun.yaml
+#
+# The run controls are explained in conf/benchmark_qehvi_phase2.yaml.
+budget: 400
+repeat: 5
+output_dir: benchmark_results/phase2_qehvi_rerun
+timeout: 259200
+run_timeout: 36000
+max_workers: null
+threads_per_run: 1
+constrained: false
+constrained_suite: synthetic
+
+plotting:
+  save_figures: false
+  show_figures: false
+  convergence_dpi: 150
+  pareto_dpi: 300
+
+export:
+  objectives: false
+  pareto: true
+
+problems:
+  - { name: dtlz4, dim: 5, n_obj: 3, ref_point: [1.1, 1.1, 1.1] }
+
+algorithms:
+  - path: "MO bench/bofire_baseline.py"
+    cls_name: BoFireQEHVIWrapper
