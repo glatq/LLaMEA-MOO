@@ -213,12 +213,24 @@ reported runs used a pool sized to `os.cpu_count()` and no torch cap. A run that
 `<output_dir>/run_status_log.csv`. That file also counts, per run, how often a BoFire
 baseline fell back to random candidates because a BoFire `ask` failed.
 
+**The timing pass.** `conf/benchmark_timing_phase2.yaml` and
+`conf/benchmark_timing_phase3.yaml` run every Phase 2 and Phase 3 algorithm once per
+problem under these controls (one run per physical core, one thread per run, no per-run
+limit), only to measure run times that are comparable with those of qEHVI. The
+hypervolume results stay those of the 5-repeat phase benchmarks.
+
 **The qEHVI baseline.** `conf/benchmark_qehvi_phase2.yaml` and
 `conf/benchmark_qehvi_phase3.yaml` add the BoFire qEHVI baseline (`BoFireQEHVIWrapper`,
 BoFire default settings) on the Phase 2 and Phase 3 problems, with one run per physical
 core, one thread per run and a 10 h per-run limit, which every run of the other methods
-stayed within. `conf/benchmark_qehvi_rerun.yaml` redoes DTLZ4, whose runs first went
-through with a 6 h limit.
+stayed within. The logs are in `paper_data/benchmark_qehvi_stage{2,3}/`, with each run's
+`environment.json`. They were produced with an earlier 6 h per-run limit. Every qEHVI run
+outside DTLZ4, WFG7 and RE37 finished within it (the longest took 4.6 h), so those results
+are the same under the 10 h limit. DTLZ4 was redone with `conf/benchmark_qehvi_rerun.yaml`
+under the 10 h limit (`environment_dtlz4_rerun.json`); one of its five runs reached the
+limit at 398 of 400 evaluations. The WFG7 and RE37 runs stopped at the 6 h limit after
+209–268 and 163–211 of 400 evaluations. `run_status_log.csv` gives each run's count, and
+the logs keep the hypervolume up to that point.
 
 ### 3. Re-running the LLaMEA search
 
@@ -291,8 +303,11 @@ batch. Both are marked in the source. No algorithmic component was altered.
 | `MO bench/` | baselines and the development-found MOEAD-EI Hybrid |
 | `conf/benchmark_phase{1,2,3}.yaml` | Phase 1–3 benchmark configurations |
 | `conf/benchmark_hpo_ablation.yaml` | LLM-default-hyperparameter benchmark |
+| `conf/benchmark_qehvi_{phase2,phase3,rerun}.yaml` | qEHVI baseline configurations |
+| `conf/benchmark_timing_phase{2,3}.yaml` | timing-pass configurations |
 | `conf/config_paper_search.yaml` | generation-phase (LLaMEA search) configuration |
 | `paper_data/benchmark_stage{1,2,3}/` | Phase 1–3 hypervolume, runtime and Pareto logs |
+| `paper_data/benchmark_qehvi_stage{2,3}/` | qEHVI hypervolume, runtime, Pareto and run-status logs |
 | `paper_data/benchmark_hpo_default/` | HPO ablation, LLM-default hyperparameters |
 | `paper_data/benchmark_moead_{tuned,untuned}/` | MOEAD-EI Hybrid, SMAC-tuned vs defaults |
 | `paper_data/search_history.csv` | per-run search trace for all nine runs |

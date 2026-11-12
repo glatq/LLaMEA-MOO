@@ -1,0 +1,26 @@
+{
+  "started": "2026-11-11T05:18:38+0000",
+  "host": "tq-george-cpu-opt-bench-20250417-173627",
+  "cpu_model": "AMD EPYC 7B13",
+  "physical_cores": 8,
+  "logical_cores": 16,
+  "python": "3.10.20",
+  "git_commit": "8ad79c041254857825eff05ee9532f86b41f9538",
+  "max_workers": 8,
+  "threads_per_run": 1,
+  "run_timeout_s": 21600.0,
+  "timeout_s": 259200,
+  "budget": 400,
+  "repeat": 5,
+  "packages": {
+    "numpy": "1.24.4",
+    "scipy": "1.12.0",
+    "scikit-learn": "1.7.2",
+    "torch": "2.12.0",
+    "botorch": "0.16.1",
+    "gpytorch": "1.15.2",
+    "bofire": "0.3.1",
+    "pymoo": "0.6.0",
+    "threadpoolctl": "3.6.0"
+  }
+}
