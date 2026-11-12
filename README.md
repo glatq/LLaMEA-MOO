@@ -192,8 +192,8 @@ encode the same settings, and the problem sets and resulting numbers have been c
 match.
 
 **Runtime.** The `timeout` field caps wall-clock for *one algorithm across all problem ×
-repeat tasks*. Raise it on a small host: qNParEGO alone averages roughly three hours per
-run on the synthetic suite, so Phase 2 is the better part of a day on ten cores.
+repeat tasks*. Raise it on a small host: qNParEGO alone averages about 1.7 hours per run
+on the synthetic suite (one thread, timing pass below), so Phase 2 takes most of a day.
 
 **Run controls and timing.** Run times are only comparable between algorithms measured
 under the same controls, so each benchmark writes them to `<output_dir>/environment.json`
@@ -217,7 +217,10 @@ baseline fell back to random candidates because a BoFire `ask` failed.
 `conf/benchmark_timing_phase3.yaml` run every Phase 2 and Phase 3 algorithm once per
 problem under these controls (one run per physical core, one thread per run, no per-run
 limit), only to measure run times that are comparable with those of qEHVI. The
-hypervolume results stay those of the 5-repeat phase benchmarks.
+hypervolume results stay those of the 5-repeat phase benchmarks. The run times are in
+`paper_data/benchmark_timing_stage{2,3}/` (`runtime_log.csv`, with `run_status_log.csv`
+and `environment.json`). They come from the same 8-core machine as the qEHVI runs. Every run
+made all 400 evaluations, and no BoFire baseline fell back to random candidates.
 
 **The qEHVI baseline.** `conf/benchmark_qehvi_phase2.yaml` and
 `conf/benchmark_qehvi_phase3.yaml` add the BoFire qEHVI baseline (`BoFireQEHVIWrapper`,
@@ -336,6 +339,7 @@ batch. Both are marked in the source. No algorithmic component was altered.
 | `conf/config_paper_search.yaml` | generation-phase (LLaMEA search) configuration |
 | `paper_data/benchmark_stage{1,2,3}/` | Phase 1–3 hypervolume, runtime and Pareto logs |
 | `paper_data/benchmark_qehvi_stage{2,3}/` | qEHVI hypervolume, runtime, Pareto and run-status logs |
+| `paper_data/benchmark_timing_stage{2,3}/` | timing pass: run times of every Phase 2/3 algorithm under the run controls |
 | `paper_data/benchmark_hpo_default/` | HPO ablation, LLM-default hyperparameters |
 | `paper_data/benchmark_moead_{tuned,untuned}/` | MOEAD-EI Hybrid, SMAC-tuned vs defaults |
 | `paper_data/search_history.csv` | per-run search trace for all nine runs |
