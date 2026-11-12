@@ -232,6 +232,32 @@ limit at 398 of 400 evaluations. The WFG7 and RE37 runs stopped at the 6 h limit
 209–268 and 163–211 of 400 evaluations. `run_status_log.csv` gives each run's count, and
 the logs keep the hypervolume up to that point.
 
+**The component ablation.** `ablation/` runs a Fawcett & Hoos ablation between MOEA/D-EGO
+and MOEAD-EI Hybrid. `ablation.ModularMOEAD` builds either algorithm, or any mix of the two,
+from ten blocks named by a ten-letter configuration string in block order (`ablation/config.py`):
+`S` takes a block from MOEA/D-EGO as implemented in [DDMTOLab](https://github.com/JiangtaoShen/DDMTOLab)
+1.0.10, `T` from the tuned MOEAD-EI Hybrid. Each block runs the original code of its algorithm.
+Under the same seed, `SSSSSSSSSS` evaluates exactly the points DDMTOLab's MOEA/D-EGO
+evaluates, and `TTTTTTTTTT` exactly those of MOEAD-EI Hybrid (`tests/test_ablation_framework.py`).
+The rules for mixing blocks that expect different counterparts are documented where they
+apply in `ablation/modular.py`. DDMTOLab is installed without its dependencies, whose
+numpy >= 2 pin conflicts with this environment; its MOEA/D-EGO runs unchanged on numpy 1.x:
+
+```bash
+pip install --no-deps ddmtolab==1.0.10
+python -m ablation.run_ablation stage=pilot      # both ends + round 1 of both directions, seed 1
+python -m ablation.run_ablation stage=path       # both ablation paths, seeds 1-5
+python -m ablation.run_ablation stage=validate   # the paths' configurations, seeds 6-15
+python -m ablation.run_ablation stage=baseline   # DDMTOLab's MOEA/D-EGO itself, seeds 1-5
+```
+
+Each round of a path runs every configuration one block closer to the other end and keeps
+the one with the best average rank of mean final HV over the 15 problems (ties: the lower
+block number). The decisions go to `path_log.csv`. The reported numbers come from the
+validation seeds, which played no part in choosing the path. All stages resume where they
+stopped. The run controls are those of every benchmark above; the settings are in
+`conf/ablation.yaml`.
+
 ### 3. Re-running the LLaMEA search
 
 The generation phase is the expensive part and needs LLM credentials; the commands are
@@ -300,11 +326,13 @@ batch. Both are marked in the source. No algorithmic component was altered.
 | Path | Contents |
 | --- | --- |
 | `generated_algorithms/` | the nine generated algorithms + `incumbents.yaml` |
-| `MO bench/` | baselines and the development-found MOEAD-EI Hybrid |
+| `MO bench/` | baselines (incl. the DDMTOLab MOEA/D-EGO wrapper) and the development-found MOEAD-EI Hybrid |
 | `conf/benchmark_phase{1,2,3}.yaml` | Phase 1–3 benchmark configurations |
 | `conf/benchmark_hpo_ablation.yaml` | LLM-default-hyperparameter benchmark |
 | `conf/benchmark_qehvi_{phase2,phase3,rerun}.yaml` | qEHVI baseline configurations |
 | `conf/benchmark_timing_phase{2,3}.yaml` | timing-pass configurations |
+| `conf/ablation.yaml` | component-ablation configuration |
+| `ablation/` | modular MOEA/D-EGO / MOEAD-EI Hybrid and the ablation runner |
 | `conf/config_paper_search.yaml` | generation-phase (LLaMEA search) configuration |
 | `paper_data/benchmark_stage{1,2,3}/` | Phase 1–3 hypervolume, runtime and Pareto logs |
 | `paper_data/benchmark_qehvi_stage{2,3}/` | qEHVI hypervolume, runtime, Pareto and run-status logs |

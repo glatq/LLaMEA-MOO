@@ -1,0 +1,37 @@
+# Fawcett & Hoos ablation between MOEA/D-EGO (start, SSSSSSSSSS) and the tuned
+# MOEAD-EI Hybrid (end, TTTTTTTTTT); see ablation/run_ablation.py.
+#
+#     python -m ablation.run_ablation stage=pilot      # both ends + round 1 of both directions, seed 1
+#     python -m ablation.run_ablation stage=path       # both paths, seeds 1-5 (resumes the pilot's runs)
+#     python -m ablation.run_ablation stage=validate   # the paths' configurations on seeds 6-15
+#     python -m ablation.run_ablation stage=baseline   # DDMTOLab's MOEA/D-EGO itself, seeds 1-5
+#
+# Run controls as for every benchmark in the paper: one thread per run, one run per
+# physical core, a 10 h limit per run.
+budget: 400
+output_dir: benchmark_results/ablation
+pilot_seeds: [1]
+path_seeds: [1, 2, 3, 4, 5]
+validation_seeds: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+max_workers: null
+threads_per_run: 1
+run_timeout: 36000
+
+# The paper's 15 problems: Phase 2 (conf/benchmark_phase2.yaml) and Phase 3
+# (conf/benchmark_phase3.yaml), same dimensions and reference points.
+problems:
+  - { name: zdt1, dim: 30, n_obj: 2, ref_point: [1.1, 7.2] }
+  - { name: zdt2, dim: 30, n_obj: 2, ref_point: [1.1, 8.0] }
+  - { name: zdt3, dim: 30, n_obj: 2, ref_point: [1.1, 7.2] }
+  - { name: zdt4, dim: 10, n_obj: 2, ref_point: [1.1, 300.0] }
+  - { name: zdt6, dim: 10, n_obj: 2, ref_point: [1.1, 11.0] }
+  - { name: dtlz1, dim: 5, n_obj: 3, ref_point: [10.0, 10.0, 10.0] }
+  - { name: dtlz2, dim: 20, n_obj: 3, ref_point: [3.0, 3.0, 3.0] }
+  - { name: dtlz4, dim: 5, n_obj: 3, ref_point: [1.1, 1.1, 1.1] }
+  - { name: dtlz7, dim: 20, n_obj: 3, ref_point: [1.1, 1.1, 28.0] }
+  - { name: wfg4, dim: 6, n_obj: 2, ref_point: [2.2, 4.4] }
+  - { name: wfg7, dim: 10, n_obj: 3, ref_point: [2.2, 4.4, 6.6] }
+  - { name: wfg9, dim: 6, n_obj: 2, ref_point: [2.2, 4.4] }
+  - { name: re21, dim: 4, n_obj: 2, ref_point: [2851.9, 0.037] }
+  - { name: re34, dim: 5, n_obj: 3, ref_point: [1862.3, 12.17, 0.196] }
+  - { name: re37, dim: 4, n_obj: 3, ref_point: [0.887, 0.913, 1.012] }
