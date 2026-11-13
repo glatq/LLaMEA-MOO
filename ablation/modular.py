@@ -10,8 +10,11 @@ DDMTOLab's functions (``ablation.moead_ego_parts``). Both pure configurations
 make the same random draws in the same order as their originals, so under the
 same seed ``TTTTTTTTTT`` reproduces MOEAD-EI Hybrid and ``SSSSSSSSSS``
 reproduces DDMTOLab's MOEA/D-EGO evaluation for evaluation (tests/test_ablation_
-framework.py). Mixed configurations follow the rules agreed for the ablation
-(rules a-i), noted where they apply.
+framework.py; ``fast_predict=False``, the default). ``fast_predict=True`` gives
+MOEA/D-EGO's two inner loops closed-form predictions from the same fitted models
+(``ablation.fast_predict``), equal to float32 rounding and about ten times faster.
+Mixed configurations follow the rules agreed for the ablation (rules a-i), noted
+where they apply.
 
 Coordinates: the S blocks work in the unit cube (as DDMTOLab does) and the T
 blocks in the problem's own bounds (as MOEAD-EI Hybrid does). The archive keeps
@@ -24,10 +27,10 @@ import random
 
 import numpy as np
 from scipy.spatial.distance import cdist
-from scipy.stats import norm
 
 from . import moead_ego_parts as ego
 from .config import parse_config
+from .fast_predict import ddmtolab_fcm_predictor, hybrid_predictor
 
 _HYBRID_PATH = (
     pathlib.Path(__file__).resolve().parents[1] / "MO bench" / "MOBO_MOEAD_EI_Hybrid_fixed.py"
@@ -69,26 +72,36 @@ def seed_everything(seed):
 
 
 class _Predictor:
-    """One fitted surrogate (blocks 2 + 3): ``predict(X, native) -> (mean, std)``."""
+    """One fitted surrogate (blocks 2 + 3): ``predict(X, native) -> (mean, std)``.
 
-    def __init__(self, predict_unit=None, predict_real=None, to_unit=None, to_real=None):
+    ``fast=True`` uses the closed-form equivalent of the same fitted model
+    (``ablation.fast_predict``) when one was built, else the model itself.
+    """
+
+    def __init__(self, predict_unit=None, predict_real=None, to_unit=None, to_real=None,
+                 fast_unit=None, fast_real=None):
         self._unit, self._real = predict_unit, predict_real
+        self._fast_unit, self._fast_real = fast_unit, fast_real
         self._to_unit, self._to_real = to_unit, to_real
 
-    def predict(self, X, native):
+    def predict(self, X, native, fast=False):
+        unit, real = self._unit, self._real
+        if fast and (self._fast_unit is not None or self._fast_real is not None):
+            unit, real = self._fast_unit, self._fast_real
         if native == "unit":
-            if self._unit is not None:
-                return self._unit(X)
-            return self._real(self._to_real(X))
-        if self._real is not None:
-            return self._real(X)
-        return self._unit(self._to_unit(X))
+            if unit is not None:
+                return unit(X)
+            return real(self._to_real(X))
+        if real is not None:
+            return real(X)
+        return unit(self._to_unit(X))
 
 
 class ModularMOEAD:
     """MOEA/D-EGO <-> MOEAD-EI Hybrid, one configuration of the ablation."""
 
-    def __init__(self, budget, dim, bounds=None, config="TTTTTTTTTT", seed=None, **hybrid_kwargs):
+    def __init__(self, budget, dim, bounds=None, config="TTTTTTTTTT", seed=None,
+                 fast_predict=False, **hybrid_kwargs):
         self.budget = int(budget)
         self.dim = int(dim)
         if bounds is None:
@@ -98,6 +111,9 @@ class ModularMOEAD:
         self.config = str(config).upper()
         self.b = parse_config(self.config)
         self.seed = seed
+        # fast_predict: closed-form predictions inside MOEA/D-EGO's two inner loops
+        # (blocks 7 and 9 as S); see ablation.fast_predict
+        self.fast_predict = bool(fast_predict) and (self.b["ideal"] == "S" or self.b["search"] == "S")
         self.hybrid_kwargs = {**HYBRID_TUNED, **hybrid_kwargs}
         # The T blocks call the methods of this MOEAD-EI Hybrid instance.
         self.hyb = hybrid_class()(budget=self.budget, dim=self.dim, bounds=self.bounds, **self.hybrid_kwargs)
@@ -106,7 +122,8 @@ class ModularMOEAD:
         # "ask_fallbacks" counts batches evaluated at random because the S
         # surrogate could not be built (DDMTOLab's fallback); the benchmark
         # writes it to run_status_log.csv like the BOFire fallbacks.
-        self.diagnostics = {"config": self.config, "ask_fallbacks": 0, "first_error": None}
+        self.diagnostics = {"config": self.config, "ask_fallbacks": 0, "first_error": None,
+                            "fast_predict": self.fast_predict}
 
     # ------------------------------------------------------------ coordinates
     def _to_unit(self, X):
@@ -170,7 +187,7 @@ class ModularMOEAD:
         fitter.n_obj = self.n_obj
         fitter._fit_model(X_real, Y)
         if len(fitter.models) != self.n_obj:
-            return None
+            return None, None
 
         def predict(Xr):
             Xs = fitter.scaler_X.transform(Xr)
@@ -181,7 +198,8 @@ class ModularMOEAD:
                 sigmas.append(sigma)
             return np.array(mus).T, np.array(sigmas).T
 
-        return predict
+        fast = hybrid_predictor(fitter.scaler_X, fitter.models) if self.fast_predict else None
+        return predict, fast
 
     def _fit_surrogate(self):
         surrogate, training = self.b["surrogate"], self.b["training"]
@@ -189,38 +207,48 @@ class ModularMOEAD:
         if surrogate == "S" and training == "S":
             mod = ego.ddmtolab()
             models, centers = mod._build_gp_models_fcm(self.X_unit, self.Y)
-            return _Predictor(predict_unit=lambda X: mod._gp_evaluate_fcm(X, models, centers), **conv)
+            return _Predictor(predict_unit=lambda X: mod._gp_evaluate_fcm(X, models, centers),
+                              fast_unit=self._fast_fcm(models, centers), **conv)
         if surrogate == "T" and training == "T":
-            predict = self._fit_hybrid_gp(self.X_real, self.Y, self.hybrid_kwargs["n_model_points"])
-            return None if predict is None else _Predictor(predict_real=predict, **conv)
+            predict, fast = self._fit_hybrid_gp(self.X_real, self.Y, self.hybrid_kwargs["n_model_points"])
+            return None if predict is None else _Predictor(predict_real=predict, fast_real=fast, **conv)
         if surrogate == "S":  # DDMTOLab GP on MOEAD-EI Hybrid's sliding window
             mod = ego.ddmtolab()
             w = self.hybrid_kwargs["n_model_points"]
             Xw, Yw = (self.X_unit[-w:], self.Y[-w:]) if self.X_unit.shape[0] > w else (self.X_unit, self.Y)
             models = [[mod.gp_build(Xw, Yw[:, j:j + 1]) for j in range(self.n_obj)]]
             centers = Xw.mean(axis=0, keepdims=True)
-            return _Predictor(predict_unit=lambda X: mod._gp_evaluate_fcm(X, models, centers), **conv)
+            return _Predictor(predict_unit=lambda X: mod._gp_evaluate_fcm(X, models, centers),
+                              fast_unit=self._fast_fcm(models, centers), **conv)
         # MOEAD-EI Hybrid GP as DDMTOLab's local models: one per k-means cluster
         clusters, centers = ego.cluster_assignment(self.X_unit)
-        local = []
+        local, local_fast = [], []
         for idx in clusters:
-            predict = self._fit_hybrid_gp(self.X_real[idx], self.Y[idx], window=10 ** 9)
+            predict, fast = self._fit_hybrid_gp(self.X_real[idx], self.Y[idx], window=10 ** 9)
             if predict is None:
                 return None
             local.append(predict)
+            local_fast.append(fast)
 
-        def predict_unit(Xu):
-            nearest = np.argmin(cdist(Xu, centers), axis=1)
-            mu = np.zeros((Xu.shape[0], self.n_obj))
-            sd = np.zeros((Xu.shape[0], self.n_obj))
-            Xr = self._to_real(Xu)
-            for ci, predict in enumerate(local):
-                mask = nearest == ci
-                if np.any(mask):
-                    mu[mask], sd[mask] = predict(Xr[mask])
-            return mu, np.maximum(sd, 0)
+        def by_cluster(predictors):
+            def predict_unit(Xu):
+                nearest = np.argmin(cdist(Xu, centers), axis=1)
+                mu = np.zeros((Xu.shape[0], self.n_obj))
+                sd = np.zeros((Xu.shape[0], self.n_obj))
+                Xr = self._to_real(Xu)
+                for ci, predict in enumerate(predictors):
+                    mask = nearest == ci
+                    if np.any(mask):
+                        mu[mask], sd[mask] = predict(Xr[mask])
+                return mu, np.maximum(sd, 0)
 
-        return _Predictor(predict_unit=predict_unit, **conv)
+            return predict_unit
+
+        fast = by_cluster(local_fast) if all(f is not None for f in local_fast) else None
+        return _Predictor(predict_unit=by_cluster(local), fast_unit=fast, **conv)
+
+    def _fast_fcm(self, models, centers):
+        return ddmtolab_fcm_predictor(models, centers) if self.fast_predict else None
 
     # ---------------------------------------------------- block 7: ideal point
     def _ideal_point(self, predictor):
@@ -228,7 +256,7 @@ class ModularMOEAD:
         if self.b["ideal"] == "T":
             return z_obs
         return ego.estimate_ideal_point(
-            self.dim, lambda X: predictor.predict(X, "unit")[0], self.W, z_obs
+            self.dim, lambda X: predictor.predict(X, "unit", fast=self.fast_predict)[0], self.W, z_obs
         )
 
     # ---------------------------------------- blocks 4 + 6: scaling, scalarising
@@ -262,7 +290,7 @@ class ModularMOEAD:
         scal_t = self.b["scalarisation"] == "T"
 
         if self.b["acquisition"] == "S":
-            get_eti = ego.ddmtolab()._get_eti
+            get_eti = ego.get_eti  # DDMTOLab's _get_eti, same values (moead_ego_parts)
 
             def acq(mu, sd, W, g):
                 mu, sd = scale_y(mu), scale_s(sd)
@@ -281,7 +309,7 @@ class ModularMOEAD:
             ei = np.zeros_like(sigma)
             ok = sigma > 1e-10
             u[ok] = (g - mean[ok]) / sigma[ok] if np.ndim(g) == 0 else (g[ok] - mean[ok]) / sigma[ok]
-            ei[ok] = sigma[ok] * (u[ok] * norm.cdf(u[ok]) + norm.pdf(u[ok]))
+            ei[ok] = sigma[ok] * (u[ok] * ego.norm_cdf(u[ok]) + ego.norm_pdf(u[ok]))
             return ei
 
         return acq
@@ -319,7 +347,7 @@ class ModularMOEAD:
         """
         if self.b["search"] == "S":
             pop_acq, pop_x = ego.moead_search(
-                self.dim, lambda X: predictor.predict(X, "unit"), self.W, gmin, acq
+                self.dim, lambda X: predictor.predict(X, "unit", fast=self.fast_predict), self.W, gmin, acq
             )
             return pop_x, "unit", np.arange(pop_x.shape[0]), pop_acq, pop_acq
 

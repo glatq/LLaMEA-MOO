@@ -8,8 +8,15 @@
 #
 # Run controls as for every benchmark in the paper: one thread per run, one run per
 # physical core, a 10 h limit per run.
+#
+# fast_predict: MOEA/D-EGO's ideal-point estimation and search (blocks 7 and 9 as S)
+# predict each offspring on its own, ~30,000 GP predictions per iteration. With
+# true they use closed-form predictions from the same fitted models
+# (ablation/fast_predict.py), equal to float32 rounding and ~10x faster per run.
+# DDMTOLab's MOEA/D-EGO itself (stage=baseline) always runs unchanged.
 budget: 400
-output_dir: benchmark_results/ablation
+fast_predict: true
+output_dir: benchmark_results/ablation_fast
 pilot_seeds: [1]
 path_seeds: [1, 2, 3, 4, 5]
 validation_seeds: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]

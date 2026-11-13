@@ -261,6 +261,20 @@ validation seeds, which played no part in choosing the path. All stages resume w
 stopped. The run controls are those of every benchmark above; the settings are in
 `conf/ablation.yaml`.
 
+DDMTOLab's MOEA/D-EGO estimates the ideal point and searches for candidates with a
+steady-state MOEA/D. It predicts each offspring with its own call to BoTorch, about 30,000
+calls per iteration. That call overhead takes most of a run, which on this machine lasts up
+to three hours per problem. With `fast_predict: true`, the setting used for the
+ablation, these two loops use `ablation/fast_predict.py`. It computes the same GP posterior
+in closed form from the models DDMTOLab has already fitted, and calls the functions that
+`scipy.stats.norm` uses internally. It fits nothing and changes no
+setting. Its predictions equal BoTorch's to BoTorch's own float32 rounding, and its
+expected Tchebycheff improvement equals DDMTOLab's bit for bit. A run is about ten
+times faster. Because MOEA/D's replacement decisions compare these values, a fast run can
+still drift from DDMTOLab's run with the same seed, so `stage=baseline` runs DDMTOLab's
+own MOEA/D-EGO for comparison with the fast `SSSSSSSSSS`. With `fast_predict: false`, the
+exactness tests above hold. An output directory holds runs of one setting only.
+
 ### 3. Re-running the LLaMEA search
 
 The generation phase is the expensive part and needs LLM credentials; the commands are

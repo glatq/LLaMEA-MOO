@@ -21,7 +21,7 @@ WEIGHTS = [5, 1, 9, 3, 3, 7, 2, 8, 4, 6]  # blocks 4 and 5 are equally important
 
 
 def _fake_run(task):
-    algo, spec, seed, budget, threads, run_timeout = task
+    algo, spec, seed, budget, threads, run_timeout, fast = task
     hv = sum(w for w, c in zip(WEIGHTS, algo) if c == "T") + (100 if spec.name == "b" else 0)
     basic = SimpleNamespace(hv_hist=[0.0, float(hv)], execution_time=0.01, n_evals=2,
                             timed_out=False, diagnostics={}, error=None, error_type=None)
@@ -34,9 +34,9 @@ def runner(tmp_path, monkeypatch):
     monkeypatch.setattr(ra, "_executor", lambda n: cf.ThreadPoolExecutor(max_workers=n))
     monkeypatch.setattr(ra, "_write_environment", lambda *a, **k: None)
 
-    def go(stage):
+    def go(stage, fast_predict=False):
         cfg = OmegaConf.create({
-            "stage": stage, "budget": 2, "output_dir": str(tmp_path),
+            "stage": stage, "budget": 2, "output_dir": str(tmp_path), "fast_predict": fast_predict,
             "pilot_seeds": [1], "path_seeds": [1, 2], "validation_seeds": [3],
             "max_workers": 4, "threads_per_run": 1, "run_timeout": None,
             "problems": [{"name": "a", "dim": 2, "n_obj": 2, "ref_point": [1.0, 1.0]},
@@ -76,6 +76,13 @@ def test_runner_resumes_without_repeating_runs_or_decisions(runner):
     assert len(pd.read_csv(out / "path_log.csv")) == n_rows
 
 
+def test_runner_refuses_to_mix_exact_and_fast_runs(runner):
+    out = runner("pilot")
+    with pytest.raises(SystemExit, match="fast_predict"):
+        runner("pilot", fast_predict=True)
+    assert not pd.read_csv(out / "run_status_log.csv").FastPredict.any()
+
+
 def test_pilot_runs_the_ends_and_round_one_on_one_seed(runner):
     out = runner("pilot")
     status = pd.read_csv(out / "run_status_log.csv")
@@ -102,7 +109,7 @@ def test_one_real_run_goes_through_the_benchmark_run_function():
     from llamevol.evaluator.multiobj_evaluator import MOOProblemSpec
 
     spec = MOOProblemSpec(name="zdt1", dim=3, n_obj=2, ref_point=[1.1, 7.2])
-    algo, problem, seed, basic = ra._run((END, spec, 2, 20, 1, None))
+    algo, problem, seed, basic = ra._run((END, spec, 2, 20, 1, None, False))
     assert (algo, problem, seed) == (END, "zdt1", 2)
     assert basic.error is None and basic.n_evals == 20
     assert len(basic.hv_hist) == 20 and basic.torch_threads == 1
