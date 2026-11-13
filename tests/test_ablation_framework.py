@@ -240,10 +240,13 @@ def test_fast_predictor_matches_ddmtolab_gp_evaluate(n_obj, n_points, scale):
     u1, s1 = fast(T)
     tol = 1e-3 * Y.std(axis=0)  # BoTorch predicts in float32
     assert np.all(np.abs(u0 - u1) <= tol) and np.all(np.abs(s0 - s1) <= tol)
-    # one point at a time, as the inner loops call it (its own code path)
+    # one point at a time, as the inner loops call it (its own code path): as close
+    # to DDMTOLab as the batch path, and equal to it up to summation order (the
+    # mean's sum over training points cancels; ~3e-11 relative with OpenBLAS)
     for i in list(range(5)) + [len(T) - 1]:
         u_one, s_one = fast(T[i][None, :])
-        assert np.allclose(u_one, u1[i], rtol=1e-12, atol=0) and np.allclose(s_one, s1[i], rtol=1e-12, atol=0)
+        assert np.all(np.abs(u_one[0] - u0[i]) <= tol) and np.all(np.abs(s_one[0] - s0[i]) <= tol)
+        assert np.allclose(u_one, u1[i], rtol=1e-9, atol=0) and np.allclose(s_one, s1[i], rtol=1e-9, atol=0)
 
 
 @pytest.mark.parametrize("fallback_kernel", [False, True])
