@@ -249,7 +249,7 @@ numpy >= 2 pin conflicts with this environment; its MOEA/D-EGO runs unchanged on
 ```bash
 pip install --no-deps ddmtolab==1.0.10
 python -m ablation.run_ablation stage=pilot      # both ends + round 1 of both directions, seed 1
-python -m ablation.run_ablation stage=path       # both ablation paths, seeds 1-5
+python -m ablation.run_ablation stage=path       # both ablation paths, seeds 1-5 (reuses the pilot's runs)
 python -m ablation.run_ablation stage=validate   # the paths' configurations, seeds 6-15
 python -m ablation.run_ablation stage=baseline   # DDMTOLab's MOEA/D-EGO itself, seeds 1-5
 ```
@@ -273,7 +273,8 @@ expected Tchebycheff improvement equals DDMTOLab's bit for bit. A run is about t
 times faster. Because MOEA/D's replacement decisions compare these values, a fast run can
 still drift from DDMTOLab's run with the same seed, so `stage=baseline` runs DDMTOLab's
 own MOEA/D-EGO for comparison with the fast `SSSSSSSSSS`. With `fast_predict: false`, the
-exactness tests above hold. An output directory holds runs of one setting only.
+exactness tests above hold. An output directory holds runs of one setting only; the
+baseline's runs are DDMTOLab's own code and are logged as exact (`FastPredict` false).
 
 ### 3. Re-running the LLaMEA search
 

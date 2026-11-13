@@ -22,7 +22,10 @@ the benchmark's columns, with the configuration string as ``Algorithm``.
 
 ``fast_predict`` (config) makes MOEA/D-EGO's two inner loops use closed-form
 predictions from the fitted models (``ablation.fast_predict``). An output directory
-holds runs of one setting only; the runner refuses to mix them.
+holds runs of one setting only; the runner refuses to mix them. The baseline is
+DDMTOLab's own code, always exact, and is logged with ``FastPredict`` false.
+
+The pilot's runs are the seed-1 runs of round 1, so ``path`` reuses them.
 """
 
 import concurrent.futures as cf
@@ -90,7 +93,8 @@ class Logs:
         if self.status.exists():
             st = pd.read_csv(self.status)
             done = st["FastPredict"].astype(bool) if "FastPredict" in st else pd.Series(False, index=st.index)
-            if (done != self.fast_predict).any():
+            modular = st["Algorithm"] != BASELINE  # DDMTOLab's own runs are always exact
+            if (done[modular] != self.fast_predict).any():
                 raise SystemExit(
                     f"{self.status} holds runs with fast_predict={not self.fast_predict}; "
                     f"use another output_dir for fast_predict={self.fast_predict}"
@@ -119,7 +123,7 @@ class Logs:
         self._append(self.status, [{
             "Algorithm": algo, "Problem": problem, "Repeat": seed,
             "Evaluations": getattr(basic, "n_evals", None), "FinalHV": final,
-            "FastPredict": self.fast_predict,
+            "FastPredict": self.fast_predict and algo != BASELINE,
             "TimedOut": bool(getattr(basic, "timed_out", False)),
             "AskFallbacks": diag.get("ask_fallbacks"), "ErrorType": basic.error_type,
             "Error": (str(basic.error)[:300] if basic.error else None),
