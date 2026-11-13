@@ -19,6 +19,10 @@ Every run goes through the benchmark's own per-run function
 (``multiobj_evaluator._run_single_moo_rep``): one thread per run, one run per
 physical core, the per-run time limit, HV after every evaluation. The logs have
 the benchmark's columns, with the configuration string as ``Algorithm``.
+
+``fast_predict`` (config) makes MOEA/D-EGO's two inner loops use closed-form
+predictions from the fitted models (``ablation.fast_predict``). An output directory
+holds runs of one setting only; the runner refuses to mix them.
 """
 
 import concurrent.futures as cf
@@ -55,12 +59,13 @@ MODULAR_CODE = (
 # ------------------------------------------------------------------ one run
 def _run(task):
     """Worker: one (algorithm, problem, seed) run. Returns the run result."""
-    algo, spec, seed, budget, threads, run_timeout = task
+    algo, spec, seed, budget, threads, run_timeout, fast = task
     if algo == BASELINE:
         code = (ROOT / "MO bench" / "ddmtolab_moead_ego.py").read_text()
         cls_name, kwargs = "DDMTOLabMOEADEGOWrapper", {"seed": seed}
     else:
-        code, cls_name, kwargs = MODULAR_CODE, "ModularMOEAD", {"config": algo, "seed": seed}
+        code, cls_name = MODULAR_CODE, "ModularMOEAD"
+        kwargs = {"config": algo, "seed": seed, "fast_predict": fast}
     basic = _run_single_moo_rep(
         spec, seed - 1, budget, code, cls_name,
         cls=None, cls_init_kwargs=kwargs, cls_call_kwargs=None, injector=None,
@@ -74,15 +79,22 @@ def _run(task):
 class Logs:
     """Append-only CSV logs in ``output_dir`` (benchmark schema)."""
 
-    def __init__(self, output_dir):
+    def __init__(self, output_dir, fast_predict=False):
         self.dir = pathlib.Path(output_dir)
         self.dir.mkdir(parents=True, exist_ok=True)
+        self.fast_predict = bool(fast_predict)
         self.hv = self.dir / "hv_benchmark_log.csv"
         self.runtime = self.dir / "runtime_log.csv"
         self.status = self.dir / "run_status_log.csv"
         self.final = {}  # (algo, problem, seed) -> final HV
         if self.status.exists():
             st = pd.read_csv(self.status)
+            done = st["FastPredict"].astype(bool) if "FastPredict" in st else pd.Series(False, index=st.index)
+            if (done != self.fast_predict).any():
+                raise SystemExit(
+                    f"{self.status} holds runs with fast_predict={not self.fast_predict}; "
+                    f"use another output_dir for fast_predict={self.fast_predict}"
+                )
             for r in st.itertuples():
                 self.final[(r.Algorithm, r.Problem, int(r.Repeat))] = r.FinalHV
 
@@ -107,6 +119,7 @@ class Logs:
         self._append(self.status, [{
             "Algorithm": algo, "Problem": problem, "Repeat": seed,
             "Evaluations": getattr(basic, "n_evals", None), "FinalHV": final,
+            "FastPredict": self.fast_predict,
             "TimedOut": bool(getattr(basic, "timed_out", False)),
             "AskFallbacks": diag.get("ask_fallbacks"), "ErrorType": basic.error_type,
             "Error": (str(basic.error)[:300] if basic.error else None),
@@ -145,7 +158,8 @@ def run(cfg):
     run_timeout = cfg.get("run_timeout", None)
     max_workers = cfg.get("max_workers", None) or physical_core_count()
     stage = cfg.stage
-    logs = Logs(cfg.output_dir)
+    fast = bool(cfg.get("fast_predict", False))
+    logs = Logs(cfg.output_dir, fast)
     _write_environment(logs.dir, cfg, max_workers, threads, run_timeout)
     seeds = list({"pilot": cfg.pilot_seeds, "path": cfg.path_seeds,
                   "validate": cfg.validation_seeds, "baseline": cfg.path_seeds}[stage])
@@ -170,7 +184,7 @@ def run(cfg):
                     for s in seeds:
                         key = (a, p.name, s)
                         if key not in logs.final and key not in queued:
-                            task = (a, p, s, budget, threads, run_timeout)
+                            task = (a, p, s, budget, threads, run_timeout, fast)
                             pending[pool.submit(_run, task)] = key
                             queued.add(key)
 

@@ -9,7 +9,10 @@ filter inside ``_opt_eti_fcm``. They are copied below with one change: the
 prediction function (and, for the MOEA/D-DE search, the acquisition function)
 is passed in as an argument. With DDMTOLab's own prediction and ETI passed in,
 they execute the same operations in the same order as the originals, which the
-tests check.
+tests check. ``get_eti`` is DDMTOLab's ``_get_eti`` with ``scipy.stats.norm``'s cdf
+and pdf replaced by the functions norm evaluates inside them (``norm_cdf``,
+``norm_pdf``): the same values bit for bit, without norm's per-call overhead,
+which matters because the MOEA/D-DE search calls it once per offspring.
 
 The copied code is from DDMTOLab (https://github.com/JiangtaoShen/DDMTOLab),
 distributed under the MIT License:
@@ -41,11 +44,23 @@ from types import SimpleNamespace
 
 import numpy as np
 from scipy.spatial.distance import cdist
-from scipy.stats import norm
+from scipy.special import ndtr
 
 L1 = 80  # DDMTOLab _L1: maximum points per local GP
 L2 = 20  # DDMTOLab _L2: archive growth per extra cluster
 NUM_WEIGHTS = {2: 200, 3: 210, 4: 295, 5: 456, 6: 462}  # DDMTOLab _opt_eti_fcm
+
+_NORM_PDF_C = np.sqrt(2 * np.pi)  # scipy.stats._continuous_distns._norm_pdf_C
+
+
+def norm_cdf(x):
+    """``scipy.stats.norm.cdf(x)`` for arrays: what norm computes inside (``ndtr``)."""
+    return ndtr(x)
+
+
+def norm_pdf(x):
+    """``scipy.stats.norm.pdf(x)`` for arrays: norm's own ``_norm_pdf`` expression."""
+    return np.exp(-x**2 / 2.0) / _NORM_PDF_C
 
 
 def ddmtolab():
@@ -222,6 +237,53 @@ def filter_candidates(candidate_x, cand_acq, train_x, D):
     return np.empty((0, D)), np.empty(0)
 
 
+def get_eti(u, sigma, ref_vecs, gbest, z):
+    """DDMTOLab ``_get_eti`` (copy; norm's cdf and pdf called directly)."""
+    # Weighted Gaussian: g_j ~ N(w_j*(u_j-z_j), (w_j*sigma_j)^2)
+    g_mu = ref_vecs * (u - z)  # (N, M)
+    g_sig = ref_vecs * sigma  # (N, M)
+    g_sig = np.maximum(g_sig, 0)
+    g_sig2 = g_sig ** 2  # (N, M)
+
+    # MMA: approximate max of M Gaussians recursively
+    mma_mean = g_mu[:, 0].copy()
+    mma_sigma2 = g_sig2[:, 0].copy()
+
+    for j in range(1, g_mu.shape[1]):
+        mu_pair = np.column_stack([mma_mean, g_mu[:, j]])
+        sig2_pair = np.column_stack([mma_sigma2, g_sig2[:, j]])
+        mma_mean, mma_sigma2 = _app_max_of_2_gaussian(mu_pair, sig2_pair)
+
+    mma_std = np.sqrt(np.maximum(mma_sigma2, 1e-20))
+    tau = (gbest - mma_mean) / mma_std
+
+    # ETI = (gbest - mma_mean) * Phi(tau) + mma_std * phi(tau)
+    eti = (gbest - mma_mean) * norm_cdf(tau) + mma_std * norm_pdf(tau)
+    return eti
+
+
+def _app_max_of_2_gaussian(mu, sig2):
+    """DDMTOLab ``_app_max_of_2_gaussian`` (copy; norm's cdf and pdf called directly)."""
+    tau = np.sqrt(np.maximum(sig2[:, 0] + sig2[:, 1], 1e-20))
+    alpha = (mu[:, 0] - mu[:, 1]) / tau
+
+    phi_alpha = norm_pdf(alpha)
+    Phi_alpha = norm_cdf(alpha)
+    Phi_neg_alpha = norm_cdf(-alpha)
+
+    # Eq. 18: mean of max
+    y = mu[:, 0] * Phi_alpha + mu[:, 1] * Phi_neg_alpha + tau * phi_alpha
+
+    # Eq. 19: second moment (corrected as per Appendix B)
+    s2 = ((mu[:, 0] ** 2 + sig2[:, 0]) * Phi_alpha +
+          (mu[:, 1] ** 2 + sig2[:, 1]) * Phi_neg_alpha +
+          (mu[:, 0] + mu[:, 1]) * tau * phi_alpha)
+    s2 = s2 - y ** 2
+    s2 = np.maximum(s2, 0)
+
+    return y, s2
+
+
 # ------------------------------------------------------------- our extension
 def augmented_tchebycheff_moments(u, sigma, ref_vecs, z, rho):
     """Mean and variance of the augmented Tchebycheff value under the GP (rule a).
@@ -257,9 +319,9 @@ def augmented_tchebycheff_moments(u, sigma, ref_vecs, z, rho):
         v_k = cov[:, k, k]
         tau = np.sqrt(np.maximum(v_y + v_k - 2.0 * c_y[:, k], 1e-20))
         alpha = (m_y - b_mu[:, k]) / tau
-        phi = norm.pdf(alpha)
-        Phi = norm.cdf(alpha)
-        Phi_n = norm.cdf(-alpha)
+        phi = norm_pdf(alpha)
+        Phi = norm_cdf(alpha)
+        Phi_n = norm_cdf(-alpha)
         new_m = m_y * Phi + b_mu[:, k] * Phi_n + tau * phi
         second = (
             (m_y ** 2 + v_y) * Phi
@@ -277,4 +339,4 @@ def eti_augmented(u, sigma, ref_vecs, gbest, z, rho):
     m_y, v_y = augmented_tchebycheff_moments(u, sigma, ref_vecs, z, rho)
     std = np.sqrt(np.maximum(v_y, 1e-20))
     t = (gbest - m_y) / std
-    return (gbest - m_y) * norm.cdf(t) + std * norm.pdf(t)
+    return (gbest - m_y) * norm_cdf(t) + std * norm_pdf(t)

@@ -221,3 +221,98 @@ def test_every_single_change_from_the_end_runs(block, config):
 def test_mixed_configurations_run_to_the_budget(config):
     pytest.importorskip("ddmtolab")
     _run(config)
+
+
+# ------------------------------------------- fast predictions (fast_predict=True)
+@pytest.mark.parametrize("n_obj, n_points, scale", [(2, 60, 1.0), (3, 130, 1.0), (2, 130, 0.01)])
+def test_fast_predictor_matches_ddmtolab_gp_evaluate(n_obj, n_points, scale):
+    from ablation.fast_predict import ddmtolab_fcm_predictor
+
+    mod = pytest.importorskip("ddmtolab.Algorithms.STMO.MOEA_D_EGO")
+    rng = np.random.default_rng(4)
+    X = rng.random((n_points, 4))
+    Y = scale * np.array([_problem(n_obj)(x) for x in X])
+    seed_everything(0)
+    models, centers = mod._build_gp_models_fcm(X, Y)  # 130 points: three local models
+    fast = ddmtolab_fcm_predictor(models, centers)
+    T = np.vstack([rng.random((400, 4)), X[:20]])  # also at training points (variance floor)
+    u0, s0 = mod._gp_evaluate_fcm(T, models, centers)
+    u1, s1 = fast(T)
+    tol = 1e-3 * Y.std(axis=0)  # BoTorch predicts in float32
+    assert np.all(np.abs(u0 - u1) <= tol) and np.all(np.abs(s0 - s1) <= tol)
+    # one point at a time, as the inner loops call it (its own code path)
+    for i in list(range(5)) + [len(T) - 1]:
+        u_one, s_one = fast(T[i][None, :])
+        assert np.allclose(u_one, u1[i], rtol=1e-12, atol=0) and np.allclose(s_one, s1[i], rtol=1e-12, atol=0)
+
+
+@pytest.mark.parametrize("fallback_kernel", [False, True])
+def test_fast_predictor_matches_moead_ei_hybrid_gp(fallback_kernel):
+    from sklearn.gaussian_process import GaussianProcessRegressor
+    from sklearn.gaussian_process.kernels import Matern, WhiteKernel
+
+    from ablation.fast_predict import hybrid_predictor
+
+    rng = np.random.default_rng(5)
+    dim = 5
+    bounds = np.array([[-2.0] * dim, [3.0] * dim])
+    X = -2 + 5 * rng.random((90, dim))
+    Y = np.array([_problem(3, -2.0, 3.0)(x) for x in X])
+    fitter = hybrid_class()(budget=100, dim=dim, bounds=bounds, **HYBRID_TUNED)
+    fitter.n_obj = 3
+    fitter._fit_model(X, Y)
+    if fallback_kernel:  # the Hybrid's fallback when its first fit fails
+        Xs = fitter.scaler_X.transform(X)
+        fitter.models = [
+            GaussianProcessRegressor(kernel=Matern(length_scale=[1.0] * dim, nu=0.5) + WhiteKernel(1e-5),
+                                     normalize_y=True, random_state=42 + i).fit(Xs, Y[:, i])
+            for i in range(3)
+        ]
+    fast = hybrid_predictor(fitter.scaler_X, fitter.models)
+    T = np.vstack([-2 + 5 * rng.random((300, dim)), X[:10]])
+    Ts = fitter.scaler_X.transform(T)
+    mu0 = np.array([m.predict(Ts, return_std=True)[0] for m in fitter.models]).T
+    sd0 = np.array([m.predict(Ts, return_std=True)[1] for m in fitter.models]).T
+    mu1, sd1 = fast(T)
+    assert np.allclose(mu0, mu1, rtol=1e-8, atol=1e-10 * np.abs(Y).max())
+    assert np.allclose(sd0, sd1, rtol=1e-6, atol=1e-8 * np.abs(Y).max())
+
+
+def test_fast_predict_leaves_the_end_configuration_exact():
+    bounds = np.array([[0.0] * 4, [1.0] * 4])
+    g1, X1, Y1 = _recorded(_problem(2))
+    np.random.seed(7)
+    hybrid_class()(budget=45, dim=4, bounds=bounds, **HYBRID_TUNED)(g1)
+    g2, X2, Y2 = _recorded(_problem(2))
+    alg = ModularMOEAD(45, 4, bounds, config=END, seed=7, fast_predict=True)
+    alg(g2)
+    assert _same(X1, X2) and _same(Y1, Y2)
+    assert alg.diagnostics["fast_predict"] is False  # no S inner loop in this configuration
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("config", [START, "TTTTTTSTTT", "TTTTTTTTST", "STTTTTSTST", "SSTSSSSSSS"])
+def test_fast_predict_configurations_run_to_the_budget(config):
+    pytest.importorskip("ddmtolab")
+    dim = 3
+    g, X, Y = _recorded(_problem(3))
+    alg = ModularMOEAD(11 * dim - 1 + 10, dim, np.array([[0.0] * dim, [1.0] * dim]),
+                       config=config, seed=1, fast_predict=True)
+    F, Xr = alg(g)
+    assert len(X) == 11 * dim - 1 + 10 and np.all(np.isfinite(F))
+    assert alg.diagnostics["fast_predict"] is True
+
+
+def test_copied_eti_is_ddmtolab_eti_bit_for_bit():
+    from scipy.stats import norm
+
+    mod = pytest.importorskip("ddmtolab.Algorithms.STMO.MOEA_D_EGO")
+    x = np.concatenate([np.linspace(-40, 40, 2001), [0.0, -0.0, np.inf, -np.inf, 1e-300, -1e-300]])
+    assert np.array_equal(ego.norm_cdf(x), norm.cdf(x)) and np.array_equal(ego.norm_pdf(x), norm.pdf(x))
+    rng = np.random.default_rng(6)
+    for m in (2, 3):
+        u, s = rng.normal(size=(500, m)), np.abs(rng.normal(size=(500, m))) * rng.random((500, 1)) ** 4
+        s[:20] = 0.0  # zero predicted std
+        W = rng.dirichlet(np.ones(m), size=500)
+        z, g = rng.normal(size=m) - 1, rng.normal(size=500)
+        assert np.array_equal(ego.get_eti(u, s, W, g, z), mod._get_eti(u, s, W, g, z))
