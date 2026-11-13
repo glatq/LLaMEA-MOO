@@ -83,6 +83,25 @@ def test_runner_refuses_to_mix_exact_and_fast_runs(runner):
     assert not pd.read_csv(out / "run_status_log.csv").FastPredict.any()
 
 
+def test_baseline_runs_are_logged_as_exact_next_to_fast_runs(runner):
+    out = runner("baseline", fast_predict=True)
+    status = pd.read_csv(out / "run_status_log.csv")
+    assert set(status.Algorithm) == {ra.BASELINE} and not status.FastPredict.any()
+    runner("pilot", fast_predict=True)  # DDMTOLab's exact runs do not block fast ones
+    status = pd.read_csv(out / "run_status_log.csv")
+    assert status.loc[status.Algorithm != ra.BASELINE, "FastPredict"].all()
+
+
+def test_path_reuses_the_pilot_runs(runner):
+    out = runner("pilot")
+    pilot = pd.read_csv(out / "run_status_log.csv")
+    runner("path")
+    status = pd.read_csv(out / "run_status_log.csv")
+    assert status.duplicated(["Algorithm", "Problem", "Repeat"]).sum() == 0
+    assert set(map(tuple, pilot[["Algorithm", "Problem", "Repeat"]].values)) <= set(
+        map(tuple, status[["Algorithm", "Problem", "Repeat"]].values))
+
+
 def test_pilot_runs_the_ends_and_round_one_on_one_seed(runner):
     out = runner("pilot")
     status = pd.read_csv(out / "run_status_log.csv")
