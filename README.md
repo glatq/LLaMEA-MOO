@@ -302,6 +302,21 @@ with its own call. With `fast_predict: true` it predicts each generation in one 
 same models and formulas, in a different floating-point summation order, so a fast run can
 drift from the exact one as above.
 
+**Analysing an ablation.** `paper_reproduction/analyze_ablation.py` reads an ablation's logs
+and writes the path decisions, the effect of each step on the validation seeds, every
+configuration on the paths against the end algorithm, the comparison with DDMTOLab's own
+start algorithm, and two figures. Per problem it uses the two-sided Mann-Whitney U test over
+the seeds; across problems, the two-sided Wilcoxon signed-rank test on the relative
+differences of mean final HV, with Holm's correction over the steps of a direction. The logs
+of the MOEA/D-EGO -> MOEAD-EI Hybrid ablation are in `paper_data/ablation_moead/`: every
+run's final HV (`run_status_log.csv`), run times and path decisions, without the
+per-evaluation HV histories (150 MB).
+
+```bash
+python paper_reproduction/analyze_ablation.py results=paper_data/ablation_moead out=paper_figures/ablation_moead
+python paper_reproduction/analyze_ablation.py config=conf/ablation_isei.yaml   # benchmark_results/ablation_isei
+```
+
 ### 3. Re-running the LLaMEA search
 
 The generation phase is the expensive part and needs LLM credentials; the commands are
@@ -384,6 +399,7 @@ batch. Both are marked in the source. No algorithmic component was altered.
 | `paper_data/benchmark_timing_stage{2,3}/` | timing pass: run times of every Phase 2/3 algorithm under the run controls |
 | `paper_data/benchmark_hpo_default/` | HPO ablation, LLM-default hyperparameters |
 | `paper_data/benchmark_moead_{tuned,untuned}/` | MOEAD-EI Hybrid, SMAC-tuned vs defaults |
+| `paper_data/ablation_moead/` | component ablation MOEA/D-EGO -> MOEAD-EI Hybrid: final HV, run times, path decisions |
 | `paper_data/search_history.csv` | per-run search trace for all nine runs |
 | `paper_data/lineage.csv` | recorded ancestry of the selected designs |
 | `paper_reproduction/` | analysis and plotting scripts |
