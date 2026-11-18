@@ -5,7 +5,7 @@
   "physical_cores": 8,
   "logical_cores": 16,
   "python": "3.10.20",
-  "git_commit": "d72769c1e25175f52569eb3c2ad11eb2121b10f9",
+  "git_commit": "7f92aba212ab9201d018e79488a1245d539ca62a",
   "max_workers": 8,
   "threads_per_run": 1,
   "run_timeout_s": null,
