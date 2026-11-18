@@ -1,6 +1,10 @@
-"""Run the Fawcett & Hoos ablation between MOEA/D-EGO and MOEAD-EI Hybrid.
+"""Run a Fawcett & Hoos ablation between two algorithms.
 
     python -m ablation.run_ablation stage=<stage> [config=conf/ablation.yaml] [key=value ...]
+
+``pair`` (config) picks the ablation: ``moead`` (default), MOEA/D-EGO -> MOEAD-EI
+Hybrid (``conf/ablation.yaml``), or ``isei``, ParEGO -> Improved-Scalarized-EI
+(``conf/ablation_isei.yaml``).
 
 Stages (each resumable: runs already in ``run_status_log.csv`` are skipped):
 
@@ -12,8 +16,9 @@ Stages (each resumable: runs already in ``run_status_log.csv`` are skipped):
                 ``path_log.csv``;
 * ``validate``  the configurations on both paths, on ``validation_seeds`` (the
                 numbers reported, free of the bias of picking the best of a round);
-* ``baseline``  DDMTOLab's MOEA/D-EGO itself (``MO bench/ddmtolab_moead_ego.py``),
-                on ``path_seeds``, for the main tables.
+* ``baseline``  the start algorithm as DDMTOLab implements it, run unchanged
+                (``MO bench/ddmtolab_moead_ego.py`` or ``ddmtolab_parego.py``), on
+                ``path_seeds``.
 
 Every run goes through the benchmark's own per-run function
 (``multiobj_evaluator._run_single_moo_rep``): one thread per run, one run per
@@ -21,9 +26,11 @@ physical core, the per-run time limit, HV after every evaluation. The logs have
 the benchmark's columns, with the configuration string as ``Algorithm``.
 
 ``fast_predict`` (config) makes MOEA/D-EGO's two inner loops use closed-form
-predictions from the fitted models (``ablation.fast_predict``). An output directory
-holds runs of one setting only; the runner refuses to mix them. The baseline is
-DDMTOLab's own code, always exact, and is logged with ``FastPredict`` false.
+predictions from the fitted models (``ablation.fast_predict``), or ISEI's genetic
+algorithm predict a generation per call (``ablation.parego_isei``). An output
+directory holds runs of one setting only; the runner refuses to mix them. The
+baseline is DDMTOLab's own code, always exact, and is logged with ``FastPredict``
+false.
 
 The pilot's runs are the seed-1 runs of round 1, so ``path`` reuses them.
 """
@@ -43,7 +50,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from omegaconf import OmegaConf  # noqa: E402
 
-from ablation.config import END, START, neighbours  # noqa: E402
+from ablation.config import END, ISEI_END, ISEI_START, START, neighbours  # noqa: E402
 from llamevol.evaluator.multiobj_evaluator import (  # noqa: E402
     MOOProblemSpec,
     _run_single_moo_rep,
@@ -51,23 +58,38 @@ from llamevol.evaluator.multiobj_evaluator import (  # noqa: E402
 )
 
 BASELINE = "DDMTOLabMOEADEGO"
-DIRECTIONS = {"forward": (START, END), "backward": (END, START)}
-MODULAR_CODE = (
-    "import sys\n"
-    f"sys.path.insert(0, {str(ROOT)!r})\n"
-    "from ablation.modular import ModularMOEAD\n"
-)
+ISEI_BASELINE = "DDMTOLabParEGO"
+BASELINES = (BASELINE, ISEI_BASELINE)
+
+# The two ablations: their ends, the modular algorithm and DDMTOLab's start algorithm.
+PAIRS = {
+    "moead": dict(start=START, end=END, module="ablation.modular", cls="ModularMOEAD",
+                  baseline=BASELINE, baseline_file="ddmtolab_moead_ego.py",
+                  baseline_cls="DDMTOLabMOEADEGOWrapper"),
+    "isei": dict(start=ISEI_START, end=ISEI_END, module="ablation.parego_isei", cls="ModularParEGOISEI",
+                 baseline=ISEI_BASELINE, baseline_file="ddmtolab_parego.py",
+                 baseline_cls="DDMTOLabParEGOWrapper"),
+}
+
+
+def _modular_code(pair):
+    p = PAIRS[pair]
+    return f"import sys\nsys.path.insert(0, {str(ROOT)!r})\nfrom {p['module']} import {p['cls']}\n"
 
 
 # ------------------------------------------------------------------ one run
 def _run(task):
     """Worker: one (algorithm, problem, seed) run. Returns the run result."""
-    algo, spec, seed, budget, threads, run_timeout, fast = task
-    if algo == BASELINE:
-        code = (ROOT / "MO bench" / "ddmtolab_moead_ego.py").read_text()
-        cls_name, kwargs = "DDMTOLabMOEADEGOWrapper", {"seed": seed}
+    algo, spec, seed, budget, threads, run_timeout, fast, *rest = task
+    pair = rest[0] if rest else "moead"
+    p = PAIRS[pair]
+    if algo == p["baseline"]:
+        code = (ROOT / "MO bench" / p["baseline_file"]).read_text()
+        cls_name, kwargs = p["baseline_cls"], {"seed": seed}
+        if algo == ISEI_BASELINE:  # DDMTOLab's ParEGO builds its weights first
+            kwargs["n_obj"] = spec.n_obj
     else:
-        code, cls_name = MODULAR_CODE, "ModularMOEAD"
+        code, cls_name = _modular_code(pair), p["cls"]
         kwargs = {"config": algo, "seed": seed, "fast_predict": fast}
     basic = _run_single_moo_rep(
         spec, seed - 1, budget, code, cls_name,
@@ -93,7 +115,7 @@ class Logs:
         if self.status.exists():
             st = pd.read_csv(self.status)
             done = st["FastPredict"].astype(bool) if "FastPredict" in st else pd.Series(False, index=st.index)
-            modular = st["Algorithm"] != BASELINE  # DDMTOLab's own runs are always exact
+            modular = ~st["Algorithm"].isin(BASELINES)  # DDMTOLab's own runs are always exact
             if (done[modular] != self.fast_predict).any():
                 raise SystemExit(
                     f"{self.status} holds runs with fast_predict={not self.fast_predict}; "
@@ -123,7 +145,7 @@ class Logs:
         self._append(self.status, [{
             "Algorithm": algo, "Problem": problem, "Repeat": seed,
             "Evaluations": getattr(basic, "n_evals", None), "FinalHV": final,
-            "FastPredict": self.fast_predict and algo != BASELINE,
+            "FastPredict": self.fast_predict and algo not in BASELINES,
             "TimedOut": bool(getattr(basic, "timed_out", False)),
             "AskFallbacks": diag.get("ask_fallbacks"), "ErrorType": basic.error_type,
             "Error": (str(basic.error)[:300] if basic.error else None),
@@ -163,6 +185,11 @@ def run(cfg):
     max_workers = cfg.get("max_workers", None) or physical_core_count()
     stage = cfg.stage
     fast = bool(cfg.get("fast_predict", False))
+    pair = cfg.get("pair", "moead")
+    if pair not in PAIRS:
+        raise SystemExit(f"pair must be one of {sorted(PAIRS)}, got {pair!r}")
+    start, end = PAIRS[pair]["start"], PAIRS[pair]["end"]
+    directions = {"forward": (start, end), "backward": (end, start)}
     logs = Logs(cfg.output_dir, fast)
     _write_environment(logs.dir, cfg, max_workers, threads, run_timeout)
     seeds = list({"pilot": cfg.pilot_seeds, "path": cfg.path_seeds,
@@ -188,21 +215,21 @@ def run(cfg):
                     for s in seeds:
                         key = (a, p.name, s)
                         if key not in logs.final and key not in queued:
-                            task = (a, p, s, budget, threads, run_timeout, fast)
+                            task = (a, p, s, budget, threads, run_timeout, fast, pair)
                             pending[pool.submit(_run, task)] = key
                             queued.add(key)
 
         state = {}
         if stage == "baseline":
-            submit([BASELINE])
+            submit([PAIRS[pair]["baseline"]])
         elif stage == "validate":
             path = pd.read_csv(logs.dir / "path_log.csv")
-            submit(sorted(set(path.loc[path.Chosen, "Candidate"]) | {START, END}))
+            submit(sorted(set(path.loc[path.Chosen, "Candidate"]) | {start, end}))
         else:
-            submit([START, END])
-            max_rounds = 1 if stage == "pilot" else len(START)
+            submit([start, end])
+            max_rounds = 1 if stage == "pilot" else len(start)
             state = {d: {"current": a, "target": b, "round": 1, "done": False}
-                     for d, (a, b) in DIRECTIONS.items()}
+                     for d, (a, b) in directions.items()}
             for s in state.values():
                 submit([c for _, c in neighbours(s["current"], s["target"])])
 

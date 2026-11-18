@@ -1,10 +1,15 @@
-"""Configuration strings of the modular algorithm.
+"""Configuration strings of the modular algorithms.
 
-A configuration names, for each of the ten blocks, which of the two algorithms it
-comes from: ``S`` (the start of the ablation path, MOEA/D-EGO as implemented in
-DDMTOLab) or ``T`` (the end of the path, the tuned MOEAD-EI Hybrid). It is written
-as a ten-letter string in block order, so ``SSSSSSSSSS`` is MOEA/D-EGO and
-``TTTTTTTTTT`` is MOEAD-EI Hybrid.
+A configuration names, for each block, which of the two algorithms it comes from:
+``S`` (the start of the ablation path) or ``T`` (the end). It is written as a
+string of S/T letters in block order.
+
+Two ablations use them:
+
+* MOEA/D-EGO as implemented in DDMTOLab (S) and the tuned MOEAD-EI Hybrid (T), ten
+  blocks (``BLOCKS``): ``SSSSSSSSSS`` is MOEA/D-EGO, ``TTTTTTTTTT`` the Hybrid;
+* ParEGO as implemented in DDMTOLab (S) and the tuned Improved-Scalarized-EI (T),
+  seven blocks (``ISEI_BLOCKS``): ``SSSSSSS`` is ParEGO, ``TTTTTTT`` ISEI.
 """
 
 BLOCKS = (
@@ -23,25 +28,40 @@ BLOCKS = (
 START = "S" * len(BLOCKS)  # MOEA/D-EGO
 END = "T" * len(BLOCKS)    # MOEAD-EI Hybrid
 
+ISEI_BLOCKS = (
+    "init",           # 1  initial design: Latin hypercube 11d-1 / Sobol 2d+1
+    "weights",        # 2  weight vectors: random from a uniform set / a Sobol set in turn
+    "scalarisation",  # 3  augmented Tchebycheff / weighted sum (each with its normalisation)
+    "modelled",       # 4  one GP on the scalarised value / one GP per objective
+    "gp",             # 5  BoTorch SingleTaskGP / scikit-learn Matern-5/2 + noise
+    "training",       # 6  all points / the most recent points
+    "search",         # 7  LogEI by BoTorch's optimiser / EI by ISEI's genetic algorithm
+)
 
-def parse_config(config: str) -> dict:
-    """Map a ten-letter S/T string to ``{block: "S" | "T"}``."""
+ISEI_START = "S" * len(ISEI_BLOCKS)  # ParEGO
+ISEI_END = "T" * len(ISEI_BLOCKS)    # Improved-Scalarized-EI
+
+
+def parse_config(config: str, blocks=BLOCKS) -> dict:
+    """Map an S/T string, one letter per block, to ``{block: "S" | "T"}``."""
     config = str(config).strip().upper()
-    if len(config) != len(BLOCKS) or set(config) - {"S", "T"}:
+    if len(config) != len(blocks) or set(config) - {"S", "T"}:
         raise ValueError(
-            f"config must be {len(BLOCKS)} letters of S/T in block order "
-            f"{BLOCKS}, got {config!r}"
+            f"config must be {len(blocks)} letters of S/T in block order "
+            f"{blocks}, got {config!r}"
         )
-    return dict(zip(BLOCKS, config))
+    return dict(zip(blocks, config))
 
 
 def neighbours(config: str, towards: str) -> list:
     """Configurations one block closer to ``towards`` (one ablation round).
 
-    Returns ``(block_index, config)`` pairs, in block order.
+    Returns ``(block_index, config)`` pairs, in block order. Works for either
+    ablation: both strings must be S/T letters of the same length.
     """
-    parse_config(config)
-    parse_config(towards)
+    config, towards = str(config).strip().upper(), str(towards).strip().upper()
+    if len(config) != len(towards) or set(config + towards) - {"S", "T"}:
+        raise ValueError(f"configs must be S/T strings of one length, got {config!r}, {towards!r}")
     out = []
     for i, (a, b) in enumerate(zip(config, towards)):
         if a != b:

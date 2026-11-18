@@ -21,7 +21,7 @@ WEIGHTS = [5, 1, 9, 3, 3, 7, 2, 8, 4, 6]  # blocks 4 and 5 are equally important
 
 
 def _fake_run(task):
-    algo, spec, seed, budget, threads, run_timeout, fast = task
+    algo, spec, seed, budget, threads, run_timeout, fast, *_ = task
     hv = sum(w for w, c in zip(WEIGHTS, algo) if c == "T") + (100 if spec.name == "b" else 0)
     basic = SimpleNamespace(hv_hist=[0.0, float(hv)], execution_time=0.01, n_evals=2,
                             timed_out=False, diagnostics={}, error=None, error_type=None)
@@ -34,9 +34,10 @@ def runner(tmp_path, monkeypatch):
     monkeypatch.setattr(ra, "_executor", lambda n: cf.ThreadPoolExecutor(max_workers=n))
     monkeypatch.setattr(ra, "_write_environment", lambda *a, **k: None)
 
-    def go(stage, fast_predict=False):
+    def go(stage, fast_predict=False, pair="moead"):
         cfg = OmegaConf.create({
             "stage": stage, "budget": 2, "output_dir": str(tmp_path), "fast_predict": fast_predict,
+            "pair": pair,
             "pilot_seeds": [1], "path_seeds": [1, 2], "validation_seeds": [3],
             "max_workers": 4, "threads_per_run": 1, "run_timeout": None,
             "problems": [{"name": "a", "dim": 2, "n_obj": 2, "ref_point": [1.0, 1.0]},
@@ -65,6 +66,19 @@ def test_paths_follow_block_importance_with_block_order_ties(runner):
     tie_rounds = path[path.Tie].groupby(["Direction", "Round"]).ChangedBlock.apply(sorted)
     assert all(blocks == [4, 5] for blocks in tie_rounds)
     assert len(tie_rounds) == 2
+
+
+def test_isei_pair_runs_its_seven_block_paths(runner):
+    out = runner("path", pair="isei")
+    path = pd.read_csv(out / "path_log.csv")
+    weights = WEIGHTS[:7]  # the fake scores the first seven blocks
+    assert _blocks_in_order(path, "forward") == sorted(range(1, 8), key=lambda b: (-weights[b - 1], b))
+    assert _blocks_in_order(path, "backward") == sorted(range(1, 8), key=lambda b: (weights[b - 1], b))
+    assert path.groupby("Direction").size().tolist() == [28, 28]
+    assert path.Candidate.str.len().eq(7).all()
+    runner("baseline", pair="isei")
+    status = pd.read_csv(out / "run_status_log.csv")
+    assert ra.ISEI_BASELINE in set(status.Algorithm)
 
 
 def test_runner_resumes_without_repeating_runs_or_decisions(runner):

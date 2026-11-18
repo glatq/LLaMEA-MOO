@@ -276,6 +276,32 @@ own MOEA/D-EGO for comparison with the fast `SSSSSSSSSS`. With `fast_predict: fa
 exactness tests above hold. An output directory holds runs of one setting only; the
 baseline's runs are DDMTOLab's own code and are logged as exact (`FastPredict` false).
 
+**The second ablation: ParEGO and Improved-Scalarized-EI.** `ablation.ModularParEGOISEI`
+does the same between ParEGO as implemented in DDMTOLab 1.0.10 (`S`) and the tuned
+Improved-Scalarized-EI (`T`), from seven blocks (`ISEI_BLOCKS` in `ablation/config.py`):
+initial design, weights, scalarisation, what is modelled (one GP on the scalarised value or
+one per objective), the GP, its training data and the search (LogEI by BoTorch's optimiser or
+EI by ISEI's genetic algorithm). Under the same seed, `SSSSSSS` evaluates exactly the points
+DDMTOLab's ParEGO evaluates and `TTTTTTT` exactly those of Improved-Scalarized-EI
+(`tests/test_ablation_isei.py`). The mixing rules are in `ablation/parego_isei.py`; the
+two that need new pieces are Clark's moment matching for per-objective GPs under ParEGO's
+augmented Tchebycheff, and ISEI's scikit-learn GPs rebuilt in torch so that BoTorch's
+optimiser can search on them. `MO bench/ddmtolab_parego.py` runs DDMTOLab's ParEGO
+unchanged (it needs the number of objectives up front, `n_obj`). The stages and the
+protocol are the same, with `conf/ablation_isei.yaml`:
+
+```bash
+python -m ablation.run_ablation config=conf/ablation_isei.yaml stage=pilot
+python -m ablation.run_ablation config=conf/ablation_isei.yaml stage=path
+python -m ablation.run_ablation config=conf/ablation_isei.yaml stage=validate
+python -m ablation.run_ablation config=conf/ablation_isei.yaml stage=baseline   # DDMTOLab's ParEGO
+```
+
+ISEI's genetic algorithm scores 85 × 39 individuals per iteration and predicts each one
+with its own call. With `fast_predict: true` it predicts each generation in one call: the
+same models and formulas, in a different floating-point summation order, so a fast run can
+drift from the exact one as above.
+
 ### 3. Re-running the LLaMEA search
 
 The generation phase is the expensive part and needs LLM credentials; the commands are
@@ -349,8 +375,9 @@ batch. Both are marked in the source. No algorithmic component was altered.
 | `conf/benchmark_hpo_ablation.yaml` | LLM-default-hyperparameter benchmark |
 | `conf/benchmark_qehvi_{phase2,phase3,rerun}.yaml` | qEHVI baseline configurations |
 | `conf/benchmark_timing_phase{2,3}.yaml` | timing-pass configurations |
-| `conf/ablation.yaml` | component-ablation configuration |
-| `ablation/` | modular MOEA/D-EGO / MOEAD-EI Hybrid and the ablation runner |
+| `conf/ablation.yaml` | component-ablation configuration (MOEA/D-EGO -> MOEAD-EI Hybrid) |
+| `conf/ablation_isei.yaml` | component-ablation configuration (ParEGO -> Improved-Scalarized-EI) |
+| `ablation/` | the modular algorithms of both ablations and the ablation runner |
 | `conf/config_paper_search.yaml` | generation-phase (LLaMEA search) configuration |
 | `paper_data/benchmark_stage{1,2,3}/` | Phase 1–3 hypervolume, runtime and Pareto logs |
 | `paper_data/benchmark_qehvi_stage{2,3}/` | qEHVI hypervolume, runtime, Pareto and run-status logs |
