@@ -18,7 +18,12 @@ Stages (each resumable: runs already in ``run_status_log.csv`` are skipped):
                 numbers reported, free of the bias of picking the best of a round);
 * ``baseline``  the start algorithm as DDMTOLab implements it, run unchanged
                 (``MO bench/ddmtolab_moead_ego.py`` or ``ddmtolab_parego.py``), on
-                ``path_seeds``.
+                ``path_seeds``;
+* ``confirm``   two configurations fixed in the config before the runs
+                (``confirm.config`` against ``confirm.against``) on fresh seeds
+                (``confirm.seeds``, none of the path or validation seeds). Picking the
+                best path configuration on the validation seeds biases its numbers
+                upwards; these runs test it without that bias.
 
 Every run goes through the benchmark's own per-run function
 (``multiobj_evaluator._run_single_moo_rep``): one thread per run, one run per
@@ -192,8 +197,12 @@ def run(cfg):
     directions = {"forward": (start, end), "backward": (end, start)}
     logs = Logs(cfg.output_dir, fast)
     _write_environment(logs.dir, cfg, max_workers, threads, run_timeout)
-    seeds = list({"pilot": cfg.pilot_seeds, "path": cfg.path_seeds,
-                  "validate": cfg.validation_seeds, "baseline": cfg.path_seeds}[stage])
+    if stage == "confirm":
+        confirm = _confirm_settings(cfg, start)
+        seeds = confirm["seeds"]
+    else:
+        seeds = list({"pilot": cfg.pilot_seeds, "path": cfg.path_seeds,
+                      "validate": cfg.validation_seeds, "baseline": cfg.path_seeds}[stage])
     # Path decisions: the pilot's (one seed) are kept apart from the real ones.
     path_log = logs.dir / ("path_log_pilot.csv" if stage == "pilot" else "path_log.csv")
     decided = {}
@@ -222,6 +231,8 @@ def run(cfg):
         state = {}
         if stage == "baseline":
             submit([PAIRS[pair]["baseline"]])
+        elif stage == "confirm":
+            submit([confirm["config"], confirm["against"]])
         elif stage == "validate":
             path = pd.read_csv(logs.dir / "path_log.csv")
             submit(sorted(set(path.loc[path.Chosen, "Candidate"]) | {start, end}))
@@ -274,6 +285,24 @@ def run(cfg):
             advance()
 
 
+def _confirm_settings(cfg, start):
+    """``cfg.confirm`` checked: two configurations of the pair and seeds not used before."""
+    c = cfg.get("confirm", None)
+    if not c or not c.get("config") or not c.get("against") or not c.get("seeds"):
+        raise SystemExit("stage=confirm needs confirm.config, confirm.against and confirm.seeds")
+    configs = [str(c.config).strip().upper(), str(c.against).strip().upper()]
+    for x in configs:
+        if len(x) != len(start) or set(x) - {"S", "T"}:
+            raise SystemExit(f"confirm configurations must be {len(start)} letters of S/T, got {x!r}")
+    if configs[0] == configs[1]:
+        raise SystemExit("confirm.config and confirm.against must differ")
+    seeds = [int(x) for x in c.seeds]
+    used = set(cfg.path_seeds) | set(cfg.validation_seeds) | set(cfg.get("pilot_seeds", []) or [])
+    if set(seeds) & used:
+        raise SystemExit(f"confirm.seeds must be fresh; {sorted(set(seeds) & used)} are path or validation seeds")
+    return dict(config=configs[0], against=configs[1], seeds=seeds)
+
+
 def _executor(max_workers):
     """The pool the runs go to (tests swap in a thread pool)."""
     return cf.ProcessPoolExecutor(max_workers=max_workers)
@@ -292,6 +321,6 @@ if __name__ == "__main__":
     cli = OmegaConf.from_cli(sys.argv[1:])
     base = OmegaConf.load(cli.pop("config", str(ROOT / "conf" / "ablation.yaml")))
     cfg = OmegaConf.merge(base, cli)
-    if cfg.get("stage") not in ("pilot", "path", "validate", "baseline"):
-        raise SystemExit("stage=pilot|path|validate|baseline is required")
+    if cfg.get("stage") not in ("pilot", "path", "validate", "baseline", "confirm"):
+        raise SystemExit("stage=pilot|path|validate|baseline|confirm is required")
     run(cfg)

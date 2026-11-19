@@ -252,6 +252,7 @@ python -m ablation.run_ablation stage=pilot      # both ends + round 1 of both d
 python -m ablation.run_ablation stage=path       # both ablation paths, seeds 1-5 (reuses the pilot's runs)
 python -m ablation.run_ablation stage=validate   # the paths' configurations, seeds 6-15
 python -m ablation.run_ablation stage=baseline   # DDMTOLab's MOEA/D-EGO itself, seeds 1-5
+python -m ablation.run_ablation stage=confirm    # the confirmation (see below), seeds 16-35
 ```
 
 Each round of a path runs every configuration one block closer to the other end and keeps
@@ -260,6 +261,12 @@ block number). The decisions go to `path_log.csv`. The reported numbers come fro
 validation seeds, which played no part in choosing the path. All stages resume where they
 stopped. The run controls are those of every benchmark above; the settings are in
 `conf/ablation.yaml`.
+
+The best configuration on the paths is chosen on the validation seeds, so its numbers on
+those seeds are biased upwards. `stage=confirm` runs it against the end algorithm on 20
+seeds used nowhere else. Both configurations and the test (one two-sided Wilcoxon
+signed-rank test over the problems, alpha 0.05) are set in the `confirm` section of
+`conf/ablation.yaml` before the runs.
 
 DDMTOLab's MOEA/D-EGO estimates the ideal point and searches for candidates with a
 steady-state MOEA/D. It predicts each offspring with its own call to BoTorch, about 30,000
@@ -307,7 +314,8 @@ and writes the path decisions, the effect of each step on the validation seeds, 
 configuration on the paths against the end algorithm, the comparison with DDMTOLab's own
 start algorithm, and two figures. Per problem it uses the two-sided Mann-Whitney U test over
 the seeds; across problems, the two-sided Wilcoxon signed-rank test on the relative
-differences of mean final HV, with Holm's correction over the steps of a direction. The logs
+differences of mean final HV, with Holm's correction over the steps of a direction. Once
+the confirmation's runs are in the logs, it adds the confirmation (`confirm.csv`). The logs
 of the MOEA/D-EGO -> MOEAD-EI Hybrid ablation are in `paper_data/ablation_moead/`: every
 run's final HV (`run_status_log.csv`), run times and path decisions, without the
 per-evaluation HV histories (150 MB).

@@ -34,7 +34,7 @@ def runner(tmp_path, monkeypatch):
     monkeypatch.setattr(ra, "_executor", lambda n: cf.ThreadPoolExecutor(max_workers=n))
     monkeypatch.setattr(ra, "_write_environment", lambda *a, **k: None)
 
-    def go(stage, fast_predict=False, pair="moead"):
+    def go(stage, fast_predict=False, pair="moead", **extra):
         cfg = OmegaConf.create({
             "stage": stage, "budget": 2, "output_dir": str(tmp_path), "fast_predict": fast_predict,
             "pair": pair,
@@ -42,6 +42,7 @@ def runner(tmp_path, monkeypatch):
             "max_workers": 4, "threads_per_run": 1, "run_timeout": None,
             "problems": [{"name": "a", "dim": 2, "n_obj": 2, "ref_point": [1.0, 1.0]},
                          {"name": "b", "dim": 2, "n_obj": 2, "ref_point": [1.0, 1.0]}],
+            **extra,
         })
         ra.run(cfg)
         return tmp_path
@@ -147,3 +148,25 @@ def test_one_real_run_goes_through_the_benchmark_run_function():
     assert basic.error is None and basic.n_evals == 20
     assert len(basic.hv_hist) == 20 and basic.torch_threads == 1
     assert basic.diagnostics["config"] == END
+
+
+def test_confirm_runs_the_two_fixed_configurations_on_its_own_seeds(runner):
+    out = runner("path")
+    n_path = len(pd.read_csv(out / "path_log.csv"))
+    runner("confirm", confirm={"config": "tstssTSSTS", "against": END, "seeds": [4, 5, 6]})
+    status = pd.read_csv(out / "run_status_log.csv")
+    new = status[status.Repeat.isin([4, 5, 6])]
+    assert set(new.Algorithm) == {"TSTSSTSSTS", END}
+    assert len(new) == 2 * 2 * 3  # two configurations, two problems, three seeds
+    assert len(pd.read_csv(out / "path_log.csv")) == n_path  # no path decisions
+
+
+@pytest.mark.parametrize("confirm, message", [
+    (None, "confirm.config"),
+    ({"config": "TSTSSTSSTS", "against": END, "seeds": [2, 4]}, "fresh"),
+    ({"config": "TSTSSTSST", "against": END, "seeds": [4]}, "10 letters"),
+    ({"config": END, "against": END, "seeds": [4]}, "differ"),
+])
+def test_confirm_refuses_unfit_settings(runner, confirm, message):
+    with pytest.raises(SystemExit, match=message):
+        runner("confirm", confirm=confirm)

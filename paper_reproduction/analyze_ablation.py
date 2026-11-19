@@ -15,7 +15,9 @@ holding the runner's logs (default: the config's ``output_dir``). Writes to ``ou
                        configuration on the paths, per problem, validation seeds;
 * ``baseline.csv``     DDMTOLab's own start algorithm against the modular start and
                        the end, per problem, on the path seeds;
-* ``runtime.csv``      mean run time per configuration;
+* ``runtime.csv``      mean run time per configuration (path and validation seeds);
+* ``confirm.csv``      the confirmation (``confirm`` in the config), per problem, if
+                       its runs are complete;
 * ``summary.md``       the numbers quoted in the paper;
 * ``ablation_path.{pdf,png}``   median HV change from the start along both paths;
 * ``ablation_steps.{pdf,png}``  each step's HV change on each problem.
@@ -29,7 +31,8 @@ seeds, alpha 0.05. Across problems: the relative difference of mean final HV,
 ``(b - a) / |a|``, on each problem, and the two-sided Wilcoxon signed-rank test on
 those differences (relative, so that problems with a large HV scale do not
 dominate); Holm's correction over the steps of one direction, and over the
-configurations compared with the end.
+configurations compared with the end. The confirmation is one pre-specified test
+(no correction); its per-problem tests are corrected with Holm over the problems.
 """
 
 import pathlib
@@ -116,6 +119,14 @@ def path_configs(path_log, start, end):
     return out
 
 
+def _seeds(seeds):
+    """``16-35`` for a run of consecutive seeds, else the list."""
+    seeds = sorted(int(x) for x in seeds)
+    if len(seeds) > 2 and seeds == list(range(seeds[0], seeds[-1] + 1)):
+        return f"{seeds[0]}-{seeds[-1]}"
+    return ", ".join(map(str, seeds))
+
+
 def step_label(direction, block):
     return ("+" if direction == "forward" else "-") + block
 
@@ -181,6 +192,33 @@ def baseline_table(status, runtime, problems, seeds, pair):
     rt = runtime[runtime.Repeat.isin(seeds)].groupby("Algorithm").ExecutionTime.mean()
     return table, dict(start=s_stats, end=e_stats,
                        runtime={k: rt.get(k, np.nan) for k in (base, start, end)})
+
+
+def confirm_table(status, runtime, problems, confirm):
+    """``confirm.config`` against ``confirm.against`` on ``confirm.seeds``, or None
+    while their runs are incomplete."""
+    a, b = str(confirm.against).upper(), str(confirm.config).upper()
+    seeds = [int(x) for x in confirm.seeds]
+    runs = Runs(status, seeds, problems)
+    if not (runs.has(a) and runs.has(b)):
+        return None, None
+    stats, rel, mw = runs.compare(a, b)
+    adj = pd.Series(holm(mw.values), index=mw.index)
+    stats["HolmBetter"] = int(((adj < ALPHA) & (rel > 0)).sum())
+    stats["HolmWorse"] = int(((adj < ALPHA) & (rel < 0)).sum())
+    table = pd.DataFrame({
+        "Problem": problems,
+        "Config": [runs.values(b, p).mean() for p in problems],
+        "ConfigSD": [runs.values(b, p).std(ddof=1) for p in problems],
+        "Against": [runs.values(a, p).mean() for p in problems],
+        "AgainstSD": [runs.values(a, p).std(ddof=1) for p in problems],
+        "RelPct": 100 * rel.reindex(problems).values,
+        "MannWhitney": mw.reindex(problems).values, "Holm": adj.reindex(problems).values,
+    })
+    rt = runtime[runtime.Repeat.isin(seeds)].groupby("Algorithm").ExecutionTime.mean()
+    stats["runtime"] = {b: rt.get(b, np.nan), a: rt.get(a, np.nan)}
+    stats["config"], stats["against"], stats["seeds"] = b, a, seeds
+    return table, stats
 
 
 # ------------------------------------------------------------------ figures
@@ -297,8 +335,12 @@ def main(cfg):
     problems = [p.name for p in cfg.problems]
     budget = int(cfg.budget)
 
-    status = pd.read_csv(results / "run_status_log.csv")
-    runtime = pd.read_csv(results / "runtime_log.csv")
+    status_all = pd.read_csv(results / "run_status_log.csv")
+    runtime_all = pd.read_csv(results / "runtime_log.csv")
+    # The ablation itself: path and validation seeds (the confirmation is kept apart).
+    ablation_seeds = set(cfg.path_seeds) | set(cfg.validation_seeds)
+    status = status_all[status_all.Repeat.isin(ablation_seeds)]
+    runtime = runtime_all[runtime_all.Repeat.isin(ablation_seeds)]
     path_log = pd.read_csv(results / "path_log.csv")
     bad = status[(status.Evaluations < budget) | status.TimedOut.astype(bool) | status.Error.notna()]
     fallbacks = status.AskFallbacks.fillna(0)
@@ -318,6 +360,11 @@ def main(cfg):
     base, base_stats = baseline_table(status, runtime, problems, list(cfg.path_seeds), pair)
     if base is not None:
         base.to_csv(out / "baseline.csv", index=False)
+    conf, conf_stats = (None, None)
+    if cfg.get("confirm", None):
+        conf, conf_stats = confirm_table(status_all, runtime_all, problems, cfg.confirm)
+        if conf is not None:
+            conf.to_csv(out / "confirm.csv", index=False)
 
     plot_path(val, paths, steps, blocks, pair, out)
     plot_steps(steps, rels, mws, problems, out)
@@ -366,6 +413,28 @@ def main(cfg):
                   f"{pair['end_name']} vs DDMTOLab: {stat_line(base_stats['end'])}.",
                   f"Mean run time (s): DDMTOLab {r[pair['baseline']]:.0f}, modular start "
                   f"{r[start]:.0f}, {pair['end_name']} {r[end]:.0f}.", ""]
+    if cfg.get("confirm", None):
+        c = cfg.confirm
+        lines += [f"## Confirmation: {c.config} against {c.against} (seeds {_seeds(c.seeds)})", ""]
+        if conf_stats is None:
+            lines += ["Runs incomplete; not analysed.", ""]
+        else:
+            s, rt = conf_stats, conf_stats["runtime"]
+            verdict = "confirmed" if s["Wilcoxon"] < ALPHA and s["MedianRelPct"] > 0 else (
+                "reversed" if s["Wilcoxon"] < ALPHA else "not confirmed")
+            n_conf = status_all[status_all.Repeat.isin(s["seeds"])
+                                & status_all.Algorithm.isin([s["config"], s["against"]])]
+            bad_c = n_conf[(n_conf.Evaluations < budget) | n_conf.TimedOut.astype(bool)
+                           | n_conf.Error.notna()]
+            lines += [f"Runs: {len(n_conf)}, failed: {len(bad_c)}, with a model-fit fallback: "
+                      f"{int((n_conf.AskFallbacks.fillna(0) > 0).sum())}.",
+                      f"{s['config']} vs {s['against']}: higher on {s['Higher']}/{len(problems)}, "
+                      f"median {s['MedianRelPct']:+.2f}%, mean {s['MeanRelPct']:+.2f}%, "
+                      f"Wilcoxon p={s['Wilcoxon']:.3g} (pre-specified, alpha {ALPHA}): {verdict}.",
+                      f"Per problem (Mann-Whitney): {s['SigBetter']} better / {s['SigWorse']} worse; "
+                      f"after Holm over the problems: {s['HolmBetter']} better / {s['HolmWorse']} worse.",
+                      f"Mean run time (s): {s['config']} {rt[s['config']]:.0f}, "
+                      f"{s['against']} {rt[s['against']]:.0f}.", ""]
     (out / "summary.md").write_text("\n".join(lines))
     print("\n".join(lines))
     print(f"wrote {out}")

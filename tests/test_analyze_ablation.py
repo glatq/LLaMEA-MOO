@@ -26,8 +26,9 @@ def test_holm():
     assert np.all(aa.holm(np.ones(3)) == 1)
 
 
-def _fake_results(tmp_path, effect_block=8):
-    """Logs of a full run: block ``effect_block`` (0-based) adds 10% HV on every problem."""
+def _fake_results(tmp_path, effect_block=8, confirm=()):
+    """Logs of a full run: block ``effect_block`` (0-based) adds 10% HV on every problem.
+    ``confirm``: ``(configurations, seeds)`` of a confirmation."""
     rng = np.random.default_rng(0)
     rows, path_rows = [], []
 
@@ -60,6 +61,9 @@ def _fake_results(tmp_path, effect_block=8):
         add(c, [3, 4, 5, 6, 7, 8])
     add(START, [1, 2])
     add(aa.PAIRS["moead"]["baseline"], [1, 2])
+    for configs, seeds in confirm:
+        for c in configs:
+            add(c, seeds)
     status = pd.DataFrame(rows).drop_duplicates(["Algorithm", "Problem", "Repeat"])
     status.to_csv(tmp_path / "run_status_log.csv", index=False)
     status.assign(ExecutionTime=1.0)[["Algorithm", "Problem", "Repeat", "ExecutionTime"]].to_csv(
@@ -95,3 +99,43 @@ def test_full_analysis_on_synthetic_logs(tmp_path):
     assert (vs_end[has_search].MedianRelPct.abs() < 0.5).all()
     assert vs_end[~has_search].MedianRelPct.between(-10, -8).all()  # 1/1.1 - 1 = -9.1%
     assert START in set(vs_end.Configuration)
+
+
+def test_confirmation_is_one_test_on_its_own_seeds(tmp_path):
+    results = tmp_path / "results"
+    results.mkdir()
+    with_search, without = "SSSSSSSSTS", START
+    _fake_results(results, effect_block=8, confirm=[((with_search, without), [21, 22, 23, 24])])
+    base = dict(pair="moead", budget=400, results=str(results), path_seeds=[1, 2],
+                validation_seeds=[3, 4, 5, 6, 7, 8], problems=[dict(name=p) for p in PROBLEMS])
+    aa.main(OmegaConf.create(dict(base, out=str(tmp_path / "plain"))))
+    plain = (tmp_path / "plain" / "summary.md").read_text()
+    cfg = OmegaConf.create(dict(base, out=str(tmp_path / "out"),
+                                confirm=dict(config=with_search, against=without, seeds=[21, 22, 23, 24])))
+    aa.main(cfg)
+    out = tmp_path / "out"
+    # the ablation's own numbers do not see the confirmation's runs
+    for f in ("steps.csv", "vs_end.csv", "per_problem.csv", "runtime.csv"):
+        assert (out / f).read_text() == (tmp_path / "plain" / f).read_text(), f
+    summary = (out / "summary.md").read_text()
+    assert summary.startswith(plain.split("## Confirmation")[0].rstrip())
+    conf = pd.read_csv(out / "confirm.csv")
+    assert list(conf.Problem) == PROBLEMS
+    assert conf.RelPct.between(9, 11).all()
+    assert (conf.MannWhitney < 0.05).all()  # four seeds each: p = 0.029 per problem
+    assert (conf.Holm >= conf.MannWhitney).all() and not (conf.Holm < 0.05).any()  # but 6 x 0.029 > 0.05
+    assert "seeds 21-24" in summary
+    assert "Wilcoxon p=0.0312 (pre-specified, alpha 0.05): confirmed" in summary
+    assert "after Holm over the problems: 0 better / 0 worse" in summary
+
+
+def test_confirmation_waits_for_its_runs(tmp_path):
+    results = tmp_path / "results"
+    results.mkdir()
+    _fake_results(results, effect_block=8, confirm=[(("SSSSSSSSTS",), [21, 22])])  # one side only
+    aa.main(OmegaConf.create(dict(
+        pair="moead", budget=400, results=str(results), out=str(tmp_path / "out"),
+        path_seeds=[1, 2], validation_seeds=[3, 4, 5, 6, 7, 8], problems=[dict(name=p) for p in PROBLEMS],
+        confirm=dict(config="SSSSSSSSTS", against=START, seeds=[21, 22]))))
+    assert not (tmp_path / "out" / "confirm.csv").exists()
+    assert "Runs incomplete" in (tmp_path / "out" / "summary.md").read_text()
