@@ -233,7 +233,9 @@ are the same under the 10 h limit. DTLZ4 was redone with `conf/benchmark_qehvi_r
 under the 10 h limit (`environment_dtlz4_rerun.json`); one of its five runs reached the
 limit at 398 of 400 evaluations. The WFG7 and RE37 runs stopped at the 6 h limit after
 209–268 and 163–211 of 400 evaluations. `run_status_log.csv` gives each run's count, and
-the logs keep the hypervolume up to that point.
+the logs keep the hypervolume up to that point. `conf/benchmark_qehvi_rerun_wfg7.yaml` and
+`conf/benchmark_qehvi_rerun_re37.yaml` redo both under the 10 h limit, side by side on five
+and three cores.
 
 **The component ablation.** `ablation/` runs a Fawcett & Hoos ablation between MOEA/D-EGO
 and MOEAD-EI Hybrid. `ablation.ModularMOEAD` builds either algorithm, or any mix of the two,
@@ -396,7 +398,7 @@ batch. Both are marked in the source. No algorithmic component was altered.
 | `MO bench/` | baselines (incl. the DDMTOLab MOEA/D-EGO wrapper) and the development-found MOEAD-EI Hybrid |
 | `conf/benchmark_phase{1,2,3}.yaml` | Phase 1–3 benchmark configurations |
 | `conf/benchmark_hpo_ablation.yaml` | LLM-default-hyperparameter benchmark |
-| `conf/benchmark_qehvi_{phase2,phase3,rerun}.yaml` | qEHVI baseline configurations |
+| `conf/benchmark_qehvi_{phase2,phase3,rerun,rerun_wfg7,rerun_re37}.yaml` | qEHVI baseline configurations |
 | `conf/benchmark_timing_phase{2,3}.yaml` | timing-pass configurations |
 | `conf/ablation.yaml` | component-ablation configuration (MOEA/D-EGO -> MOEAD-EI Hybrid) |
 | `conf/ablation_isei.yaml` | component-ablation configuration (ParEGO -> Improved-Scalarized-EI) |

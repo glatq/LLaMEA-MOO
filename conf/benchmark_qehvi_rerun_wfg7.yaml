@@ -1,0 +1,40 @@
+# Phase 2 add-on: qEHVI on WFG7 again, with the 10 h per-run limit
+#
+# The first qEHVI pass (conf/benchmark_qehvi_phase2.yaml) ran with a 6 h per-run
+# limit, which stopped all five WFG7 runs after 209-268 of 400 evaluations. The
+# limit is now 10 h, the per-run budget every other method stayed within. All five
+# repeats are redone (repeats are not seeded) and replace the WFG7 rows of the first
+# pass. A run that reaches the limit keeps the hypervolume of the evaluations it made
+# and is flagged TimedOut in run_status_log.csv.
+#
+# Run from the repo root, side by side with RE37 (conf/benchmark_qehvi_rerun_re37.yaml, 3 workers)
+# on an 8-core machine, so that every run has its own physical core:
+#     python benchmark_best_codes.py config=conf/benchmark_qehvi_rerun_wfg7.yaml
+#
+# The run controls are explained in conf/benchmark_qehvi_phase2.yaml.
+budget: 400
+repeat: 5
+output_dir: benchmark_results/phase2_qehvi_rerun_wfg7
+timeout: 259200
+run_timeout: 36000
+max_workers: 5
+threads_per_run: 1
+constrained: false
+constrained_suite: synthetic
+
+plotting:
+  save_figures: false
+  show_figures: false
+  convergence_dpi: 150
+  pareto_dpi: 300
+
+export:
+  objectives: false
+  pareto: true
+
+problems:
+  - { name: wfg7, dim: 10, n_obj: 3, ref_point: [2.2, 4.4, 6.6] }
+
+algorithms:
+  - path: "MO bench/bofire_baseline.py"
+    cls_name: BoFireQEHVIWrapper
