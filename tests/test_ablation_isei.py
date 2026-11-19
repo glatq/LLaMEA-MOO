@@ -168,11 +168,17 @@ def test_wrapped_ddmtolab_gp_gives_ddmtolab_candidate():
         post = gp.posterior(Xq.to(torch.float32))
         return -post.mean[..., 0].to(torch.float64), post.variance[..., 0].to(torch.float64)
 
+    model = pp.ScalarisedModel(f)
+    Xq = torch.rand(40, 1, 3, dtype=torch.float64)
+    pg, pw = gp.posterior(Xq.to(torch.float32)), model.posterior(Xq)
+    assert torch.allclose(pw.mean.to(torch.float32), pg.mean, rtol=1e-6, atol=1e-6)
+    assert torch.allclose(pw.variance.to(torch.float32), pg.variance, rtol=1e-6, atol=1e-7)
+    # the same search; BoTorch's float32 optimiser is reproducible to ~1e-4 on a flat optimum
     seed_everything(5)
     direct = pp.optimize_logei(gp, s, 3)
     seed_everything(5)
-    wrapped = pp.optimize_logei(pp.ScalarisedModel(f), s, 3)
-    assert np.allclose(direct, wrapped, atol=1e-5)
+    wrapped = pp.optimize_logei(model, s, 3)
+    assert np.allclose(direct, wrapped, atol=2e-3)
 
 
 def test_fast_genetic_algorithm_scores_like_the_original():
@@ -219,3 +225,38 @@ def test_mixed_configurations_run_exact_and_fast(config):
     pytest.importorskip("ddmtolab")
     _run(config, n_obj=3, fast=False)
     _run(config, n_obj=2, fast=True)
+
+
+# ------------------------------------------------------- a GP that cannot be fitted
+@pytest.mark.parametrize("config", ["SSSSSSS", "SSSTSSS", "TTTTSTT"])
+def test_a_failed_botorch_fit_evaluates_a_random_point(config, monkeypatch):
+    """As DDMTOLab's MOEA/D-EGO: the iteration evaluates a random point; the run goes on."""
+    pytest.importorskip("ddmtolab")
+    real, calls = pp.botorch_gp, {"n": 0}
+
+    def flaky(X, y):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("All attempts to fit the model have failed.")
+        return real(X, y)
+
+    monkeypatch.setattr(pp, "botorch_gp", flaky)
+    dim = 2
+    budget = (11 * dim - 1 if config[0] == "S" else 5) + 4
+    g, X, _ = _recorded(_problem(2))
+    m = ModularParEGOISEI(budget, dim, config=config, seed=1, fast_predict=True, **SMALL_GA)
+    F, _ = m(g)
+    assert len(X) == budget and np.all(np.isfinite(F))
+    assert m.diagnostics["ask_fallbacks"] == 1
+    assert m.diagnostics["first_error"].startswith("RuntimeError")
+
+
+def test_a_failed_isei_fit_is_not_caught(monkeypatch):
+    """Only BoTorch's GP falls back here; ISEI's own GP keeps its own fallback."""
+    def broken(*a, **k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(pp, "fit_isei_gp", broken)
+    g, _, _ = _recorded(_problem(2))
+    with pytest.raises(RuntimeError, match="boom"):
+        ModularParEGOISEI(9, 2, config=ISEI_END, seed=1, **SMALL_GA)(g)

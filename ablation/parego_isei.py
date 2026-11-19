@@ -72,7 +72,8 @@ class ModularParEGOISEI:
         # fast_predict: one prediction call per generation in ISEI's genetic algorithm
         self.fast_predict = bool(fast_predict) and self.b["search"] == "T"
         self.isei_kwargs = {**pp.ISEI_TUNED, **isei_kwargs}
-        # "ask_fallbacks" counts ISEI GP fits that fell back to no optimiser restarts.
+        # "ask_fallbacks" counts ISEI GP fits that fell back to no optimiser restarts, and
+        # iterations that evaluated a random point because BoTorch could not fit a GP.
         self.diagnostics = {"config": self.config, "ask_fallbacks": 0, "first_error": None,
                             "fast_predict": self.fast_predict}
 
@@ -241,11 +242,24 @@ class ModularParEGOISEI:
                 w = self._isei_weight()
             Yn = self._normalised()
             win = self._window()
-            if self.b["modelled"] == "S":
-                s_all = self._scalarised(Yn, w)
-                models = [self._fit(self.X_unit[win], self.X_real[win], s_all[win])]
-            else:
-                models = [self._fit(self.X_unit[win], self.X_real[win], Yn[win, j]) for j in range(self.n_obj)]
+            try:
+                if self.b["modelled"] == "S":
+                    s_all = self._scalarised(Yn, w)
+                    models = [self._fit(self.X_unit[win], self.X_real[win], s_all[win])]
+                else:
+                    models = [self._fit(self.X_unit[win], self.X_real[win], Yn[win, j])
+                              for j in range(self.n_obj)]
+            except Exception as e:
+                if self.b["gp"] != "S":
+                    raise
+                # BoTorch could not fit a GP (DDMTOLab's ParEGO stops here). Evaluate a random
+                # point instead, as DDMTOLab's MOEA/D-EGO does when its GPs cannot be built.
+                self.diagnostics["ask_fallbacks"] += 1
+                if self.diagnostics["first_error"] is None:
+                    self.diagnostics["first_error"] = f"{type(e).__name__}: {e}"
+                self._evaluate(func, np.random.rand(1, self.dim), "unit")
+                continue
+            if self.b["modelled"] == "T":
                 if w is None:  # ISEI: the weight comes after the fit
                     w = self._isei_weight()
                 s_all = self._scalarised(Yn, w)
