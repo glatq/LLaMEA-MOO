@@ -18,8 +18,17 @@ phase dirs, so no manual merging is needed:
 
 Run from the repo root, after the phase benchmarks:
     python paper_reproduction/rerun_isei_seeds.py
+
+Five more runs (repeats 6-10, fresh seeds, own folders, nothing merged):
+    python paper_reproduction/rerun_isei_seeds.py --seeds 5 6 7 8 9 --first-repeat 6 \
+        --syn-out benchmark_results/extra_isei_syn --real-out benchmark_results/extra_isei_real \
+        --no-merge --max-workers 3 --run-timeout 36000
 """
-import os, numpy as np, pandas as pd
+import argparse, os, sys, numpy as np, pandas as pd
+
+# This checkout's llamevol, not another installed copy: a script's own folder, not
+# the repo root, heads sys.path.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from llamevol.evaluator.multiobj_evaluator import MultiObjEvaluator, MOOProblemSpec
 import yaml
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
@@ -61,13 +70,16 @@ def _append_into(path, df, name):
     df.to_csv(path, index=False)
 
 
-def run(specs, outdir, targets=None):
+def run(specs, outdir, targets=None, seeds=SEEDS, first_repeat=1, max_workers=None,
+        run_timeout=None):
     os.makedirs(outdir, exist_ok=True)
     problems=[MOOProblemSpec(name=n,dim=d,n_obj=o,ref_point=r) for (n,d,o,r) in specs]
     hv_rows,obj_rows,rt_rows=[],[],[]; raw_by_prob={}
-    for ri,seed in enumerate(SEEDS, start=1):
+    for ri,seed in enumerate(seeds, start=first_repeat):
         ev=MultiObjEvaluator(budget=400,problems=problems,repeat=1,calculate_hv_history=True,
-                             timeout=21600,use_multiprocessing=True)
+                             timeout=21600 if run_timeout is None else 360000,
+                             use_multiprocessing=True,max_workers=max_workers,
+                             run_timeout=run_timeout)
         res=ev.evaluate(code=code,cls_name=CLS,cls_init_kwargs={**incumbent,"random_seed":seed})
         for r in res.result:
             prob=r.name.split("-rep")[0]
@@ -106,16 +118,33 @@ def run(specs, outdir, targets=None):
         print(f"  [merged] Improved-Scalarized-EI rows appended into {tgt}")
     # quick determinism check vs seed 42
     f=pd.DataFrame(hv_rows); f=f[f.Epoch==400]
-    print(f"  [{outdir}] final-HV spread per problem (seed order {SEEDS}):")
+    print(f"  [{outdir}] final-HV spread per problem (seed order {seeds}):")
     for prob in f.Problem.unique():
         vals=f[f.Problem==prob].sort_values("Repeat").HV.round(3).tolist()
         print(f"    {prob:7s} {vals}")
 
 if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description="Improved-Scalarized-EI on explicit seeds.")
+    ap.add_argument("--seeds", type=int, nargs="+", default=SEEDS)
+    ap.add_argument("--first-repeat", type=int, default=1,
+                    help="Repeat label of the first seed (6 for the five extra runs).")
+    ap.add_argument("--syn-out", default="benchmark_results/isei_rerun_syn")
+    ap.add_argument("--real-out", default="benchmark_results/isei_rerun_real")
+    ap.add_argument("--no-merge", action="store_true",
+                    help="Do not append the rows into the phase folders.")
+    ap.add_argument("--max-workers", type=int, default=None,
+                    help="Parallel runs (default: one per physical core).")
+    ap.add_argument("--run-timeout", type=float, default=None,
+                    help="Per-run wall-clock limit in seconds (default: none).")
+    a = ap.parse_args()
+    if set(a.seeds) & set(SEEDS) and a.seeds != SEEDS:
+        raise SystemExit(f"seeds {sorted(set(a.seeds) & set(SEEDS))} were used by the paper's runs")
+    opts = dict(seeds=a.seeds, first_repeat=a.first_repeat, max_workers=a.max_workers,
+                run_timeout=a.run_timeout)
     print("=== SYNTHETIC ===")
-    run(SYN, "benchmark_results/isei_rerun_syn",
-        targets=["benchmark_results/phase1", "benchmark_results/phase2"])
+    run(SYN, a.syn_out,
+        targets=None if a.no_merge else ["benchmark_results/phase1", "benchmark_results/phase2"],
+        **opts)
     print("=== REAL ===")
-    run(RE, "benchmark_results/isei_rerun_real",
-        targets=["benchmark_results/phase3"])
+    run(RE, a.real_out, targets=None if a.no_merge else ["benchmark_results/phase3"], **opts)
     print("DONE")

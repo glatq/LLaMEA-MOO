@@ -237,6 +237,26 @@ the logs keep the hypervolume up to that point. `conf/benchmark_qehvi_rerun_wfg7
 `conf/benchmark_qehvi_rerun_re37.yaml` redo both under the 10 h limit, side by side on five
 and three cores.
 
+**Five more runs.** With five runs against five, the smallest two-sided Mann-Whitney p is
+2/252 = 0.0079, so no per-problem test survives a Holm correction over more than six
+comparisons. Repeats 6–10 of every Phase 2 and Phase 3 method come from four commands,
+under the same run controls as the qEHVI runs:
+
+```bash
+# the stochastic methods and qEHVI (labelled repeats 1-5 in these folders; repeats 6-10 in the analysis)
+python benchmark_best_codes.py config=conf/benchmark_extra_phase2.yaml
+python benchmark_best_codes.py config=conf/benchmark_extra_phase3.yaml
+# Improved-Scalarized-EI on five fresh seeds
+python paper_reproduction/rerun_isei_seeds.py --seeds 5 6 7 8 9 --first-repeat 6 \
+    --syn-out benchmark_results/extra_isei_syn --real-out benchmark_results/extra_isei_real \
+    --no-merge --max-workers 3 --run-timeout 36000
+# DDMTOLab's MOEA/D-EGO and ParEGO on seeds 6-10
+python -m ablation.run_ablation stage=baseline 'path_seeds=[6,7,8,9,10]' \
+    output_dir=benchmark_results/extra_ddmtolab_moead max_workers=3
+python -m ablation.run_ablation config=conf/ablation_isei.yaml stage=baseline \
+    'path_seeds=[6,7,8,9,10]' output_dir=benchmark_results/extra_ddmtolab_parego max_workers=5
+```
+
 **The component ablation.** `ablation/` runs a Fawcett & Hoos ablation between MOEA/D-EGO
 and MOEAD-EI Hybrid. `ablation.ModularMOEAD` builds either algorithm, or any mix of the two,
 from ten blocks named by a ten-letter configuration string in block order (`ablation/config.py`):
@@ -397,6 +417,7 @@ batch. Both are marked in the source. No algorithmic component was altered.
 | `generated_algorithms/` | the nine generated algorithms + `incumbents.yaml` |
 | `MO bench/` | baselines (incl. the DDMTOLab MOEA/D-EGO wrapper) and the development-found MOEAD-EI Hybrid |
 | `conf/benchmark_phase{1,2,3}.yaml` | Phase 1–3 benchmark configurations |
+| `conf/benchmark_extra_phase{2,3}.yaml` | five more runs of every Phase 2 and 3 method |
 | `conf/benchmark_hpo_ablation.yaml` | LLM-default-hyperparameter benchmark |
 | `conf/benchmark_qehvi_{phase2,phase3,rerun,rerun_wfg7,rerun_re37}.yaml` | qEHVI baseline configurations |
 | `conf/benchmark_timing_phase{2,3}.yaml` | timing-pass configurations |
