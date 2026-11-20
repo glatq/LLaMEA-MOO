@@ -123,6 +123,7 @@ tables regenerate directly. Run everything from the repository root:
 
 ```bash
 python paper_reproduction/emit_paper_numbers.py      # Table II + supplementary tables + in-text checklist
+python paper_reproduction/benchmark_table.py         # GECCO Table 2: generated vs baselines, Wilcoxon + Holm
 python paper_reproduction/significance_tests.py      # Friedman, mean ranks, Holm-corrected Wilcoxon
 python paper_reproduction/cd_diagram.py              # critical-difference diagram
 python paper_reproduction/plot_search_progress.py    # search progress across the nine runs
