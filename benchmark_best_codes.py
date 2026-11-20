@@ -529,4 +529,14 @@ if __name__ == "__main__":
     print("Benchmark config:")
     print(OmegaConf.to_yaml(cfg))
 
+    # Optional process start method for the run pool. Linux forks by default, and a forked
+    # worker inherits the parent's global numpy/torch random state, so the first runs of
+    # unseeded algorithms on different workers repeat each other exactly. `spawn` (the
+    # macOS default) gives every worker fresh state. Unset keeps the platform default.
+    if cfg.get("start_method"):
+        import multiprocessing
+
+        multiprocessing.set_start_method(cfg.start_method, force=True)
+        print(f"Process start method: {cfg.start_method}")
+
     benchmark_and_plot(cfg)
