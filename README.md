@@ -239,8 +239,8 @@ and three cores.
 
 **Five more runs.** With five runs against five, the smallest two-sided Mann-Whitney p is
 2/252 = 0.0079, so no per-problem test survives a Holm correction over more than six
-comparisons. Repeats 6–10 of every Phase 2 and Phase 3 method come from four commands,
-under the same run controls as the qEHVI runs:
+comparisons. Repeats 6–10 of every Phase 2 and Phase 3 method except IOC-SAMO-COBRA come
+from the commands below, under the same run controls as the qEHVI runs:
 
 ```bash
 # the stochastic methods and qEHVI (labelled repeats 1-5 in these folders; repeats 6-10 in the analysis)
@@ -256,6 +256,13 @@ python -m ablation.run_ablation stage=baseline 'path_seeds=[6,7,8,9,10]' \
 python -m ablation.run_ablation config=conf/ablation_isei.yaml stage=baseline \
     'path_seeds=[6,7,8,9,10]' output_dir=benchmark_results/extra_ddmtolab_parego max_workers=5
 ```
+
+IOC-SAMO-COBRA is not rerun. Its initialisation needs at least one constraint column, and
+on these unconstrained problems `MO bench/ioc_samo_cobra.py` passes none, so COBRA stops
+with an error after evaluating its 20 Halton points and the wrapper fills the rest of the
+budget with uniform random points. The IOC-SAMO-COBRA rows of
+`paper_data/benchmark_stage{2,3}/` are therefore 20 Halton points followed by random
+search (each run takes under a second), not COBRA's optimisation.
 
 **The component ablation.** `ablation/` runs a Fawcett & Hoos ablation between MOEA/D-EGO
 and MOEAD-EI Hybrid. `ablation.ModularMOEAD` builds either algorithm, or any mix of the two,

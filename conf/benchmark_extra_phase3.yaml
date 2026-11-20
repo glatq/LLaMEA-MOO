@@ -3,7 +3,8 @@
 # The paper's per-problem tests need more than five runs: with 5 against 5, the
 # smallest two-sided Mann-Whitney p is 2/252 = 0.0079, which no Holm correction over
 # more than six comparisons can pass. These runs add five independent repeats of every
-# method of conf/benchmark_phase3.yaml, plus qEHVI, under the same controls as the qEHVI runs:
+# method of conf/benchmark_phase3.yaml except IOC-SAMO-COBRA, plus qEHVI, under the same
+# controls as the qEHVI runs:
 # one thread per run, a 10 h per-run limit, and max_workers parallel runs.
 # The runs are unseeded, as in conf/benchmark_phase3.yaml; this folder labels them
 # repeats 1-5, and the analysis counts them as repeats 6-10.
@@ -95,9 +96,8 @@ algorithms:
   - path: "MO bench/bofire_baseline.py"
     cls_name: BoFireQparEGOWrapper
 
-  # surrogate-assisted baseline
-  - path: "MO bench/ioc_samo_cobra.py"
-    cls_name: IOCSAMOCOBRAWrapper
+  # IOC-SAMO-COBRA is not rerun (README, "Five more runs"): on these unconstrained
+  # problems its initialisation fails and the wrapper fills the budget with random points.
 
   # classical evolutionary baseline
   - path: "MO bench/NSGA-II.py"
