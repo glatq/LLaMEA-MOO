@@ -6,6 +6,7 @@
 #     python -m ablation.run_ablation config=conf/ablation_isei.yaml stage=path
 #     python -m ablation.run_ablation config=conf/ablation_isei.yaml stage=validate
 #     python -m ablation.run_ablation config=conf/ablation_isei.yaml stage=baseline   # DDMTOLab's ParEGO itself
+#     python -m ablation.run_ablation config=conf/ablation_isei.yaml stage=confirm    # seeds 16-35, see confirm
 #
 # Same protocol as conf/ablation.yaml: path on seeds 1-5, validation on seeds 6-15,
 # one thread per run, one run per physical core, a 10 h limit per run.
@@ -23,6 +24,19 @@ validation_seeds: [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 max_workers: null
 threads_per_run: 1
 run_timeout: 36000
+
+# Confirmation, fixed on 2026-11-23 after the validation stage and before any of its
+# runs. The best configuration on the paths (TSSSTST: ParEGO with Improved-Scalarized-
+# EI's initial design, GP and search; best average rank on the validation seeds) was
+# picked on the validation seeds, so those seeds overstate it. It is run against
+# Improved-Scalarized-EI on 20 fresh seeds. Test: one two-sided Wilcoxon signed-rank
+# test over the 15 problems on the relative difference of mean final HV, alpha 0.05, no
+# correction (a single test). Secondary: per-problem Mann-Whitney U, Holm over the
+# problems.
+confirm:
+  config: TSSSTST
+  against: TTTTTTT
+  seeds: [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]
 
 # The paper's 15 problems: Phase 2 (conf/benchmark_phase2.yaml) and Phase 3
 # (conf/benchmark_phase3.yaml), same dimensions and reference points.

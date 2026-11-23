@@ -333,6 +333,7 @@ python -m ablation.run_ablation config=conf/ablation_isei.yaml stage=pilot
 python -m ablation.run_ablation config=conf/ablation_isei.yaml stage=path
 python -m ablation.run_ablation config=conf/ablation_isei.yaml stage=validate
 python -m ablation.run_ablation config=conf/ablation_isei.yaml stage=baseline   # DDMTOLab's ParEGO
+python -m ablation.run_ablation config=conf/ablation_isei.yaml stage=confirm    # seeds 16-35
 ```
 
 ISEI's genetic algorithm scores 85 × 39 individuals per iteration and predicts each one
@@ -347,13 +348,14 @@ start algorithm, and two figures. Per problem it uses the two-sided Mann-Whitney
 the seeds; across problems, the two-sided Wilcoxon signed-rank test on the relative
 differences of mean final HV, with Holm's correction over the steps of a direction. Once
 the confirmation's runs are in the logs, it adds the confirmation (`confirm.csv`). The logs
-of the MOEA/D-EGO -> MOEAD-EI Hybrid ablation are in `paper_data/ablation_moead/`: every
+of the MOEA/D-EGO -> MOEAD-EI Hybrid ablation are in `paper_data/ablation_moead/` and those
+of the ParEGO -> Improved-Scalarized-EI ablation in `paper_data/ablation_isei/`: every
 run's final HV (`run_status_log.csv`), run times and path decisions, without the
-per-evaluation HV histories (150 MB).
+per-evaluation HV histories (150 MB and 78 MB).
 
 ```bash
 python paper_reproduction/analyze_ablation.py results=paper_data/ablation_moead out=paper_figures/ablation_moead
-python paper_reproduction/analyze_ablation.py config=conf/ablation_isei.yaml   # benchmark_results/ablation_isei
+python paper_reproduction/analyze_ablation.py config=conf/ablation_isei.yaml results=paper_data/ablation_isei out=paper_figures/ablation_isei
 ```
 
 ### 3. Re-running the LLaMEA search

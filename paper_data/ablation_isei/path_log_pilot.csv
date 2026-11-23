@@ -1,0 +1,15 @@
+Direction,Round,Candidate,ChangedBlock,AvgRank,Chosen,Tie
+forward,1,TSSSSSS,1,3.6333333333333333,False,False
+forward,1,STSSSSS,2,3.7333333333333334,False,False
+forward,1,SSTSSSS,3,4.7,False,False
+forward,1,SSSTSSS,4,4.366666666666666,False,False
+forward,1,SSSSTSS,5,3.2,True,False
+forward,1,SSSSSTS,6,4.833333333333333,False,False
+forward,1,SSSSSST,7,3.533333333333333,False,False
+backward,1,STTTTTT,1,4.366666666666666,False,False
+backward,1,TSTTTTT,2,4.1,False,False
+backward,1,TTSTTTT,3,4.633333333333334,False,False
+backward,1,TTTSTTT,4,3.7,False,False
+backward,1,TTTTSTT,5,4.433333333333334,False,False
+backward,1,TTTTTST,6,3.4,False,False
+backward,1,TTTTTTS,7,3.3666666666666667,True,False
