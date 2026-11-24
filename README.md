@@ -349,10 +349,10 @@ start algorithm, and two figures. Per problem it uses the two-sided Mann-Whitney
 the seeds; across problems, the two-sided Wilcoxon signed-rank test on the relative
 differences of mean final HV, with Holm's correction over the steps of a direction. Once
 the confirmation's runs are in the logs, it adds the confirmation (`confirm.csv`). The logs
-of the MOEA/D-EGO -> MOEAD-EI Hybrid ablation are in `paper_data/ablation_moead/` and those
-of the ParEGO -> Improved-Scalarized-EI ablation in `paper_data/ablation_isei/`: every
-run's final HV (`run_status_log.csv`), run times and path decisions, without the
-per-evaluation HV histories (150 MB and 78 MB).
+of the MOEA/D-EGO -> MOEAD-EI Hybrid ablation, with its confirmation, are in
+`paper_data/ablation_moead/` and those of the ParEGO -> Improved-Scalarized-EI ablation in
+`paper_data/ablation_isei/`: every run's final HV (`run_status_log.csv`), run times and
+path decisions, without the per-evaluation HV histories (150 MB and 78 MB).
 
 ```bash
 python paper_reproduction/analyze_ablation.py results=paper_data/ablation_moead out=paper_figures/ablation_moead
@@ -442,7 +442,8 @@ batch. Both are marked in the source. No algorithmic component was altered.
 | `paper_data/benchmark_timing_stage{2,3}/` | timing pass: run times of every Phase 2/3 algorithm under the run controls |
 | `paper_data/benchmark_hpo_default/` | HPO ablation, LLM-default hyperparameters |
 | `paper_data/benchmark_moead_{tuned,untuned}/` | MOEAD-EI Hybrid, SMAC-tuned vs defaults |
-| `paper_data/ablation_moead/` | component ablation MOEA/D-EGO -> MOEAD-EI Hybrid: final HV, run times, path decisions |
+| `paper_data/ablation_moead/` | component ablation MOEA/D-EGO -> MOEAD-EI Hybrid: final HV, run times, path decisions, confirmation |
+| `paper_data/ablation_isei/` | component ablation ParEGO -> Improved-Scalarized-EI: final HV, run times, path decisions |
 | `paper_data/search_history.csv` | per-run search trace for all nine runs |
 | `paper_data/lineage.csv` | recorded ancestry of the selected designs |
 | `paper_reproduction/` | analysis and plotting scripts |
