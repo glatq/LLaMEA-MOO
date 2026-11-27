@@ -1,0 +1,6 @@
+Algorithm,Problem,Repeat,Evaluations,TimedOut,AskFallbacks,TellFailures,TorchThreads,ErrorType,Error,FirstFallbackError
+BoFireQEHVIWrapper,wfg7,4,211,True,0,0,1,RunTimeLimit,Per-run time limit (36000s) reached after 211 of 400 evaluations,
+BoFireQEHVIWrapper,wfg7,5,208,True,0,0,1,RunTimeLimit,Per-run time limit (36000s) reached after 208 of 400 evaluations,
+BoFireQEHVIWrapper,wfg7,1,204,True,0,0,1,RunTimeLimit,Per-run time limit (36000s) reached after 204 of 400 evaluations,
+BoFireQEHVIWrapper,wfg7,2,197,True,0,0,1,RunTimeLimit,Per-run time limit (36000s) reached after 197 of 400 evaluations,
+BoFireQEHVIWrapper,wfg7,3,195,True,0,0,1,RunTimeLimit,Per-run time limit (36000s) reached after 195 of 400 evaluations,

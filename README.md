@@ -238,7 +238,13 @@ limit at 398 of 400 evaluations. The WFG7 and RE37 runs stopped at the 6 h limit
 209–268 and 163–211 of 400 evaluations. `run_status_log.csv` gives each run's count, and
 the logs keep the hypervolume up to that point. `conf/benchmark_qehvi_rerun_wfg7.yaml` and
 `conf/benchmark_qehvi_rerun_re37.yaml` redo both under the 10 h limit, side by side on five
-and three cores.
+and three cores. Their logs are in `paper_data/benchmark_qehvi_rerun_{wfg7,re37}/` and take
+the place of these two problems' 6 h runs in the analysis. Every run again reached the
+limit, after 195–211 (WFG7) and 191–283 (RE37) of 400 evaluations, about as many as the
+6 h runs made (209–268 and 163–211): here all eight cores ran qEHVI for the whole 10 h,
+while the 6 h runs shared the machine with qEHVI runs on other problems that finished
+early. The extra runs below, which shared it with cheaper methods, made 323–359 and
+241–351 evaluations in 10 h.
 
 **Five more runs.** With five runs against five, the smallest two-sided Mann-Whitney p is
 2/252 = 0.0079, so no per-problem test survives a Holm correction over more than six
@@ -439,6 +445,7 @@ batch. Both are marked in the source. No algorithmic component was altered.
 | `conf/config_paper_search.yaml` | generation-phase (LLaMEA search) configuration |
 | `paper_data/benchmark_stage{1,2,3}/` | Phase 1–3 hypervolume, runtime and Pareto logs |
 | `paper_data/benchmark_qehvi_stage{2,3}/` | qEHVI hypervolume, runtime, Pareto and run-status logs |
+| `paper_data/benchmark_qehvi_rerun_{wfg7,re37}/` | qEHVI on WFG7 and RE37 under the 10 h limit (replace the 6 h runs) |
 | `paper_data/benchmark_timing_stage{2,3}/` | timing pass: run times of every Phase 2/3 algorithm under the run controls |
 | `paper_data/benchmark_hpo_default/` | HPO ablation, LLM-default hyperparameters |
 | `paper_data/benchmark_moead_{tuned,untuned}/` | MOEAD-EI Hybrid, SMAC-tuned vs defaults |
