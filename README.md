@@ -6,17 +6,16 @@ evolution strategy that writes complete MOBO algorithm implementations; each
 candidate is hyperparameter-tuned with SMAC inside the evolutionary loop and scored
 by normalized hypervolume on a suite of benchmark problems.
 
-This branch, `publication_llamea_moo_unconstrained`, is the snapshot accompanying the
-paper *"Large Language Model-Driven Evolutionary Generation of Multi-Objective
-Bayesian Optimization Algorithms"*. It contains the nine generated algorithms, the
-exact configurations used, the benchmark result logs, and the scripts that turn those
-logs into every figure and table in the paper and its supplementary material.
+This branch, `publication_llamea_moo_unconstrained`, contains the nine generated
+algorithms, the exact configurations used, the benchmark result logs, the component
+ablations of two generated algorithms, and the scripts that turn those logs into every
+figure and table in the paper and its supplementary material.
 
 > **Scope.** The branch also carries in-progress infrastructure for *constrained*
 > multi-objective optimization — a constrained problem suite (CTP/BNH/C3-DTLZ4 and the
 > real-world CRE problems), a feasibility-aware prompt generator, feasible-hypervolume
 > metrics, and constraint-aware baselines. None of it is used by, or evaluated in, the
-> paper above. Everything described here is unconstrained.
+> paper. Everything described here is unconstrained.
 
 ## Contents
 
@@ -122,7 +121,7 @@ deployed at 400 in the benchmark.
 tables regenerate directly. Run everything from the repository root:
 
 ```bash
-python paper_reproduction/emit_paper_numbers.py      # Table II + supplementary tables + in-text checklist
+python paper_reproduction/emit_paper_numbers.py      # Phase 1-3 benchmark tables + in-text checklist
 python paper_reproduction/benchmark_table.py         # GECCO Table 2: generated vs baselines, Wilcoxon + Holm
 python paper_reproduction/supplement_tables.py      # GECCO supplement tables of an analysed ablation (analysis=..)
 python paper_reproduction/time_accuracy_figure.py   # GECCO Figure 2: time per run vs normalised HV (summary=.. from benchmark_table.py)
@@ -156,7 +155,7 @@ python benchmark_best_codes.py config=conf/benchmark_phase3.yaml        # 3 real
 #    Appends its rows into the phase output dirs, so no manual merging.
 python paper_reproduction/rerun_isei_seeds.py
 
-# c. the Table III "LLM defaults" half of the HPO ablation
+# c. the "LLM defaults" half of the HPO ablation
 python benchmark_best_codes.py config=conf/benchmark_hpo_ablation.yaml
 ```
 
@@ -164,8 +163,8 @@ python benchmark_best_codes.py config=conf/benchmark_hpo_ablation.yaml
 algorithms that takes a `random_seed` parameter (default 42) and drives its own
 `np.random.default_rng`, so it is deterministic: every repeat returns an identical
 hypervolume and reports zero variance. The paper's Improved-Scalarized-EI numbers — in
-Phase 1, 2 and 3 alike — come from five explicit seeds, which is what step (b) does and
-what Section VI-B of the paper describes. The phase configs therefore exclude it, both to
+Phase 1, 2 and 3 alike — come from five explicit seeds, which is what step (b) does.
+The phase configs therefore exclude it, both to
 avoid ~1.5 h of wasted compute and to avoid reporting a zero-variance result. The other
 eight algorithms have no seed parameter and vary normally across repeats.
 
@@ -431,8 +430,8 @@ acquisition is the noisy qNEI) alongside
 `MOBO_MOEAD_EI_Hybrid_fixed.py`, the development-found generated algorithm. MOEAD-EI
 Hybrid is not one of the nine, so its SMAC incumbent is not in `incumbents.yaml`; it is
 written inline in `conf/benchmark_phase2.yaml` and `conf/benchmark_phase3.yaml`, which is
-what makes those configs reproduce the tuned Table II values (0.971 synthetic, 0.926
-real-world) rather than the Table III defaults (0.956, 0.859).
+what makes those configs reproduce the tuned values (0.971 synthetic, 0.926 real-world)
+rather than those of the LLM's defaults (0.956, 0.859).
 
 Two of the benchmarked algorithms carry a one-line mechanical fix applied before
 benchmarking — an index/population-size bound that otherwise crashes on the final
