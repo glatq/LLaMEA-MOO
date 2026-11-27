@@ -126,6 +126,7 @@ python paper_reproduction/emit_paper_numbers.py      # Table II + supplementary 
 python paper_reproduction/benchmark_table.py         # GECCO Table 2: generated vs baselines, Wilcoxon + Holm
 python paper_reproduction/supplement_tables.py      # GECCO supplement tables of an analysed ablation (analysis=..)
 python paper_reproduction/time_accuracy_figure.py   # GECCO Figure 2: time per run vs normalised HV (summary=.. from benchmark_table.py)
+python paper_reproduction/convergence_figure.py     # GECCO supplement: mean HV over the evaluations, every Table 2 method and problem
 python paper_reproduction/significance_tests.py      # Friedman, mean ranks, Holm-corrected Wilcoxon
 python paper_reproduction/cd_diagram.py              # critical-difference diagram
 python paper_reproduction/plot_search_progress.py    # search progress across the nine runs
@@ -365,7 +366,9 @@ the confirmation's runs are in the logs, it adds the confirmation (`confirm.csv`
 of both ablations, with their confirmations, are in `paper_data/ablation_moead/`
 (MOEA/D-EGO -> MOEAD-EI Hybrid) and `paper_data/ablation_isei/` (ParEGO ->
 Improved-Scalarized-EI): every run's final HV (`run_status_log.csv`), run times and
-path decisions, without the per-evaluation HV histories (150 MB and 78 MB).
+path decisions, without the per-evaluation HV histories (150 MB and 78 MB). Only the
+histories of DDMTOLab's own MOEA/D-EGO and ParEGO (seeds 1-5) are kept, in
+`hv_baseline_log.csv`, for `convergence_figure.py`.
 
 ```bash
 python paper_reproduction/analyze_ablation.py results=paper_data/ablation_moead out=paper_figures/ablation_moead
