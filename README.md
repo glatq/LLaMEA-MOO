@@ -266,6 +266,13 @@ python -m ablation.run_ablation config=conf/ablation_isei.yaml stage=baseline \
     'path_seeds=[6,7,8,9,10]' output_dir=benchmark_results/extra_ddmtolab_parego max_workers=5
 ```
 
+The logs are in `paper_data/benchmark_extra_stage{2,3}/`, `paper_data/benchmark_extra_isei_{syn,real}/`
+and `paper_data/ablation_{moead,isei}_extra/` (code c720de6b). Every run made all 400
+evaluations except qEHVI's on WFG7 and RE37, which all reached the 10 h limit (after
+323–359 and 241–351 evaluations), and no BoFire baseline fell back to random candidates.
+`benchmark_table.py` adds them to runs 1–5, for ten runs per method and problem; with ten
+runs against ten the smallest two-sided Mann-Whitney p is 2/184,756 ≈ 1.1e-5.
+
 IOC-SAMO-COBRA is not rerun. Its initialisation needs at least one constraint column, and
 on these unconstrained problems `MO bench/ioc_samo_cobra.py` passes none, so COBRA stops
 with an error after evaluating its 20 Halton points and the wrapper fills the rest of the
@@ -447,6 +454,8 @@ batch. Both are marked in the source. No algorithmic component was altered.
 | `paper_data/benchmark_qehvi_stage{2,3}/` | qEHVI hypervolume, runtime, Pareto and run-status logs |
 | `paper_data/benchmark_qehvi_rerun_{wfg7,re37}/` | qEHVI on WFG7 and RE37 under the 10 h limit (replace the 6 h runs) |
 | `paper_data/benchmark_timing_stage{2,3}/` | timing pass: run times of every Phase 2/3 algorithm under the run controls |
+| `paper_data/benchmark_extra_stage{2,3}/`, `benchmark_extra_isei_{syn,real}/` | repeats 6–10 of every Phase 2/3 method and of Improved-Scalarized-EI |
+| `paper_data/ablation_{moead,isei}_extra/` | DDMTOLab's MOEA/D-EGO and ParEGO, seeds 6–10 |
 | `paper_data/benchmark_hpo_default/` | HPO ablation, LLM-default hyperparameters |
 | `paper_data/benchmark_moead_{tuned,untuned}/` | MOEAD-EI Hybrid, SMAC-tuned vs defaults |
 | `paper_data/ablation_moead/` | component ablation MOEA/D-EGO -> MOEAD-EI Hybrid: final HV, run times, path decisions, confirmation |
